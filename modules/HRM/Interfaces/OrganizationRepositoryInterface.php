@@ -9,3 +9,4 @@ interface OrganizationRepositoryInterface
     public function updateOrganization($organizationId, array $data);
 }
 
+//THIS IS A ORIGNIZATRIONS INFO JUST ONE RECORD WILL INSERT
