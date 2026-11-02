@@ -1,0 +1,12 @@
+<?php
+namespace Modules\HRM\Models\Employee;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+class EmployeeEducation extends Model {
+    use HasFactory;
+    protected $table = 'employee_education';
+    protected $guarded = [];
+    protected static function newFactory() { return \Modules\HRM\Database\Factories\EmployeeEducationFactory::new(); }
+    public function employee(): BelongsTo { return $this->belongsTo(Employee::class, 'employee_id','employee_id'); }
+}

@@ -1,0 +1,27 @@
+<script setup lang="ts">
+import { Head, useForm } from '@inertiajs/vue3';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+defineProps<{ parentOptions: {value:number;label:string}[] }>();
+const form=useForm({name:'',code:'',description:'',parent_id:null as number|null,is_active:true});
+function submit(){ form.post(route('hrm.departments.store')); }
+</script>
+<template>
+  <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Departments',href:route('hrm.departments.index')},{title:'Create'}]">
+    <Head title="Create Department"/>
+    <div class="max-w-2xl mx-auto bg-card border rounded-xl p-6">
+      <h1 class="text-lg font-bold mb-4">New Department</h1>
+      <form @submit.prevent="submit" class="space-y-4">
+        <div class="space-y-2"><Label>Name *</Label><Input v-model="form.name"/><p v-if="form.errors.name" class="text-sm text-destructive">{{ form.errors.name }}</p></div>
+        <div class="space-y-2"><Label>Code</Label><Input v-model="form.code" placeholder="e.g. HR-01"/><p v-if="form.errors.code" class="text-sm text-destructive">{{ form.errors.code }}</p></div>
+        <div class="space-y-2"><Label>Description</Label><Input v-model="form.description"/><p v-if="form.errors.description" class="text-sm text-destructive">{{ form.errors.description }}</p></div>
+        <div class="space-y-2"><Label>Parent Department</Label><SearchableSelect v-model="form.parent_id" :options="parentOptions" placeholder="Top-level (no parent)"/></div>
+        <div class="flex items-center gap-2"><input type="checkbox" v-model="form.is_active" id="active"/><Label for="active">Active</Label></div>
+        <Button type="submit" :disabled="form.processing">Create Department</Button>
+      </form>
+    </div>
+  </AdminLayout>
+</template>
