@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, User, Shield, DollarSign, GraduationCap, Briefcase, Wrench, Calendar, Fingerprint, UsersRound } from 'lucide-vue-next';
+import {ChevronDown, ClipboardCheck, User, Shield, DollarSign, GraduationCap, Briefcase, Wrench, Calendar, Fingerprint, UsersRound, FolderOpen, Archive, BadgeCent, ArrowLeftRight, ShieldCheck, FileText} from 'lucide-vue-next';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 
 defineProps<{ employee:any; subordinates?: any[] }>();
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Employees',href:route('hrm.employees.index')},{title:employee.full_name}]">
     <Head :title="employee.full_name"/>
+    <PageHeader title="Pages Detail" description="{{ employee.employee_id }} • {{ employee.designation?.name }} • {{ employee.department?.name }}" :icon="FileText">
     <div class="max-w-4xl mx-auto space-y-4">
       <div class="flex items-start gap-4">
         <img v-if="employee.photo_url" :src="employee.photo_url" class="size-16 rounded-full object-cover border" :alt="employee.full_name"/>
@@ -28,7 +30,7 @@ defineProps<{ employee:any; subordinates?: any[] }>();
       </div>
 
       <!-- Basic Details collapsible -->
-      <Collapsible defaultOpen class="bg-card border rounded-xl">
+      <Collapsible defaultOpen class="bg-card border rounded-2xl shadow-sm">
         <CollapsibleTrigger class="w-full flex items-center justify-between p-4 hover:bg-muted/50">
           <div class="flex items-center gap-2"><User class="size-4 text-primary"/><h3 class="font-semibold text-sm">Employee Details</h3></div><ChevronDown class="size-4"/>
         </CollapsibleTrigger>
@@ -47,7 +49,7 @@ defineProps<{ employee:any; subordinates?: any[] }>();
 
       
       <!-- Employment Details (Excel) -->
-      <Collapsible class="bg-card border rounded-xl">
+      <Collapsible class="bg-card border rounded-2xl shadow-sm">
         <CollapsibleTrigger class="w-full flex items-center justify-between p-4 hover:bg-muted/50">
           <div class="flex items-center gap-2"><Briefcase class="size-4 text-slate-500"/><h3 class="font-semibold text-sm">Employment Details</h3><span v-if="employee.file_no" class="text-xs bg-slate-500 text-white px-2 py-0.5 rounded-full">{{ employee.file_no }}</span></div><ChevronDown class="size-4"/>
         </CollapsibleTrigger>
@@ -66,7 +68,7 @@ defineProps<{ employee:any; subordinates?: any[] }>();
       </Collapsible>
 
 <!-- Profile -->
-      <Collapsible class="bg-card border rounded-xl" :defaultOpen="!!employee.profile">
+      <Collapsible class="bg-card border rounded-2xl shadow-sm" :defaultOpen="!!employee.profile">
         <CollapsibleTrigger class="w-full flex items-center justify-between p-4 hover:bg-muted/50">
           <div class="flex items-center gap-2"><User class="size-4 text-blue-500"/><h3 class="font-semibold text-sm">Employee Profile</h3><span v-if="employee.profile" class="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">Present</span><span v-else class="text-xs text-muted-foreground">Not filled</span></div><ChevronDown class="size-4"/>
         </CollapsibleTrigger>
@@ -87,7 +89,7 @@ defineProps<{ employee:any; subordinates?: any[] }>();
       </Collapsible>
 
       <!-- Policy -->
-      <Collapsible class="bg-card border rounded-xl" :defaultOpen="!!employee.policy">
+      <Collapsible class="bg-card border rounded-2xl shadow-sm" :defaultOpen="!!employee.policy">
         <CollapsibleTrigger class="w-full flex items-center justify-between p-4 hover:bg-muted/50">
           <div class="flex items-center gap-2"><Shield class="size-4 text-amber-500"/><h3 class="font-semibold text-sm">Attendance Policy</h3><span v-if="employee.policy" class="text-xs bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full">{{ employee.policy.shift_type }}</span></div><ChevronDown class="size-4"/>
         </CollapsibleTrigger>
@@ -103,7 +105,7 @@ defineProps<{ employee:any; subordinates?: any[] }>();
       </Collapsible>
 
       <!-- Salary Full -->
-      <Collapsible class="bg-card border rounded-xl" :defaultOpen="!!(employee.salaries && employee.salaries.length)">
+      <Collapsible class="bg-card border rounded-2xl shadow-sm" :defaultOpen="!!(employee.salaries && employee.salaries.length)">
         <CollapsibleTrigger class="w-full flex items-center justify-between p-4 hover:bg-muted/50">
           <div class="flex items-center gap-2"><DollarSign class="size-4 text-emerald-500"/><h3 class="font-semibold text-sm">Salary Breakdown</h3><span v-if="employee.salaries?.length" class="text-xs bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full">{{ employee.salaries.length }} record(s)</span></div><ChevronDown class="size-4"/>
         </CollapsibleTrigger>
@@ -131,7 +133,7 @@ defineProps<{ employee:any; subordinates?: any[] }>();
       </Collapsible>
 
       <!-- Education -->
-      <Collapsible class="bg-card border rounded-xl" :defaultOpen="!!(employee.educations && employee.educations.length)">
+      <Collapsible class="bg-card border rounded-2xl shadow-sm" :defaultOpen="!!(employee.educations && employee.educations.length)">
         <CollapsibleTrigger class="w-full flex items-center justify-between p-4 hover:bg-muted/50">
           <div class="flex items-center gap-2"><GraduationCap class="size-4 text-violet-500"/><h3 class="font-semibold text-sm">Education</h3><span class="text-xs bg-violet-500/10 text-violet-600 px-2 py-0.5 rounded-full">{{ employee.educations?.length||0 }}</span></div><ChevronDown class="size-4"/>
         </CollapsibleTrigger>
@@ -148,7 +150,7 @@ defineProps<{ employee:any; subordinates?: any[] }>();
       </Collapsible>
 
       <!-- Experience -->
-      <Collapsible class="bg-card border rounded-xl" :defaultOpen="!!(employee.experiences && employee.experiences.length)">
+      <Collapsible class="bg-card border rounded-2xl shadow-sm" :defaultOpen="!!(employee.experiences && employee.experiences.length)">
         <CollapsibleTrigger class="w-full flex items-center justify-between p-4 hover:bg-muted/50">
           <div class="flex items-center gap-2"><Briefcase class="size-4 text-orange-500"/><h3 class="font-semibold text-sm">Experience</h3><span class="text-xs bg-orange-500/10 text-orange-600 px-2 py-0.5 rounded-full">{{ employee.experiences?.length||0 }}</span></div><ChevronDown class="size-4"/>
         </CollapsibleTrigger>
@@ -165,7 +167,7 @@ defineProps<{ employee:any; subordinates?: any[] }>();
       </Collapsible>
 
       <!-- Skills -->
-      <Collapsible class="bg-card border rounded-xl" :defaultOpen="!!(employee.skills && employee.skills.length)">
+      <Collapsible class="bg-card border rounded-2xl shadow-sm" :defaultOpen="!!(employee.skills && employee.skills.length)">
         <CollapsibleTrigger class="w-full flex items-center justify-between p-4 hover:bg-muted/50">
           <div class="flex items-center gap-2"><Wrench class="size-4 text-pink-500"/><h3 class="font-semibold text-sm">Skills</h3><span class="text-xs bg-pink-500/10 text-pink-600 px-2 py-0.5 rounded-full">{{ employee.skills?.length||0 }}</span></div><ChevronDown class="size-4"/>
         </CollapsibleTrigger>
@@ -178,7 +180,7 @@ defineProps<{ employee:any; subordinates?: any[] }>();
       </Collapsible>
 
       <!-- Supervisors (flexible User/Employee) -->
-      <Collapsible class="bg-card border rounded-xl" :defaultOpen="!!(employee.supervisors && employee.supervisors.length)">
+      <Collapsible class="bg-card border rounded-2xl shadow-sm" :defaultOpen="!!(employee.supervisors && employee.supervisors.length)">
         <CollapsibleTrigger class="w-full flex items-center justify-between p-4 hover:bg-muted/50">
           <div class="flex items-center gap-2"><UsersRound class="size-4 text-indigo-600"/><h3 class="font-semibold text-sm">Supervisors</h3><span class="text-xs bg-indigo-500 text-white px-2 py-0.5 rounded-full">{{ employee.supervisors?.length||0 }}</span><span class="hidden sm:inline text-[11px] text-muted-foreground ml-1">User or Employee can supervise</span></div><ChevronDown class="size-4"/>
         </CollapsibleTrigger>
@@ -216,11 +218,40 @@ defineProps<{ employee:any; subordinates?: any[] }>();
         </CollapsibleContent>
       </Collapsible>
 
+      <!-- Documents & Assets — enterprise links -->
+      <div class="grid sm:grid-cols-2 gap-4">
+        <a :href="route('hrm.employees.documents', employee.id)" class="bg-card border rounded-2xl shadow-sm p-4 flex items-center justify-between hover:bg-muted/40 hover:border-primary/30 transition">
+          <div class="flex items-center gap-3"><div class="size-10 rounded-lg bg-blue-500/10 flex items-center justify-center"><FolderOpen class="size-5 text-blue-600" /></div><div><h3 class="font-semibold text-sm">Documents Vault</h3><p class="text-xs text-muted-foreground">NID, contracts, certificates — verified & expiry-tracked</p></div></div>
+          <span class="text-xs font-medium text-primary">Open →</span>
+        </a>
+        <a :href="route('hrm.employees.assets', employee.id)" class="bg-card border rounded-2xl shadow-sm p-4 flex items-center justify-between hover:bg-muted/40 hover:border-primary/30 transition">
+          <div class="flex items-center gap-3"><div class="size-10 rounded-lg bg-amber-500/10 flex items-center justify-center"><Archive class="size-5 text-amber-600" /></div><div><h3 class="font-semibold text-sm">Asset Inventory</h3><p class="text-xs text-muted-foreground">Laptop, ID card, uniform — recovery feeds settlement</p></div></div>
+          <span class="text-xs font-medium text-primary">Open →</span>
+        </a>
+      </div>
+      <!-- Lifecycle — Probation / Movements / Clearance -->
+      <div class="grid sm:grid-cols-3 gap-4">
+        <a :href="route('hrm.probations.index')" class="bg-card border rounded-2xl shadow-sm p-4 flex items-center justify-between hover:bg-muted/40 hover:border-primary/30 transition">
+          <div class="flex items-center gap-3"><div class="size-10 rounded-lg bg-purple-500/10 flex items-center justify-center"><BadgeCent class="size-5 text-purple-600" /></div><div><h3 class="font-semibold text-sm">Probation</h3><p class="text-xs text-muted-foreground">Active/Extended → Confirm to Permanent</p></div></div><span class="text-xs font-medium text-primary">Manage →</span>
+        </a>
+        <a :href="route('hrm.movements.index')" class="bg-card border rounded-2xl shadow-sm p-4 flex items-center justify-between hover:bg-muted/40 hover:border-primary/30 transition">
+          <div class="flex items-center gap-3"><div class="size-10 rounded-lg bg-sky-500/10 flex items-center justify-center"><ArrowLeftRight class="size-5 text-sky-600" /></div><div><h3 class="font-semibold text-sm">Transfers & Promotions</h3><p class="text-xs text-muted-foreground">Draft→Approved updates master & salary</p></div></div><span class="text-xs font-medium text-primary">View →</span>
+        </a>
+        <a :href="route('hrm.clearance.index')" class="bg-card border rounded-2xl shadow-sm p-4 flex items-center justify-between hover:bg-muted/40 hover:border-primary/30 transition">
+          <div class="flex items-center gap-3"><div class="size-10 rounded-lg bg-emerald-500/10 flex items-center justify-center"><ShieldCheck class="size-5 text-emerald-600" /></div><div><h3 class="font-semibold text-sm">Exit Clearance</h3><p class="text-xs text-muted-foreground">HR·IT·Admin·Finance·Payroll gate</p></div></div><span class="text-xs font-medium text-primary">Clear →</span>
+        </a>
+      </div>
+      <div class="bg-card border rounded-2xl shadow-sm p-4 flex items-center justify-between">
+        <div class="flex items-center gap-2"><ClipboardCheck class="size-4 text-primary"/><h3 class="font-semibold text-sm">On/Offboarding Checklists</h3><span class="text-xs text-muted-foreground">Template → assign → % progress</span></div>
+        <a :href="route('hrm.checklists.index')" class="text-sm text-primary hover:underline">Manage →</a>
+      </div>
+
       <!-- Attendance quick link -->
-      <div class="bg-card border rounded-xl p-4 flex items-center justify-between">
+      <div class="bg-card border rounded-2xl shadow-sm p-4 flex items-center justify-between">
         <div class="flex items-center gap-2"><Fingerprint class="size-4 text-primary"/><h3 class="font-semibold text-sm">Attendance</h3></div>
         <a :href="route('hrm.attendance.index',{employee_id:employee.employee_id})" class="text-sm text-primary hover:underline flex items-center gap-1"><Calendar class="size-3"/> View Logs →</a>
       </div>
     </div>
+      </PageHeader>
   </AdminLayout>
 </template>

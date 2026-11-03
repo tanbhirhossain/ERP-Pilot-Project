@@ -4,6 +4,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
 import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
 import type { Paginator, FilterDef } from '../../../../../CORE/Resources/js/types';
@@ -25,10 +26,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Departments'}]">
     <Head title="Departments"/>
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div><h1 class="text-xl font-bold">Departments</h1><p class="text-sm text-muted-foreground">Organize structure by departments & sub-departments.</p></div>
-      <Link :href="route('hrm.departments.create')"><Button size="sm"><Plus class="size-4"/> New Department</Button></Link>
-    </div>
+    <PageHeader title="Departments" description="Organize structure by departments & sub-departments." :icon="Pencil" :actions="[{ label:'New Department', route:'hrm.departments.create', icon: Plus }]">
     <DataTable route-name="hrm.departments.index" title="Departments" :columns="columns" :rows="(departments.data as unknown as Record<string,unknown>[])" :meta="departments.meta" search-placeholder="Search department...">
       <template #cell-name="{row}"><span class="font-semibold">{{ row.name }}</span></template>
       <template #cell-code="{row}"><span class="text-sm text-muted-foreground">{{ row.code || '—' }}</span></template>
@@ -43,5 +41,6 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
       </template>
     </DataTable>
     <ConfirmDialog v-model:open="confirmOpen" :processing="processing" title="Delete department?" :description="`Delete ${pending?.name}?`" confirm-label="Delete" @confirm="confirmDelete"/>
+      </PageHeader>
   </AdminLayout>
 </template>

@@ -63,9 +63,38 @@ final class ProcessFinalSettlementAction
             $gratuity = round(($base / 30) * (float) $policy->days_per_service_year * $serviceYears, 2);
         }
 
+        // ── HRM Encashment auto-prefill (H-P1-2) ─────────────────────
         $leaveEncashment = (float) ($data['leave_encashment'] ?? 0);
+        if ($leaveEncashment === 0.0 && empty($data['leave_encashment_reason'])) {
+            try {
+                if (class_exists(\Modules\HRM\Services\LeaveYearEndService::class)) {
+                    $hrmEnc = app(\Modules\HRM\Services\LeaveYearEndService::class)->encashableForSettlement($employee->employeeId, (int)$lastDay->year);
+                    if (!empty($hrmEnc)) {
+                        $dailyRate = (float)($lastSalarySegment['basic_salary'] ?? $lastSalarySegment['gross_salary'] ?? 0) / 30;
+                        $autoEncDays = collect($hrmEnc)->sum('encash_days');
+                        $autoEncAmt = round($autoEncDays * $dailyRate, 2);
+                        if ($autoEncAmt > 0) {
+                            $leaveEncashment = $autoEncAmt;
+                            $data['leave_encashment_reason'] = ($data['leave_encashment_reason'] ?? '')." Auto: {$autoEncDays} encashable days × {$dailyRate}/day (HRM balances ".implode(', ', array_column($hrmEnc,'leave_type')).")";
+                            \Illuminate\Support\Facades\Log::info('Settlement auto-encashment', ['employee_id'=>$employee->employeeId,'days'=>$autoEncDays,'amount'=>$autoEncAmt]);
+                        }
+                    }
+                }
+            } catch (\Throwable $e) { \Illuminate\Support\Facades\Log::warning('Settlement encash auto failed: '.$e->getMessage()); }
+        }
         $otherBenefits = (float) ($data['other_benefits'] ?? 0);
-        $deductions = (float) ($data['deductions'] ?? 0);
+        // ── HRM Asset recovery (auto) ─────────────────────────────────
+        $assetRecovery = 0.0; $assetRecoveryDetail = [];
+        if (class_exists(\Modules\HRM\Models\EmployeeAsset::class) && class_exists(\Modules\HRM\Models\HrmAsset::class)) {
+            try {
+                $openAssets = \Modules\HRM\Models\EmployeeAsset::where('employee_id', $employee->employeeId)->whereNull('returned_date')->with('asset')->get();
+                foreach ($openAssets as $ea) {
+                    $cost = (float) ($ea->recovery_amount > 0 ? $ea->recovery_amount : ($ea->asset->unit_cost ?? 0));
+                    if ($cost > 0) { $assetRecovery += $cost; $assetRecoveryDetail[] = ['asset_code'=>$ea->asset->asset_code,'name'=>$ea->asset->name,'category'=>$ea->asset->category,'issued_date'=>$ea->issued_date?->toDateString(),'recovery'=>$cost]; }
+                }
+            } catch (\Throwable $e) { /* table not yet migrated → ignore */ }
+        }
+        $deductions = (float) ($data['deductions'] ?? 0) + $assetRecovery;
         $net = round($grossDue + $gratuity + $leaveEncashment + $otherBenefits - $deductions, 2);
         $breakdown = [
             'salary_proration' => ['rule' => 'calendar-day weighted by effective salary segment', 'days_in_month' => $monthDays, 'payable_days' => $payableDays, 'salary_segments' => $salarySegments, 'gross_due' => $grossDue],
@@ -80,9 +109,12 @@ final class ProcessFinalSettlementAction
                 'other_benefits_reason' => $data['other_benefits_reason'] ?? null,
                 'deductions_reason' => $data['deductions_reason'] ?? null,
             ],
+            'asset_recovery' => ['total'=>$assetRecovery,'items'=>$assetRecoveryDetail,'note'=>'Auto-added from HRM unreturned assets (hrm_employee_assets where returned_date is null)'],
             'net_settlement' => $net,
         ];
 
+        // encashable_days for audit (from HRM)
+        $encashableDays = 0; try { if (isset($hrmEnc)) $encashableDays = collect($hrmEnc ?? [])->sum('encash_days'); } catch (\Throwable $e) {}
         return PayrollSettlement::query()->create([
             'employee_id' => $employee->employeeId,
             'employee_name' => $employee->name,
@@ -91,8 +123,10 @@ final class ProcessFinalSettlementAction
             'gross_due' => $grossDue,
             'gratuity_amount' => $gratuity,
             'leave_encashment' => $leaveEncashment,
+            'encashable_days' => $encashableDays,
             'other_benefits' => $otherBenefits,
             'deductions' => $deductions,
+            'asset_recovery_total' => $assetRecovery,
             'net_settlement' => $net,
             'status' => 'pending',
             'breakdown_json' => $breakdown,

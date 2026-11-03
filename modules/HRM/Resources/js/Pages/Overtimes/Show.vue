@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Timer, Check, X, Clock3, User, CalendarDays } from 'lucide-vue-next';
+import {ArrowLeft, Timer, Check, X, Clock3, User, CalendarDays, FileText} from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 const props=defineProps<{ overtime: { id: number; hours: number; source_attendance_hours: number; [key: string]: any }; canApprove: boolean }>();
 const processing=ref(false);
 const hours=ref(Number(props.overtime.hours));
@@ -25,12 +26,13 @@ function reject(){
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Overtime', href: route('hrm.overtimes.index')},{title:`#${overtime.id}`}]">
     <Head :title="`Overtime #${overtime.id}`"/>
+    <PageHeader title="Pages Detail" description="Employee" :icon="FileText">
     <div class="max-w-3xl mx-auto space-y-4">
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-bold flex items-center gap-2"><Timer class="size-5"/> Overtime #{{ overtime.id }} <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" :class="overtime.status==='Pending'?'bg-amber-100 text-amber-700': overtime.status==='Approved'?'bg-emerald-100 text-emerald-700': overtime.status==='Rejected'?'bg-red-100 text-red-700':'bg-muted'">{{ overtime.status }}</span></h1>
         <Link :href="route('hrm.overtimes.index')"><Button variant="outline" size="sm"><ArrowLeft class="size-4"/> Back</Button></Link>
       </div>
-      <div class="bg-card border rounded-xl p-6 space-y-4">
+      <div class="bg-card border rounded-2xl shadow-sm p-6 space-y-4">
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div><p class="text-muted-foreground flex items-center gap-1"><User class="size-3"/> Employee</p><p class="font-semibold font-mono">{{ overtime.employee_id }} <span class="text-muted-foreground font-normal">{{ overtime.employee }}</span></p></div>
           <div><p class="text-muted-foreground flex items-center gap-1"><CalendarDays class="size-3"/> Date</p><p class="font-mono font-semibold">{{ overtime.overtime_date }}</p></div>
@@ -52,5 +54,6 @@ function reject(){
         <p v-else class="text-xs text-muted-foreground border-t pt-2">Decision {{ overtime.approved_at ? 'on '+overtime.approved_at : '' }} by {{ overtime.approver || '—' }}</p>
       </div>
     </div>
+      </PageHeader>
   </AdminLayout>
 </template>

@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { CalendarCheck, Clock3 } from 'lucide-vue-next';
 import { Trash2 } from 'lucide-vue-next';
 import AdminLayout from '../../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import DataTable, { type DataTableColumn } from '../../../../../../CORE/Resources/js/Components/DataTable.vue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import type { FilterDef, Paginator } from '../../../../../../CORE/Resources/js/types';
 interface Row { id:number; employee_id:string; employee?:string; department?:string; designation?:string; duty_date:string; primary_punch_in?:string; primary_punch_out?:string; primary_worked_hours:number; total_overtime_hours:number; grand_total_hours:number; status:string; shift?:string; expected_in_time?:string; expected_out_time?:string }
 const props=defineProps<{ dailies: Paginator<Row>; filterDefs: FilterDef[]; reconcileFrom:string; reconcileTo:string }>();
@@ -30,17 +35,26 @@ function statusClass(s:string){
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Daily Attendance'}]">
     <Head title="Daily Attendance"/>
-    <div class="flex flex-wrap items-start justify-between gap-4"><div><h1 class="text-xl font-bold">Daily Attendance</h1><p class="text-sm text-muted-foreground">One record per employee per calendar date: absent, roster Off Day, holiday, leave, extra duty and late/early classifications. No-log night duties remain pending through the following day.</p></div><form @submit.prevent="reconcile" class="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-3"><div><label class="mb-1 block text-xs">From</label><input v-model="reconcileForm.from" type="date" class="h-9 rounded-md border bg-background px-2 text-sm"/></div><div><label class="mb-1 block text-xs">To (completed days)</label><input v-model="reconcileForm.to" type="date" class="h-9 rounded-md border bg-background px-2 text-sm"/></div><button :disabled="reconcileForm.processing" class="h-9 rounded-md bg-primary px-3 text-sm text-primary-foreground">{{reconcileForm.processing?'Working…':'Classify missing days'}}</button></form></div>
-    <DataTable route-name="hrm.attendance.dailies.index" title="Daily Attendance" :columns="columns" :rows="(dailies.data as unknown as Record<string,unknown>[])" :meta="dailies.meta" :filter-defs="filterDefs" search-placeholder="Search employee name or ID…">
-      <template #cell-employee_id="{row}"><div class="leading-tight"><div class="font-mono text-sm font-semibold">{{ row.employee_id }}</div><div v-if="row.employee" class="text-xs text-foreground">{{ row.employee }}</div><div v-if="row.department || row.designation" class="text-[11px] text-muted-foreground">{{ row.department ?? '' }}<span v-if="row.department && row.designation"> · </span>{{ row.designation ?? '' }}</div></div></template>
-      <template #cell-duty_date="{row}"><span class="font-mono text-sm">{{ row.duty_date }}</span><div v-if="row.shift" class="text-[11px] text-muted-foreground">{{ row.shift }}</div></template>
-      <template #cell-primary_punch_in="{row}"><span class="text-sm font-mono">{{ fmt(row.primary_punch_in) }} → {{ fmt(row.primary_punch_out) }}</span><div class="text-xs text-muted-foreground" v-if="row.expected_in_time">Exp: {{ row.expected_in_time }}–{{ row.expected_out_time }}</div></template>
-      <template #cell-primary_worked_hours="{row}"><span class="font-mono font-semibold">{{ row.primary_worked_hours }}h</span></template>
-      <template #cell-total_overtime_hours="{row}"><span class="font-mono" :class="Number(row.total_overtime_hours)>0?'text-amber-600 font-semibold':''">{{ row.total_overtime_hours }}h</span></template>
-      <template #cell-grand_total_hours="{row}"><span class="font-mono font-bold">{{ row.grand_total_hours }}h</span></template>
-      <template #cell-status="{row}"><span class="px-2.5 py-1 rounded-full text-xs font-medium border" :class="statusClass(String(row.status))">{{ row.status }}</span></template>
-      <template #cell-actions="{row}"><button @click="del(row.id)" class="size-8 grid place-items-center rounded-md hover:bg-destructive/10 hover:text-destructive"><Trash2 class="size-4"/></button></template>
-    </DataTable>
-
+    <PageHeader title="Daily Attendance" description="One record per employee per calendar date: absent, roster Off Day, holiday, leave, extra duty and late/early classifications. No-log night duties remain pending through the following day." :icon="CalendarCheck">
+      <div class="bg-card border rounded-2xl p-4 shadow-sm">
+        <h3 class="text-sm font-semibold flex items-center gap-2 mb-3"><Clock3 class="size-4 text-primary" /> Reconcile — classify missing days</h3>
+        <form @submit.prevent="reconcile" class="flex flex-wrap items-end gap-3">
+          <div class="space-y-1"><Label class="text-xs">From</Label><Input v-model="reconcileForm.from" type="date" class="h-9" /></div>
+          <div class="space-y-1"><Label class="text-xs">To (completed days)</Label><Input v-model="reconcileForm.to" type="date" class="h-9" /></div>
+          <Button :disabled="reconcileForm.processing" size="sm" class="rounded-full">{{ reconcileForm.processing?'Working…':'Classify missing days' }}</Button>
+          <span class="text-xs text-muted-foreground ml-auto hidden sm:inline">Runs duty resolver for missing statuses</span>
+        </form>
+      </div>
+      <DataTable route-name="hrm.attendance.dailies.index" title="Daily Attendance" :columns="columns" :rows="(dailies.data as unknown as Record<string,unknown>[])" :meta="dailies.meta" :filter-defs="filterDefs" search-placeholder="Search employee name or ID…">
+        <template #cell-employee_id="{row}"><div class="leading-tight"><div class="font-mono text-sm font-semibold">{{ row.employee_id }}</div><div v-if="row.employee" class="text-xs text-foreground">{{ row.employee }}</div><div v-if="row.department || row.designation" class="text-[11px] text-muted-foreground">{{ row.department ?? '' }}<span v-if="row.department && row.designation"> · </span>{{ row.designation ?? '' }}</div></div></template>
+        <template #cell-duty_date="{row}"><span class="font-mono text-sm">{{ row.duty_date }}</span><div v-if="row.shift" class="text-[11px] text-muted-foreground">{{ row.shift }}</div></template>
+        <template #cell-primary_punch_in="{row}"><span class="text-sm font-mono">{{ fmt(row.primary_punch_in) }} → {{ fmt(row.primary_punch_out) }}</span><div class="text-xs text-muted-foreground" v-if="row.expected_in_time">Exp: {{ row.expected_in_time }}–{{ row.expected_out_time }}</div></template>
+        <template #cell-primary_worked_hours="{row}"><span class="font-mono font-semibold">{{ row.primary_worked_hours }}h</span></template>
+        <template #cell-total_overtime_hours="{row}"><span class="font-mono" :class="Number(row.total_overtime_hours)>0?'text-amber-600 font-semibold':''">{{ row.total_overtime_hours }}h</span></template>
+        <template #cell-grand_total_hours="{row}"><span class="font-mono font-bold">{{ row.grand_total_hours }}h</span></template>
+        <template #cell-status="{row}"><span class="px-2.5 py-1 rounded-full text-xs font-medium border" :class="statusClass(String(row.status))">{{ row.status }}</span></template>
+        <template #cell-actions="{row}"><button @click="del(row.id)" class="size-8 grid place-items-center rounded-md hover:bg-destructive/10 hover:text-destructive"><Trash2 class="size-4"/></button></template>
+      </DataTable>
+    </PageHeader>
   </AdminLayout>
 </template>

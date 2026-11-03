@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Trash2, Wrench } from 'lucide-vue-next';
+import { Trash2, Wrench, GitBranch } from 'lucide-vue-next';
 import AdminLayout from '../../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import DataTable, { type DataTableColumn } from '../../../../../../CORE/Resources/js/Components/DataTable.vue';
 import type { FilterDef, Paginator } from '../../../../../../CORE/Resources/js/types';
 import { formatDateTime } from '../../../../../../CORE/Resources/js/Utils/format';
@@ -15,16 +16,17 @@ function del(id:number){ if(confirm('Delete this pair only? Use Repair this date
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Attendance Pairs'}]">
     <Head title="Attendance Pairs"/>
-    <div class="flex items-start justify-between gap-4"><div><h1 class="text-xl font-bold">Attendance Pairs</h1><p class="text-sm text-muted-foreground">Paired IN→OUT — shift auto-detected by nearest 8h window (grace + fallback). Filters: Dept / Designation / Employee / Type / Date range. Search by name.</p></div><Link :href="route('hrm.attendance.fix.index')"><button class="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm text-primary-foreground"><Wrench class="size-4"/> Repair pairs</button></Link></div>
-    <DataTable route-name="hrm.attendance.pairs.index" title="Attendance Pairs" :columns="columns" :rows="(pairs.data as unknown as Record<string,unknown>[])" :meta="pairs.meta" :filter-defs="filterDefs" search-placeholder="Search employee name or ID…">
-      <template #cell-employee_id="{row}"><div class="leading-tight"><div class="font-mono text-sm font-semibold">{{ row.employee_id }}</div><div v-if="row.employee" class="text-xs">{{ row.employee }}</div><div v-if="row.department" class="text-[11px] text-muted-foreground">{{ row.department }}<span v-if="row.designation"> · {{ row.designation }}</span></div></div></template>
-      <template #cell-duty_date="{row}"><span class="text-sm font-mono">{{ row.duty_date }}</span></template>
-      <template #cell-punch_in="{row}"><span class="text-sm font-mono">{{ formatDateTime(row.punch_in) }} <span class="text-muted-foreground">→</span> {{ row.punch_out?formatDateTime(row.punch_out):'OPEN' }}</span></template>
-      <template #cell-shift="{row}"><div class="leading-tight"><span class="text-sm font-medium">{{ row.shift || '—' }}</span><div v-if="row.shift_time" class="text-xs font-mono text-muted-foreground">{{ row.shift_time }}</div></div></template>
-      <template #cell-duty_type="{row}"><span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="row.duty_type==='Primary'?'bg-blue-500/10 text-blue-600':'bg-amber-500/10 text-amber-600'">{{ row.duty_type }}</span></template>
-      <template #cell-shift_type_applied="{row}"><span class="text-xs px-2 py-0.5 rounded bg-muted">{{ row.shift_type_applied }}</span></template>
-      <template #cell-worked_hours="{row}"><span class="font-mono font-semibold">{{ row.worked_hours }}h</span></template>
-      <template #cell-actions="{row}"><div class="flex justify-end gap-1"><Link :href="route('hrm.attendance.fix.index',{employee_id:row.employee_id,from:row.duty_date,to:row.duty_date})" class="inline-flex size-8 items-center justify-center rounded-md hover:bg-primary/10 hover:text-primary" title="Repair this employee/date from biometric logs"><Wrench class="size-4"/></Link><button @click="del(row.id)" class="size-8 grid place-items-center rounded-md hover:bg-destructive/10 hover:text-destructive" title="Delete pair only"><Trash2 class="size-4"/></button></div></template>
-    </DataTable>
+    <PageHeader title="Attendance Pairs" description="Paired IN→OUT — shift auto-detected by nearest 8h window (grace + fallback). Filters: Dept / Designation / Employee / Type / Date range. Search by name." :icon="GitBranch" :actions="[{ label: 'Repair pairs', route: 'hrm.attendance.fix.index', icon: Wrench }]">
+      <DataTable route-name="hrm.attendance.pairs.index" title="Attendance Pairs" :columns="columns" :rows="(pairs.data as unknown as Record<string,unknown>[])" :meta="pairs.meta" :filter-defs="filterDefs" search-placeholder="Search employee name or ID…">
+        <template #cell-employee_id="{row}"><div class="leading-tight"><div class="font-mono text-sm font-semibold">{{ row.employee_id }}</div><div v-if="row.employee" class="text-xs">{{ row.employee }}</div><div v-if="row.department" class="text-[11px] text-muted-foreground">{{ row.department }}<span v-if="row.designation"> · {{ row.designation }}</span></div></div></template>
+        <template #cell-duty_date="{row}"><span class="text-sm font-mono">{{ row.duty_date }}</span></template>
+        <template #cell-punch_in="{row}"><span class="text-sm font-mono">{{ formatDateTime(row.punch_in) }} <span class="text-muted-foreground">→</span> {{ row.punch_out?formatDateTime(row.punch_out):'OPEN' }}</span></template>
+        <template #cell-shift="{row}"><div class="leading-tight"><span class="text-sm font-medium">{{ row.shift || '—' }}</span><div v-if="row.shift_time" class="text-xs font-mono text-muted-foreground">{{ row.shift_time }}</div></div></template>
+        <template #cell-duty_type="{row}"><span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="row.duty_type==='Primary'?'bg-blue-500/10 text-blue-600':'bg-amber-500/10 text-amber-600'">{{ row.duty_type }}</span></template>
+        <template #cell-shift_type_applied="{row}"><span class="text-xs px-2 py-0.5 rounded bg-muted">{{ row.shift_type_applied }}</span></template>
+        <template #cell-worked_hours="{row}"><span class="font-mono font-semibold">{{ row.worked_hours }}h</span></template>
+        <template #cell-actions="{row}"><div class="flex justify-end gap-1"><Link :href="route('hrm.attendance.fix.index',{employee_id:row.employee_id,from:row.duty_date,to:row.duty_date})" class="inline-flex size-8 items-center justify-center rounded-md hover:bg-primary/10 hover:text-primary" title="Repair this employee/date from biometric logs"><Wrench class="size-4"/></Link><button @click="del(row.id)" class="size-8 grid place-items-center rounded-md hover:bg-destructive/10 hover:text-destructive" title="Delete pair only"><Trash2 class="size-4"/></button></div></template>
+      </DataTable>
+    </PageHeader>
   </AdminLayout>
 </template>

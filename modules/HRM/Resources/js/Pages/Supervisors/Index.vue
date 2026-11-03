@@ -4,6 +4,7 @@ import { Pencil, Plus, Trash2, Eye, Shield } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
 import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
 import type { Paginator } from '../../../../../CORE/Resources/js/types';
@@ -42,10 +43,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
       <span style="font-size:11px;background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:999px">User ⇄ Employee</span>
     </div>
 
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div><h1 class="text-xl font-bold">Employee Supervisors</h1><p class="text-sm text-muted-foreground">Map employees to their supervisors — supports User and Employee supervisors.</p></div>
-      <Link :href="route('hrm.supervisors.create')"><Button size="sm"><Plus class="size-4"/> Assign Supervisor</Button></Link>
-    </div>
+    <PageHeader title="Employee Supervisors" description="Map employees to their supervisors — supports User and Employee supervisors." :icon="Shield" :actions="[{ label:'Assign Supervisor', route:'hrm.supervisors.create', icon: Plus }]">
     <DataTable route-name="hrm.supervisors.index" title="Supervisors" :columns="columns" :rows="(supervisors.data as unknown as Record<string,unknown>[])" :meta="supervisors.meta" search-placeholder="Search employee or type...">
       <template #cell-employee="{row}"><span class="font-semibold">{{ row.employee }}</span><span class="text-xs text-muted-foreground ml-1">({{ row.employee_id }})</span></template>
       <template #cell-supervisor="{row}">
@@ -68,5 +66,6 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
       </template>
     </DataTable>
     <ConfirmDialog v-model:open="confirmOpen" :processing="processing" title="Remove supervisor?" :description="`Remove ${pending?.supervisor_type} assignment for ${pending?.employee}?`" confirm-label="Remove" @confirm="confirmDelete"/>
+      </PageHeader>
   </AdminLayout>
 </template>

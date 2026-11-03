@@ -4,6 +4,7 @@ import { Pencil, Plus, Trash2, Tag, ShieldCheck } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
 import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
 import type { Paginator } from '../../../../../CORE/Resources/js/types';
@@ -24,10 +25,7 @@ function confirmDelete(){ if(!pending.value) return; router.delete(route('hrm.le
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Leave Types'}]">
     <Head title="Leave Types"/>
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div><h1 class="text-xl font-bold flex items-center gap-2"><Tag class="size-5"/> Leave Types</h1><p class="text-sm text-muted-foreground">Define quotas — Casual, Sick, Earned etc. Color codes the requests.</p></div>
-      <Link :href="route('hrm.leave-types.create')"><Button size="sm"><Plus class="size-4"/> New Type</Button></Link>
-    </div>
+    <PageHeader title="Leave Types" description="Define quotas — Casual, Sick, Earned etc. Color codes the requests." :icon="Tag" :actions="[{ label:'New Type', route:'hrm.leave-types.create', icon: Plus }]">
     <DataTable route-name="hrm.leave-types.index" title="Leave Types" :columns="columns" :rows="(leaveTypes.data as unknown as Record<string,unknown>[])" :meta="leaveTypes.meta">
       <template #cell-name="{row}"><div class="flex items-center gap-2"><span class="size-3 rounded-full" :style="{backgroundColor: (row as any).color}"></span><span class="font-semibold text-sm">{{ row.name }}</span></div><p class="text-xs text-muted-foreground truncate max-w-[240px]">{{ (row as any).description || '' }}</p></template>
       <template #cell-code="{row}"><span class="font-mono text-sm px-2 py-0.5 rounded bg-muted">{{ row.code || '—' }}</span></template>
@@ -37,5 +35,6 @@ function confirmDelete(){ if(!pending.value) return; router.delete(route('hrm.le
       <template #cell-actions="{row}"><div class="flex justify-end gap-1"><Link :href="route('hrm.leave-types.edit',(row as any).id)" class="size-8 grid place-items-center rounded-md hover:bg-accent"><Pencil class="size-4"/></Link><button @click="askDelete(row as unknown as Row)" class="size-8 grid place-items-center rounded-md hover:bg-destructive/10 hover:text-destructive"><Trash2 class="size-4"/></button></div></template>
     </DataTable>
     <ConfirmDialog v-model:open="confirmOpen" title="Delete leave type?" :description="`Delete ${pending?.name}?`" confirm-label="Delete" @confirm="confirmDelete"/>
+      </PageHeader>
   </AdminLayout>
 </template>

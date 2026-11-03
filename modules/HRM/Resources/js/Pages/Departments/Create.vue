@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
 defineProps<{ parentOptions: {value:number;label:string}[] }>();
 const form=useForm({name:'',code:'',description:'',parent_id:null as number|null,is_active:true});
@@ -12,7 +13,8 @@ function submit(){ form.post(route('hrm.departments.store')); }
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Departments',href:route('hrm.departments.index')},{title:'Create'}]">
     <Head title="Create Department"/>
-    <div class="max-w-2xl mx-auto bg-card border rounded-xl p-6">
+    <PageHeader title="New Department" description="Complete the form — required *" :icon="Package">
+    <div class="max-w-2xl mx-auto bg-card border rounded-2xl shadow-sm p-6">
       <h1 class="text-lg font-bold mb-4">New Department</h1>
       <form @submit.prevent="submit" class="space-y-4">
         <div class="space-y-2"><Label>Name *</Label><Input v-model="form.name"/><p v-if="form.errors.name" class="text-sm text-destructive">{{ form.errors.name }}</p></div>
@@ -23,5 +25,6 @@ function submit(){ form.post(route('hrm.departments.store')); }
         <Button type="submit" :disabled="form.processing">Create Department</Button>
       </form>
     </div>
+      </PageHeader>
   </AdminLayout>
 </template>

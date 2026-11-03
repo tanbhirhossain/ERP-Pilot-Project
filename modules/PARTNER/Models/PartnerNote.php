@@ -1,0 +1,36 @@
+<?php
+
+namespace Modules\PARTNER\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
+
+class PartnerNote extends Model
+{
+    use SoftDeletes, LogsActivity;
+
+    protected $guarded = [];
+
+    protected $casts = [
+        'is_private' => 'boolean',
+        'is_pinned' => 'boolean',
+    ];
+
+    public function partner(): BelongsTo
+    {
+        return $this->belongsTo(Partner::class);
+    }
+
+    public function author(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\CORE\Models\User::class, 'created_by');
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()->useLogName('partner_note')->logAll()->logOnlyDirty()->setDescriptionForEvent(fn (string $e) => "PartnerNote {$e}");
+    }
+}

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import {LayoutDashboard, Plus} from 'lucide-vue-next';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
 import EmployeeMultiSearchSelect from '../../Components/EmployeeMultiSearchSelect.vue';
@@ -86,13 +88,7 @@ const columns: DataTableColumn[] = [
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'PAYROLL' }, { title: 'Loans' }]">
     <Head title="Payroll loans" />
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 class="text-xl font-bold">Employee loans</h1>
-        <p class="text-sm text-muted-foreground">Strictly interest-free loans, controlled approval, and audited monthly payroll recovery.</p>
-      </div>
-      <Link :href="route('payroll.loans.create')"><Button>New loan request</Button></Link>
-    </div>
+    <PageHeader title="Employee loans" description="Strictly interest-free loans, controlled approval, and audited monthly payroll recovery." :icon="LayoutDashboard" :actions="[{ label:'New loan request', route:'payroll.loans.create', icon: Plus }]">
 
     <section class="mt-5 rounded-xl border bg-card p-5">
       <div class="flex flex-wrap items-start justify-between gap-3">
@@ -179,5 +175,6 @@ const columns: DataTableColumn[] = [
         </div>
       </template>
     </DataTable>
+      </PageHeader>
   </AdminLayout>
 </template>

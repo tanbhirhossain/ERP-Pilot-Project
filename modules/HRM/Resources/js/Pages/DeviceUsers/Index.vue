@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
 import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
 import type { Paginator } from '../../../../../CORE/Resources/js/types';
@@ -141,6 +142,8 @@ function syncFromSelectedDevice() {
     </div>
 
     <!-- Global mapping table -->
+        <PageHeader title="Employee ↔ Device Mapping" description="One Device User ID (ZK UID like 1001) maps to one
+        EMP-xxxx globally — punch-in on Device A and punch-out on Device B resolves to the same employee. No device binding." :icon="Link2" >
     <DataTable
       route-name="hrm.device-users.index"
       title="Global Mappings"
@@ -176,5 +179,6 @@ function syncFromSelectedDevice() {
         </div>
       </template>
     </DataTable>
+      </PageHeader>
   </AdminLayout>
 </template>

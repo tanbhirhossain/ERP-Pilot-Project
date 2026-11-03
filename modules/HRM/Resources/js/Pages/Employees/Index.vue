@@ -4,6 +4,7 @@ import { Pencil, Plus, Trash2, Eye } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
 import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
 import type { Paginator } from '../../../../../CORE/Resources/js/types';
@@ -27,7 +28,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Employees'}]">
     <Head title="Employees"/>
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h1 class="text-xl font-bold">Employees</h1><p class="text-sm text-muted-foreground">Central HR directory — profiles, salaries, policies linked.</p></div><Link :href="route('hrm.employees.create')"><Button size="sm"><Plus class="size-4"/> Add Employee</Button></Link></div>
+    <PageHeader title="Employees" description="Central HR directory — profiles, salaries, policies linked." :icon="Pencil" :actions="[{ label:'Add Employee', route:'hrm.employees.create', icon: Plus }]">
     <DataTable route-name="hrm.employees.index" title="Employees" :columns="columns" :rows="(employees.data as unknown as Record<string,unknown>[])" :meta="employees.meta" search-placeholder="Search by ID, name, email...">
       <template #cell-employee_id="{row}"><span class="font-mono text-sm font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded">{{ row.employee_id }}</span></template>
       <template #cell-biometric_id="{row}"><span class="font-mono text-xs px-1.5 py-0.5 rounded" :class="row.biometric_id ? 'bg-emerald-500/10 text-emerald-600 font-semibold' : 'bg-amber-500/10 text-amber-600'">{{ row.biometric_id || '—' }}</span></template>
@@ -43,5 +44,6 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
       </div></template>
     </DataTable>
     <ConfirmDialog v-model:open="confirmOpen" :processing="processing" title="Delete employee?" :description="`Delete ${pending?.full_name} (${pending?.employee_id})?`" confirm-label="Delete" @confirm="confirmDelete"/>
+      </PageHeader>
   </AdminLayout>
 </template>

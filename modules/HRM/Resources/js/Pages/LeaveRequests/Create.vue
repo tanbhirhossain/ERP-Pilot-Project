@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, CalendarDays } from 'lucide-vue-next';
+import {ArrowLeft, CalendarDays, Package} from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
 const props=defineProps<{ employeeOptions:{value:string,label:string}[]; leaveTypeOptions:{value:number,label:string,color?:string}[]; leave?: any }>();
 const isEdit=computed(()=> !!props.leave);
@@ -30,10 +31,10 @@ function submit(){ if(isEdit.value) form.put(route('hrm.leaves.update', props.le
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Leaves', href: route('hrm.leaves.index')},{title: isEdit ? 'Edit' : 'New'}]">
     <Head :title="isEdit ? 'Edit Leave' : 'New Leave Request'"/>
-    <div class="max-w-3xl mx-auto space-y-4">
-      <div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2"><CalendarDays class="size-5"/>{{ isEdit ? 'Edit Leave' : 'New Leave Request' }}</h1><Link :href="route('hrm.leaves.index')"><Button variant="outline" size="sm"><ArrowLeft class="size-4"/> Back</Button></Link></div>
+    <PageHeader :title="isEdit ? 'Edit Leave' : 'New Leave Request' " description="Complete the form — required *" :icon="Package">
+    <div class="max-w-3xl mx-auto space-y-4"><div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2"><CalendarDays class="size-5"/>{{ isEdit ? 'Edit Leave' : 'New Leave Request' }}</h1><Link :href="route('hrm.leaves.index')"><Button variant="outline" size="sm"><ArrowLeft class="size-4"/> Back</Button></Link></div>
       <p class="text-sm text-muted-foreground">Leave rules vary by type: calendar or working days, accrual and pro-rating are configured in Leave Types. A printable application slip is generated after submission.</p>
-      <form @submit.prevent="submit" class="bg-card border rounded-xl p-6 space-y-4">
+      <form @submit.prevent="submit" class="bg-card border rounded-2xl shadow-sm p-6 space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1"><Label>Employee *</Label><SearchableSelect v-model="form.employee_id" :options="employeeOptions" endpoint="/hrm/api/options/employees" placeholder="Select employee" :error="form.errors.employee_id as any"/><p v-if="form.errors.employee_id" class="text-xs text-destructive">{{ form.errors.employee_id }}</p></div>
           <div class="space-y-1"><Label>Leave Type *</Label><SearchableSelect v-model="form.leave_type_id" :options="leaveTypeOptions" placeholder="Select type" :error="form.errors.leave_type_id as any"/><p v-if="form.errors.leave_type_id" class="text-xs text-destructive">{{ form.errors.leave_type_id }}</p></div>
@@ -48,5 +49,6 @@ function submit(){ if(isEdit.value) form.put(route('hrm.leaves.update', props.le
         <div class="flex justify-end gap-2 pt-2"><Link :href="route('hrm.leaves.index')"><Button type="button" variant="outline">Cancel</Button></Link><Button type="submit" :disabled="form.processing" class="bg-indigo-600 hover:bg-indigo-700"><CalendarDays class="size-4"/>{{ form.processing ? 'Saving...' : isEdit ? 'Update' : 'Submit Request' }}</Button></div>
       </form>
     </div>
+      </PageHeader>
   </AdminLayout>
 </template>

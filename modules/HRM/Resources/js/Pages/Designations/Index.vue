@@ -4,6 +4,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
 import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
 import type { Paginator } from '../../../../../CORE/Resources/js/types';
@@ -26,7 +27,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Designations'}]">
     <Head title="Designations"/>
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h1 class="text-xl font-bold">Designations</h1><p class="text-sm text-muted-foreground">Manage job titles & grades.</p></div><Link :href="route('hrm.designations.create')"><Button size="sm"><Plus class="size-4"/> New Designation</Button></Link></div>
+    <PageHeader title="Designations" description="Manage job titles & grades." :icon="Pencil" :actions="[{ label:'New Designation', route:'hrm.designations.create', icon: Plus }]">
     <DataTable route-name="hrm.designations.index" title="Designations" :columns="columns" :rows="(designations.data as unknown as Record<string,unknown>[])" :meta="designations.meta">
       <template #cell-name="{row}"><span class="font-semibold">{{ row.name }}</span></template>
       <template #cell-code="{row}"><span class="text-sm text-muted-foreground">{{ row.code || '—' }}</span></template>
@@ -37,5 +38,6 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
       <template #cell-actions="{row}"><div class="flex justify-end gap-1"><Link :href="route('hrm.designations.edit',row.id)" class="size-8 grid place-items-center rounded-md hover:bg-accent"><Pencil class="size-4"/></Link><button @click="askDelete(row)" class="size-8 grid place-items-center rounded-md hover:bg-destructive/10 hover:text-destructive"><Trash2 class="size-4"/></button></div></template>
     </DataTable>
     <ConfirmDialog v-model:open="confirmOpen" :processing="processing" title="Delete designation?" :description="`Delete ${pending?.name}?`" confirm-label="Delete" @confirm="confirmDelete"/>
+      </PageHeader>
   </AdminLayout>
 </template>

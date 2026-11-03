@@ -56,7 +56,13 @@ final class MarkPayrollSlipPaymentAction
                 'paid_by' => $status === 'paid' ? $actorId : null,
             ]);
 
-            return $locked->refresh();
+            $result = $locked->refresh();
+            // ── Finance Bridge: auto-post payment JV (idempotent, never blocks HR) ──
+            if ($status === 'paid') {
+                try { app(\Modules\PAYROLL\Services\PayrollPaymentPostingService::class)->postIfPaid($result); } catch (\Throwable $e) { \Illuminate\Support\Facades\Log::warning('Payroll payment JV skipped: '.$e->getMessage(), ['slip_id'=>$result->id]); }
+            }
+
+            return $result;
         });
     }
 

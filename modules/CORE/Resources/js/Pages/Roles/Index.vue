@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import DataTable, { type DataTableColumn } from '../../Components/DataTable.vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import PageHeader from '../../Components/PageHeader.vue';
 import { useAcl } from '../../Composables/useAcl';
 import type { FilterDef, Paginator, RoleRow } from '../../types';
 import { formatDate, formatNumber } from '../../Utils/format';
@@ -55,20 +56,7 @@ function confirmDelete() {
     <AdminLayout :breadcrumbs="[{ title: 'Access Control' }, { title: 'Roles' }]">
         <Head title="Roles" />
 
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
-            <div>
-                <h1 class="text-xl font-bold tracking-tight">Roles</h1>
-                <p class="mt-0.5 text-sm text-muted-foreground">
-                    Bundle permissions into reusable access profiles.
-                </p>
-            </div>
-            <Link v-if="can('roles.create')" :href="route('core.roles.create')">
-                <Button class="h-9 shadow-md shadow-primary/20">
-                    <Plus class="size-4" />
-                    New role
-                </Button>
-            </Link>
-        </div>
+        <PageHeader title="Roles" description="Bundle permissions into reusable access profiles." :icon="ShieldCheck" :actions="[{ label:'New role', route:'core.roles.create', icon: Plus }]">
 
         <DataTable
             route-name="core.roles.index"
@@ -146,5 +134,6 @@ function confirmDelete() {
             confirm-label="Delete role"
             @confirm="confirmDelete"
         />
-    </AdminLayout>
+        </PageHeader>
+  </AdminLayout>
 </template>

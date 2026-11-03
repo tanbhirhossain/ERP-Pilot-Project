@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { Eye, ScrollText } from 'lucide-vue-next';
 import DataTable, { type DataTableColumn } from '../../Components/DataTable.vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import PageHeader from '../../Components/PageHeader.vue';
 import type { ActivityRow, FilterDef, Paginator } from '../../types';
 import { eventTone, formatDateTime } from '../../Utils/format';
 
@@ -42,7 +43,8 @@ const columns: DataTableColumn[] = [
             </div>
         </div>
 
-        <DataTable
+            <PageHeader title="Audit trail" description="JCI-grade record of who did what, when and from where — immutable and never editable." :icon="ScrollText" >
+    <DataTable
             route-name="core.activities.index"
             export-resource="activities"
             title="Audit trail"
@@ -108,5 +110,6 @@ const columns: DataTableColumn[] = [
                 </div>
             </template>
         </DataTable>
-    </AdminLayout>
+        </PageHeader>
+  </AdminLayout>
 </template>

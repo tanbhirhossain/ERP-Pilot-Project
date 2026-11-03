@@ -90,6 +90,20 @@ export function avatarTone(seed: string): string {
     return tones[hash % tones.length];
 }
 
+const bdtFormatter = new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 2 });
+const bdtNumberFormatter = new Intl.NumberFormat('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+export function formatCurrency(value: number | null | undefined, currency: string = 'BDT'): string {
+    if (value === null || value === undefined) return '—';
+    if (currency === 'BDT') return `৳ ${bdtNumberFormatter.format(Number(value))}`;
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(value));
+}
+
+export function formatCurrencyCompact(value: number | null | undefined): string {
+    if (value === null || value === undefined) return '—';
+    return `৳ ${new Intl.NumberFormat('en-BD', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(value))}`;
+}
+
 /** Badge tones for audit events. */
 export function eventTone(event: string | null): { dot: string; chip: string } {
     switch (event) {

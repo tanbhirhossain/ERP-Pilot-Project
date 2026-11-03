@@ -6,8 +6,9 @@ import { Separator } from '@/components/ui/separator';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { useAppearance } from '@/composables/useAppearance';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { ChevronRight, Moon, Sun } from 'lucide-vue-next';
+import { ChevronRight, Moon, Search, Sun } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import CommandPalette from '../Components/CommandPalette.vue';
 import ToastStack from '../Components/ToastStack.vue';
 import type { AuthUser, Breadcrumb } from '../types';
 import TreeSidebar from './TreeSidebar.vue';
@@ -99,67 +100,47 @@ function toggleTheme() {
 
         <SidebarInset class="relative min-w-0">
             <header
-                class="no-print bg-background/80 sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b px-4 backdrop-blur-md transition-[width,height] print:hidden"
+                class="no-print glass-header bg-background/70 sticky top-0 z-30 flex h-[3.5rem] shrink-0 items-center gap-3 border-b border-border/60 px-4 shadow-[0_1px_0_0_hsl(var(--border)/0.6),0_8px_24px_hsl(var(--foreground)/0.04)] transition-[width,height] print:hidden supports-[backdrop-filter]:bg-background/50"
             >
-                <SidebarTrigger class="-ml-1 shrink-0" />
-                <Separator orientation="vertical" class="h-5 shrink-0" />
+                <SidebarTrigger class="-ml-1 shrink-0 rounded-lg hover:bg-accent" />
+                <Separator orientation="vertical" class="h-5 shrink-0 opacity-60" />
 
-                <!-- Breadcrumbs -->
-                <nav class="flex min-w-0 items-center gap-1.5 overflow-hidden" aria-label="Breadcrumb">
+                <!-- Breadcrumbs — premium pill -->
+                <nav class="flex min-w-0 items-center gap-1 overflow-hidden" aria-label="Breadcrumb">
                     <template v-for="(crumb, index) in breadcrumbs" :key="`${crumb.title}-${index}`">
-                        <ChevronRight v-if="index > 0" class="text-muted-foreground/60 size-3.5 shrink-0" aria-hidden="true" />
-                        <Link
-                            v-if="crumb.href && index < breadcrumbs.length - 1"
-                            :href="crumb.href"
-                            class="text-muted-foreground hover:text-foreground max-w-[10rem] truncate text-sm transition"
-                        >
+                        <span v-if="index > 0" class="text-muted-foreground/30 select-none">/</span>
+                        <Link v-if="crumb.href && index < breadcrumbs.length - 1" :href="crumb.href" class="text-muted-foreground hover:text-foreground max-w-[10rem] truncate rounded-md px-1.5 py-1 text-[13px] font-medium transition hover:bg-accent">
                             {{ crumb.title }}
                         </Link>
-                        <span v-else class="text-foreground max-w-[14rem] truncate text-sm font-semibold" aria-current="page">
-                            {{ crumb.title }}
-                        </span>
+                        <span v-else class="max-w-[14rem] truncate rounded-md bg-accent px-2 py-1 text-[13px] font-semibold text-foreground" aria-current="page">{{ crumb.title }}</span>
                     </template>
+                    <span v-if="!breadcrumbs.length" class="text-sm font-semibold text-foreground">{{ title ?? 'Dashboard' }}</span>
                 </nav>
 
-                <div class="ml-auto flex items-center gap-1.5">
+                <div class="ml-auto flex items-center gap-1">
+                    <!-- Global search — premium inset -->
+                    <CommandPalette v-slot="{ open }">
+                        <button type="button" class="hidden md:flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5 text-[13px] text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground transition" @click="open()">
+                            <Search class="size-3.5" /> Search <span class="ml-1 hidden lg:inline-flex items-center gap-1 rounded bg-background border px-1.5 py-0 text-[11px] font-medium shadow-sm">⌘K</span>
+                        </button>
+                        <Button variant="ghost" size="icon" class="md:hidden size-9 rounded-full" aria-label="Search" @click="open()"><Search class="size-4" /></Button>
+                    </CommandPalette>
                     <!-- Theme toggle -->
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        class="text-muted-foreground size-9 rounded-lg"
-                        :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-                        @click="toggleTheme"
-                    >
-                        <Sun v-if="isDark" class="size-4.5" />
-                        <Moon v-else class="size-4.5" />
+                    <Button variant="ghost" size="icon" class="size-8 rounded-full text-muted-foreground hover:bg-accent" :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
+                        <Sun v-if="isDark" class="size-4" /><Moon v-else class="size-4" />
                     </Button>
+                    <Separator orientation="vertical" class="h-6 mx-1 hidden sm:block opacity-50" />
 
-                    <!-- Account -->
+                    <!-- Account — premium pill -->
                     <DropdownMenu v-if="user">
                         <DropdownMenuTrigger as-child>
-                            <button
-                                type="button"
-                                class="hover:border-border hover:bg-accent focus-visible:ring-ring flex items-center gap-2 rounded-lg border border-transparent px-2 py-1.5 text-sm transition focus-visible:ring-2 focus-visible:outline-none"
-                            >
-                                <span
-                                    class="grid size-7 shrink-0 place-items-center rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 text-[11px] font-bold text-white"
-                                >
-                                    {{
-                                        user.name
-                                            .split(/\s+/)
-                                            .map((part) => part[0])
-                                            .slice(0, 2)
-                                            .join('')
-                                            .toUpperCase()
-                                    }}
-                                </span>
-                                <span class="hidden max-w-36 truncate font-medium md:inline">{{ user.name }}</span>
-                                <ChevronRight class="text-muted-foreground size-3.5 rotate-90" />
+                            <button type="button" class="flex items-center gap-2 rounded-full border border-border bg-card pl-1 pr-2 py-1 text-sm shadow-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none transition">
+                                <span class="grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 text-[11px] font-bold text-white ring-1 ring-black/5">{{ user.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase() }}</span>
+                                <span class="hidden max-w-36 truncate text-[13px] font-medium md:inline">{{ user.name }}</span>
+                                <ChevronRight class="size-3.5 text-muted-foreground rotate-90" />
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-64">
-                            <UserMenuContent :user="user" />
-                        </DropdownMenuContent>
+                        <DropdownMenuContent align="end" class="w-64 rounded-xl p-1 shadow-xl"><UserMenuContent :user="user" /></DropdownMenuContent>
                     </DropdownMenu>
                 </div>
             </header>
@@ -169,7 +150,7 @@ function toggleTheme() {
                 <div class="global-progress-bar bg-primary h-full w-1/3 rounded-full" />
             </div>
 
-            <div class="flex-1 p-4 md:p-6">
+            <div class="flex-1 p-4 md:p-6 bg-gradient-to-b from-muted/[0.35] to-transparent">
                 <div class="page-enter mx-auto w-full max-w-[1500px] space-y-6">
                     <slot />
                 </div>

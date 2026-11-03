@@ -1,0 +1,1 @@
+<script setup lang="ts">import { Head } from "@inertiajs/vue3"; import AdminLayout from "../../../../../CORE/Resources/js/Layouts/AdminLayout.vue"; defineProps<{ret:any}>();</script><template><AdminLayout><Head title="Edit Return"/><div class="p-8 text-center text-muted-foreground">Edit disabled — Cancel draft and recreate if needed.</div></AdminLayout></template>

@@ -68,4 +68,22 @@ Route::middleware(['web', 'auth'])->prefix('payroll')->name('payroll.')->group(f
     Route::post('settlements/gratuity-policies', [PayrollSettlementController::class, 'storeGratuityPolicy'])->middleware(PermissionMiddleware::class.':payroll.settlements.manage')->name('settlements.gratuity-policies.store');
     Route::post('settlements/{settlement}/approve', [PayrollSettlementController::class, 'approve'])->middleware(PermissionMiddleware::class.':payroll.settlements.approve')->name('settlements.approve');
     Route::post('settlements/{settlement}/paid', [PayrollSettlementController::class, 'paid'])->middleware(PermissionMiddleware::class.':payroll.settlements.manage')->name('settlements.paid');
+
+    // ── Finance Bridge (ACCOUNTS posting + BEFTN) ───────────────────────
+    Route::get('finance/sheets/{salarySheet}', [\Modules\PAYROLL\Http\Controllers\PayrollFinanceController::class, 'showSheetFinance'])->middleware(PermissionMiddleware::class.':payroll.finance.view')->name('finance.sheets.show');
+    Route::post('finance/sheets/{salarySheet}/post-accrual', [\Modules\PAYROLL\Http\Controllers\PayrollFinanceController::class, 'postAccrual'])->middleware(PermissionMiddleware::class.':payroll.finance.post')->name('finance.sheets.post-accrual');
+    Route::post('finance/posts/{post}/void', [\Modules\PAYROLL\Http\Controllers\PayrollFinanceController::class, 'voidPosting'])->middleware(PermissionMiddleware::class.':payroll.finance.void')->name('finance.posts.void');
+    Route::get('finance/journals', function(){ return redirect()->route('payroll.sheets.index'); })->name('finance.journals'); // placeholder, full journals via ACCOUNTS
+
+    Route::get('bank-advices', [\Modules\PAYROLL\Http\Controllers\PayrollFinanceController::class, 'indexAdvices'])->middleware(PermissionMiddleware::class.':payroll.bank-advices.view')->name('bank-advices.index');
+    Route::post('bank-advices/generate/{salarySheet}', [\Modules\PAYROLL\Http\Controllers\PayrollFinanceController::class, 'generateAdvice'])->middleware(PermissionMiddleware::class.':payroll.bank-advices.manage')->name('bank-advices.generate');
+    Route::get('bank-advices/{advice}', [\Modules\PAYROLL\Http\Controllers\PayrollFinanceController::class, 'showAdvice'])->middleware(PermissionMiddleware::class.':payroll.bank-advices.view')->name('bank-advices.show');
+    Route::get('bank-advices/{advice}/download', [\Modules\PAYROLL\Http\Controllers\PayrollFinanceController::class, 'downloadAdvice'])->middleware(PermissionMiddleware::class.':payroll.bank-advices.view')->name('bank-advices.download');
+    Route::post('bank-advices/{advice}/confirm', [\Modules\PAYROLL\Http\Controllers\PayrollFinanceController::class, 'confirmAdvice'])->middleware(PermissionMiddleware::class.':payroll.bank-advices.manage')->name('bank-advices.confirm');
+    Route::post('bank-advices/{advice}/paid', [\Modules\PAYROLL\Http\Controllers\PayrollFinanceController::class, 'markAdvicePaid'])->middleware(PermissionMiddleware::class.':payroll.bank-advices.manage')->name('bank-advices.paid');
+
+    // ── Payroll Reopen (Finance reverses JV) ───────────────────────
+    Route::get('reopens', [\Modules\PAYROLL\Http\Controllers\PayrollReopenController::class, 'index'])->middleware(PermissionMiddleware::class.':payroll.finance.view')->name('reopens.index');
+    Route::post('reopens/request/{salarySheet}', [\Modules\PAYROLL\Http\Controllers\PayrollReopenController::class, 'request'])->middleware(PermissionMiddleware::class.':payroll.finance.post')->name('reopens.request');
+    Route::post('reopens/{reopen}/approve', [\Modules\PAYROLL\Http\Controllers\PayrollReopenController::class, 'approve'])->middleware(PermissionMiddleware::class.':payroll.finance.void')->name('reopens.approve');
 });

@@ -1,17 +1,10 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-/* Class-based dark mode (html.dark) — Tailwind 4 CSS-first setup */
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Tailwind 4 theme — maps the design tokens declared in :root / .dark
- * onto utilities (bg-background, text-muted-foreground, border-border, ...).
- */
 @theme inline {
-    --font-sans:
-        'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     --color-background: hsl(var(--background));
     --color-foreground: hsl(var(--foreground));
     --color-card: hsl(var(--card));
@@ -36,7 +29,6 @@
     --color-chart-3: hsl(var(--chart-3));
     --color-chart-4: hsl(var(--chart-4));
     --color-chart-5: hsl(var(--chart-5));
-
     --color-sidebar-background: hsl(var(--sidebar-background));
     --color-sidebar-foreground: hsl(var(--sidebar-foreground));
     --color-sidebar-primary: hsl(var(--sidebar-primary));
@@ -45,7 +37,6 @@
     --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
     --color-sidebar-border: hsl(var(--sidebar-border));
     --color-sidebar-ring: hsl(var(--sidebar-ring));
-
     --radius-sm: calc(var(--radius) - 4px);
     --radius-md: calc(var(--radius) - 2px);
     --radius-lg: var(--radius);
@@ -55,80 +46,137 @@
 @layer base {
     :root {
         --background: 0 0% 100%;
-        --foreground: 0 0% 3.9%;
+        --foreground: 240 10% 3.9%;
         --card: 0 0% 100%;
-        --card-foreground: 0 0% 3.9%;
+        --card-foreground: 240 10% 3.9%;
         --popover: 0 0% 100%;
-        --popover-foreground: 0 0% 3.9%;
-        --primary: 0 0% 9%;
+        --popover-foreground: 240 10% 3.9%;
+        --primary: 240 5.9% 10%;
         --primary-foreground: 0 0% 98%;
-        --secondary: 0 0% 92.1%;
-        --secondary-foreground: 0 0% 9%;
-        --muted: 0 0% 96.1%;
-        --muted-foreground: 0 0% 45.1%;
-        --accent: 0 0% 96.1%;
-        --accent-foreground: 0 0% 9%;
+        --secondary: 240 4.8% 95.9%;
+        --secondary-foreground: 240 5.9% 10%;
+        --muted: 240 4.8% 95.9%;
+        --muted-foreground: 240 3.8% 46.1%;
+        --accent: 240 4.8% 95.9%;
+        --accent-foreground: 240 5.9% 10%;
         --destructive: 0 84.2% 60.2%;
         --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 92.8%;
-        --input: 0 0% 89.8%;
-        --ring: 0 0% 3.9%;
-        --chart-1: 12 76% 61%;
+        --border: 240 5.9% 90%;
+        --input: 240 5.9% 90%;
+        --ring: 240 10% 3.9%;
+        --chart-1: 221 83% 53%;
         --chart-2: 173 58% 39%;
         --chart-3: 197 37% 24%;
         --chart-4: 43 74% 66%;
         --chart-5: 27 87% 67%;
-        --radius: 0.5rem;
-        --sidebar-background: 0 0% 98%;
+        --radius: 0.625rem;
+        --sidebar-background: 0 0% 98.5%;
         --sidebar-foreground: 240 5.3% 26.1%;
-        --sidebar-primary: 0 0% 10%;
+        --sidebar-primary: 240 5.9% 10%;
         --sidebar-primary-foreground: 0 0% 98%;
-        --sidebar-accent: 0 0% 94%;
-        --sidebar-accent-foreground: 240 5.3% 26.1%;
-        --sidebar-border: 0 0% 91%;
-        --sidebar-ring: 217.2 91.2% 59.8%;
+        --sidebar-accent: 240 4.8% 95.9%;
+        --sidebar-accent-foreground: 240 5.9% 10%;
+        --sidebar-border: 240 5.9% 90%;
+        --sidebar-ring: 221 83% 53%;
     }
 
     .dark {
-        --background: 0 0% 3.9%;
+        --background: 240 10% 3.9%;
         --foreground: 0 0% 98%;
-        --card: 0 0% 3.9%;
+        --card: 240 10% 3.9%;
         --card-foreground: 0 0% 98%;
-        --popover: 0 0% 3.9%;
+        --popover: 240 10% 3.9%;
         --popover-foreground: 0 0% 98%;
         --primary: 0 0% 98%;
-        --primary-foreground: 0 0% 9%;
-        --secondary: 0 0% 14.9%;
+        --primary-foreground: 240 5.9% 10%;
+        --secondary: 240 3.7% 15.9%;
         --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 14.9%;
-        --muted-foreground: 0 0% 63.9%;
-        --accent: 0 0% 14.9%;
+        --muted: 240 3.7% 15.9%;
+        --muted-foreground: 240 5% 64.9%;
+        --accent: 240 3.7% 15.9%;
         --accent-foreground: 0 0% 98%;
-        --destructive: 0 84.2% 60.2%;
+        --destructive: 0 62.8% 30.6%;
         --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 14.9%;
-        --input: 0 0% 14.9%;
-        --ring: 0 0% 83.1%;
+        --border: 240 3.7% 15.9%;
+        --input: 240 3.7% 15.9%;
+        --ring: 240 4.9% 83.9%;
         --chart-1: 220 70% 50%;
         --chart-2: 160 60% 45%;
         --chart-3: 30 80% 55%;
         --chart-4: 280 65% 60%;
         --chart-5: 340 75% 55%;
-        --sidebar-background: 0 0% 7%;
-        --sidebar-foreground: 0 0% 95.9%;
-        --sidebar-primary: 360 100% 100%;
+        --sidebar-background: 240 10% 3.9%;
+        --sidebar-foreground: 240 4.8% 95.9%;
+        --sidebar-primary: 224 71% 4%;
         --sidebar-primary-foreground: 0 0% 100%;
-        --sidebar-accent: 0 0% 15.9%;
+        --sidebar-accent: 240 3.7% 15.9%;
         --sidebar-accent-foreground: 240 4.8% 95.9%;
-        --sidebar-border: 0 0% 15.9%;
-        --sidebar-ring: 217.2 91.2% 59.8%;
+        --sidebar-border: 240 3.7% 15.9%;
+        --sidebar-ring: 221 83% 53%;
     }
 
-    * {
-        @apply border-border outline-ring/50;
-    }
+    * { @apply border-border outline-ring/50; }
+    body { @apply bg-background text-foreground antialiased; font-feature-settings: "rlig" 1, "calt" 1; }
+    /* Premium selection */
+    ::selection { background: hsl(var(--primary) / 0.12); }
+}
 
-    body {
-        @apply bg-background text-foreground;
+@layer utilities {
+    /* ── Premium sidebar scrollbar ── */
+    .premium-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: hsl(var(--sidebar-border)) transparent;
+        scroll-behavior: smooth;
     }
+    .premium-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+    .premium-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .premium-scrollbar::-webkit-scrollbar-thumb {
+        background: hsl(var(--sidebar-border));
+        border-radius: 9999px;
+        border: 1px solid transparent;
+        background-clip: padding-box;
+    }
+    .premium-scrollbar::-webkit-scrollbar-thumb:hover { background: hsl(var(--sidebar-foreground) / 0.2); background-clip: padding-box; }
+    .premium-scrollbar::-webkit-scrollbar-corner { background: transparent; }
+    /* Hide by default, show on hover/focus-within — production feel like Linear */
+    .premium-scrollbar { scrollbar-width: thin; }
+    @supports not selector(::-webkit-scrollbar) { .premium-scrollbar { scrollbar-color: hsl(var(--sidebar-border)) transparent; } }
+
+    /* Thin auto-hide variant for collapsed icon mode — never show */
+    .group-data-\[collapsible\=icon\]\:overflow-hidden:is(:where(.group)[data-collapsible="icon"] *) { overflow: hidden !important; }
+
+    /* Premium content fade masks at scroll edges */
+    .scroll-mask-top { mask-image: linear-gradient(to bottom, transparent, black 12px); }
+    .scroll-mask-both { mask-image: linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent); }
+
+    /* Glass header polish */
+    .glass-header { backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); }
+}
+
+@layer components {
+    /* ── Enterprise global polish — upgrades ALL pages without per-file edits ── */
+    /* Cards: every bg-card bordered panel becomes 2xl + soft shadow */
+    .bg-card.border:not(.rounded-full):not(.rounded-md) { @apply shadow-sm; }
+    /* Form cards: make single rounded-xl forms feel premium */
+    form.bg-card { @apply rounded-2xl shadow-sm; }
+    /* Table wrappers already rounded-xl in DataTable — elevate */
+    [data-core-print] { @apply rounded-2xl; }
+    /* Enterprise h1: tighter tracking */
+    h1.text-xl { @apply tracking-tight; }
+    h1.text-xl.font-bold { @apply tracking-tight; }
+    /* Enterprise buttons: subtle press animation */
+    button:active:not(:disabled) { transform: scale(0.98); }
+    /* Enterprise focus */
+    input:focus, select:focus, textarea:focus { @apply ring-2 ring-ring/20 border-ring/30 outline-none transition; }
+    /* Status badges: add subtle ring for depth */
+    .rounded-full.ring-1 { @apply shadow-sm; }
+    /* Premium page enter — respects reduced-motion */
+    .page-enter { animation: page-in 0.4s cubic-bezier(0.21,1.02,0.73,1) both; }
+    @media (prefers-reduced-motion: reduce) { .page-enter { animation: none; } }
+}
+
+/* Enterprise keyframes (kept here so purge keeps them) */
+@keyframes page-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
 }

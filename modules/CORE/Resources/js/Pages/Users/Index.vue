@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import DataTable, { type DataTableColumn } from '../../Components/DataTable.vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import PageHeader from '../../Components/PageHeader.vue';
 import { useAcl } from '../../Composables/useAcl';
 import type { FilterDef, Paginator, UserRow } from '../../types';
 import { avatarTone, formatDate, initials } from '../../Utils/format';
@@ -57,20 +58,7 @@ function confirmDelete() {
     <AdminLayout :breadcrumbs="[{ title: 'Access Control' }, { title: 'Users' }]">
         <Head title="Users" />
 
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
-            <div>
-                <h1 class="text-xl font-bold tracking-tight">Users</h1>
-                <p class="mt-0.5 text-sm text-muted-foreground">
-                    Manage identities, assignments and account status.
-                </p>
-            </div>
-            <Link v-if="can('users.create')" :href="route('core.users.create')">
-                <Button class="h-9 shadow-md shadow-primary/20">
-                    <Plus class="size-4" />
-                    New user
-                </Button>
-            </Link>
-        </div>
+        <PageHeader title="Users" description="Manage identities, assignments and account status." :icon="UserCheck" :actions="[{ label:'New user', route:'core.users.create', icon: Plus }]">
 
         <DataTable
             route-name="core.users.index"
@@ -168,5 +156,6 @@ function confirmDelete() {
             confirm-label="Delete user"
             @confirm="confirmDelete"
         />
-    </AdminLayout>
+        </PageHeader>
+  </AdminLayout>
 </template>

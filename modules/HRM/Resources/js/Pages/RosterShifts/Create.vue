@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 const form=useForm({shift_name:'',start_time:'',end_time:'',punch_in_window_start:'',punch_in_window_end:'',crosses_midnight:false,max_duration_hours:24});
 function submit(){ form.post(route('hrm.shifts.store')); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Shifts',href:route('hrm.shifts.index')},{title:'Create'}]">
-    <Head title="Create Shift"/><div class="max-w-2xl mx-auto bg-card border rounded-xl p-6"><h1 class="text-lg font-bold mb-4">New Shift</h1>
+    <Head title="Create Shift"/><PageHeader title="New Shift" description="Complete the form — required *" :icon="Package">
+    <div class="max-w-2xl mx-auto bg-card border rounded-2xl shadow-sm p-6"><h1 class="text-lg font-bold mb-4">New Shift</h1>
     <form @submit.prevent="submit" class="space-y-4">
       <div class="space-y-2"><Label>Shift Name *</Label><Input v-model="form.shift_name" placeholder="Day Shift A"/><p v-if="form.errors.shift_name" class="text-sm text-destructive">{{ form.errors.shift_name }}</p></div>
       <div class="grid grid-cols-2 gap-4"><div class="space-y-2"><Label>Start Time</Label><Input v-model="form.start_time" type="time"/></div><div class="space-y-2"><Label>End Time</Label><Input v-model="form.end_time" type="time"/></div></div>
@@ -18,5 +20,6 @@ function submit(){ form.post(route('hrm.shifts.store')); }
       <div class="space-y-2"><Label>Max Duration (hours, 1-72)</Label><Input v-model.number="form.max_duration_hours" type="number"/><p v-if="form.errors.max_duration_hours" class="text-sm text-destructive">{{ form.errors.max_duration_hours }}</p></div>
       <Button type="submit" :disabled="form.processing">Create Shift</Button>
     </form></div>
+      </PageHeader>
   </AdminLayout>
 </template>

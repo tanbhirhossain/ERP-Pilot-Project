@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Tag } from 'lucide-vue-next';
+import {ArrowLeft, Tag, Package} from 'lucide-vue-next';
 import { computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 const props=defineProps<{ leaveType?: any; policy?: any }>();
 const isEdit=computed(()=> !!props.leaveType);
 const form=useForm({ name: props.leaveType?.name ?? '', code: props.leaveType?.code ?? '', days_per_year: props.leaveType?.days_per_year ?? 12, is_paid: props.leaveType?.is_paid ?? true, color: props.leaveType?.color ?? '#6366f1', description: props.leaveType?.description ?? '', is_active: props.leaveType?.is_active ?? true, day_count_mode:props.policy?.day_count_mode??'calendar_days', accrual_mode:props.policy?.accrual_mode??'annual', proration_mode:props.policy?.proration_mode??'none', working_days_csv:props.policy?.working_days_csv??'0,1,2,3,4', approval_steps_text:props.policy?.approval_steps_text??'HR' });
@@ -15,9 +16,9 @@ function submit(){ if(isEdit.value) form.put(route('hrm.leave-types.update', pro
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Leave Types', href: route('hrm.leave-types.index')},{title: isEdit ? 'Edit' : 'New'}]">
     <Head :title="isEdit ? 'Edit Leave Type' : 'New Leave Type'"/>
-    <div class="max-w-2xl mx-auto space-y-4">
-      <div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2"><Tag class="size-5"/>{{ isEdit ? 'Edit Leave Type' : 'New Leave Type' }}</h1><Link :href="route('hrm.leave-types.index')"><Button variant="outline" size="sm"><ArrowLeft class="size-4"/> Back</Button></Link></div>
-      <form @submit.prevent="submit" class="bg-card border rounded-xl p-6 space-y-4">
+    <PageHeader :title="isEdit ? 'Edit Leave Type' : 'New Leave Type' " description="Complete the form — required *" :icon="Package">
+    <div class="max-w-2xl mx-auto space-y-4"><div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2"><Tag class="size-5"/>{{ isEdit ? 'Edit Leave Type' : 'New Leave Type' }}</h1><Link :href="route('hrm.leave-types.index')"><Button variant="outline" size="sm"><ArrowLeft class="size-4"/> Back</Button></Link></div>
+      <form @submit.prevent="submit" class="bg-card border rounded-2xl shadow-sm p-6 space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1"><Label>Name *</Label><Input v-model="form.name" placeholder="e.g. Casual Leave"/><p v-if="form.errors.name" class="text-xs text-destructive">{{ form.errors.name }}</p></div>
           <div class="space-y-1"><Label>Code</Label><Input v-model="form.code" placeholder="CL, SL, EL"/><p v-if="form.errors.code" class="text-xs text-destructive">{{ form.errors.code }}</p></div>
@@ -33,5 +34,6 @@ function submit(){ if(isEdit.value) form.put(route('hrm.leave-types.update', pro
         <div class="flex justify-end gap-2 pt-2"><Link :href="route('hrm.leave-types.index')"><Button type="button" variant="outline">Cancel</Button></Link><Button type="submit" :disabled="form.processing" class="bg-indigo-600 hover:bg-indigo-700">{{ form.processing ? 'Saving...' : isEdit ? 'Update' : 'Create' }}</Button></div>
       </form>
     </div>
+      </PageHeader>
   </AdminLayout>
 </template>

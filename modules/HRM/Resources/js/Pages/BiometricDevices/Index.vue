@@ -4,6 +4,7 @@ import { Pencil, Plus, Trash2, Wifi, WifiOff, Play } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
 import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
 import type { Paginator } from '../../../../../CORE/Resources/js/types';
@@ -21,7 +22,7 @@ function testDevice(id:number){ router.post(route('hrm.devices.test',id),{},{pre
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Biometric Devices'}]">
     <Head title="Biometric Devices"/>
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h1 class="text-xl font-bold">Biometric Devices</h1><p class="text-sm text-muted-foreground">ZKTeCo machines — configure IP/port & sync settings.</p></div><Link :href="route('hrm.devices.create')"><Button size="sm"><Plus class="size-4"/> Add Device</Button></Link></div>
+    <PageHeader title="Biometric Devices" description="ZKTeCo machines — configure IP/port & sync settings." :icon="Wifi" :actions="[{ label:'Add Device', route:'hrm.devices.create', icon: Plus }]">
     <DataTable route-name="hrm.devices.index" title="Biometric Devices" :columns="columns" :rows="(devices.data as unknown as Record<string,unknown>[])" :meta="devices.meta">
       <template #cell-name="{row}"><div><p class="font-semibold flex items-center gap-1.5"><Fingerprint class="size-4 text-muted-foreground"/>{{ row.name }}</p><p class="text-xs text-muted-foreground">{{ row.port }} • {{ row.serial_number || 'No SN' }}</p></div></template>
       <template #cell-ip_address="{row}"><span class="font-mono text-sm bg-muted px-1.5 py-0.5 rounded">{{ row.ip_address }}:{{ row.port }}</span></template>
@@ -35,6 +36,7 @@ function testDevice(id:number){ router.post(route('hrm.devices.test',id),{},{pre
       </div></template>
     </DataTable>
     <ConfirmDialog v-model:open="confirmOpen" :processing="processing" title="Delete device?" :description="`Delete ${pending?.name}?`" confirm-label="Delete" @confirm="confirmDelete"/>
+      </PageHeader>
   </AdminLayout>
 </template>
 <script lang="ts">import { Fingerprint } from 'lucide-vue-next';</script>

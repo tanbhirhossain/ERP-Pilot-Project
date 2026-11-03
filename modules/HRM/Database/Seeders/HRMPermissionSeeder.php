@@ -18,11 +18,20 @@ class HRMPermissionSeeder extends Seeder {
             'hrm.holidays.view','hrm.holidays.manage',
             'hrm.leave-types.view','hrm.leave-types.manage',
             'hrm.leaves.view','hrm.leaves.manage','hrm.leaves.approve','hrm.leaves.balance.view',
+            'hrm.documents.view','hrm.documents.manage','hrm.documents.verify',
+            'hrm.assets.view','hrm.assets.manage',
+            'hrm.probations.view','hrm.probations.manage',
+            'hrm.movements.view','hrm.movements.manage','hrm.movements.approve',
+            'hrm.regularizations.view','hrm.regularizations.manage','hrm.regularizations.approve','hrm.leave-year-end.view','hrm.leave-year-end.manage','hrm.reports.view',
+            'hrm.shift-allowances.view','hrm.shift-allowances.manage',
+            'hrm.ot-policies.view','hrm.ot-policies.manage',
+            'hrm.checklists.view','hrm.checklists.manage',
+            'hrm.clearance.view','hrm.clearance.manage',
             'hrm.informed.view','hrm.informed.manage',
             'hrm.attendance.view','hrm.attendance.manage','hrm.attendance.sync',
         ];
         foreach($perms as $name){
-            Permission::firstOrCreate(['name'=>$name,'guard_name'=>'web'],['group'=>'HRM','guard_name'=>'web']);
+            Permission::firstOrCreate(['name'=>$name,'guard_name'=>'web']);
         }
         // CORE provisions the Administrator role (not only an "Admin" alias).
         // Grant HRM queue permissions to both supported administrator role names.

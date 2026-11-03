@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Bell, Check, X, Clock, User } from 'lucide-vue-next';
+import {ArrowLeft, Bell, Check, X, Clock, User, FileText} from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
 const props=defineProps<{ informed:any }>();
 const processing=ref(false);
 function ack(){ processing.value=true; router.post(route('hrm.informed.acknowledge', props.informed.id),{},{onFinish(){processing.value=false;}}); }
@@ -12,9 +13,10 @@ function rej(){ if(!confirm('Reject?')) return; processing.value=true; router.po
 <template>
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Informed', href: route('hrm.informed.index')},{title:`#${informed.id}`}]">
     <Head :title="`Informed #${informed.id}`"/>
+    <PageHeader title="Pages Detail" description="Employee" :icon="FileText">
     <div class="max-w-3xl mx-auto space-y-4">
       <div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2"><Bell class="size-5"/> Notice #{{ informed.id }} <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" :class="informed.status==='Pending'?'bg-amber-100 text-amber-700': informed.status==='Acknowledged'?'bg-emerald-100 text-emerald-700': informed.status==='Rejected'?'bg-red-100 text-red-700':'bg-muted'">{{ informed.status }}</span></h1><Link :href="route('hrm.informed.index')"><Button variant="outline" size="sm"><ArrowLeft class="size-4"/> Back</Button></Link></div>
-      <div class="bg-card border rounded-xl p-6 space-y-4">
+      <div class="bg-card border rounded-2xl shadow-sm p-6 space-y-4">
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div><p class="text-muted-foreground flex items-center gap-1"><User class="size-3"/> Employee</p><p class="font-semibold font-mono">{{ informed.employee_id }} <span class="text-muted-foreground font-normal">{{ informed.employee }}</span></p></div>
           <div><p class="text-muted-foreground flex items-center gap-1"><Clock class="size-3"/> Date</p><p class="font-mono font-semibold">{{ informed.informed_date }}</p></div>
@@ -30,5 +32,6 @@ function rej(){ if(!confirm('Reject?')) return; processing.value=true; router.po
         <p v-else class="text-xs text-muted-foreground border-t pt-2">Decision {{ informed.approved_at ? 'on '+informed.approved_at : '' }} by {{ informed.approver || '—' }}</p>
       </div>
     </div>
+      </PageHeader>
   </AdminLayout>
 </template>

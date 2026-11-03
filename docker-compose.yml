@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports: ["8000:80"]
+    volumes: [".:/var/www/html", "storage:/var/www/html/storage"]
+    env_file: .env
+    depends_on: [db]
+  db:
+    image: mysql:8.0
+    environment: { MYSQL_DATABASE: erp_pilot, MYSQL_ROOT_PASSWORD: secret }
+    ports: ["3306:3306"]
+    volumes: [dbdata:/var/lib/mysql]
+volumes: { storage: {}, dbdata: {} }

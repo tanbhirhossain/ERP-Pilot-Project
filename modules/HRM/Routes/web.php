@@ -188,5 +188,79 @@ Route::middleware(['web','auth'])->prefix('hrm')->name('hrm.')->group(function (
     Route::get('supervisors/{supervisor}/edit', [EmployeeSupervisorController::class,'edit'])->name('supervisors.edit');
     Route::put('supervisors/{supervisor}', [EmployeeSupervisorController::class,'update'])->name('supervisors.update');
     Route::delete('supervisors/{supervisor}', [EmployeeSupervisorController::class,'destroy'])->name('supervisors.destroy');
+
+    // ── Employee Documents Vault (premium) ──────────────────────
+    Route::get('documents', [\Modules\HRM\Http\Controllers\EmployeeDocumentController::class,'index'])->name('documents.index');
+    Route::post('documents', [\Modules\HRM\Http\Controllers\EmployeeDocumentController::class,'store'])->name('documents.store');
+    Route::post('documents/{document}/verify', [\Modules\HRM\Http\Controllers\EmployeeDocumentController::class,'verify'])->name('documents.verify');
+    Route::get('documents/{document}/download', [\Modules\HRM\Http\Controllers\EmployeeDocumentController::class,'download'])->name('documents.download');
+    Route::delete('documents/{document}', [\Modules\HRM\Http\Controllers\EmployeeDocumentController::class,'destroy'])->name('documents.destroy');
+    Route::get('employees/{employee}/documents', [\Modules\HRM\Http\Controllers\EmployeeDocumentController::class,'forEmployee'])->name('employees.documents');
+
+    // ── Employee Assets (inventory → settlement bridge) ─────────
+    Route::get('assets', [\Modules\HRM\Http\Controllers\EmployeeAssetController::class,'index'])->name('assets.index');
+    Route::post('assets', [\Modules\HRM\Http\Controllers\EmployeeAssetController::class,'storeAsset'])->name('assets.store');
+    Route::post('assets/issue', [\Modules\HRM\Http\Controllers\EmployeeAssetController::class,'issue'])->name('assets.issue');
+    Route::post('employee-assets/{employeeAsset}/return', [\Modules\HRM\Http\Controllers\EmployeeAssetController::class,'returnAsset'])->name('assets.return');
+    Route::get('employees/{employee}/assets', [\Modules\HRM\Http\Controllers\EmployeeAssetController::class,'forEmployee'])->name('employees.assets');
+
+    // ── Probation / Confirmation (enterprise) ───────────────────
+    Route::get('probations', [\Modules\HRM\Http\Controllers\EmployeeProbationController::class,'index'])->name('probations.index');
+    Route::post('probations', [\Modules\HRM\Http\Controllers\EmployeeProbationController::class,'store'])->name('probations.store');
+    Route::post('probations/{probation}/extend', [\Modules\HRM\Http\Controllers\EmployeeProbationController::class,'extend'])->name('probations.extend');
+    Route::post('probations/{probation}/confirm', [\Modules\HRM\Http\Controllers\EmployeeProbationController::class,'confirm'])->name('probations.confirm');
+    Route::post('probations/{probation}/fail', [\Modules\HRM\Http\Controllers\EmployeeProbationController::class,'fail'])->name('probations.fail');
+
+    // ── Career Movements (Transfer / Promotion / Demotion) ──────
+    Route::get('movements', [\Modules\HRM\Http\Controllers\EmployeeMovementController::class,'index'])->name('movements.index');
+    Route::get('movements/create', [\Modules\HRM\Http\Controllers\EmployeeMovementController::class,'create'])->name('movements.create');
+    Route::post('movements', [\Modules\HRM\Http\Controllers\EmployeeMovementController::class,'store'])->name('movements.store');
+    Route::get('movements/{movement}', [\Modules\HRM\Http\Controllers\EmployeeMovementController::class,'show'])->name('movements.show');
+    Route::post('movements/{movement}/submit', [\Modules\HRM\Http\Controllers\EmployeeMovementController::class,'submit'])->name('movements.submit');
+    Route::post('movements/{movement}/approve', [\Modules\HRM\Http\Controllers\EmployeeMovementController::class,'approve'])->name('movements.approve');
+    Route::post('movements/{movement}/reject', [\Modules\HRM\Http\Controllers\EmployeeMovementController::class,'reject'])->name('movements.reject');
+    Route::post('movements/{movement}/cancel', [\Modules\HRM\Http\Controllers\EmployeeMovementController::class,'cancel'])->name('movements.cancel');
+
+    // ── Onboarding / Offboarding Checklists ─────────────────────
+    Route::get('checklists', [\Modules\HRM\Http\Controllers\ChecklistController::class,'index'])->name('checklists.index');
+    Route::post('checklists/templates', [\Modules\HRM\Http\Controllers\ChecklistController::class,'storeTemplate'])->name('checklists.templates.store');
+    Route::post('checklists/assign', [\Modules\HRM\Http\Controllers\ChecklistController::class,'assign'])->name('checklists.assign');
+    Route::post('checklists/progress/{progressId}', [\Modules\HRM\Http\Controllers\ChecklistController::class,'progress'])->name('checklists.progress');
+    Route::post('checklists/seed', [\Modules\HRM\Http\Controllers\ChecklistController::class,'seed'])->name('checklists.seed');
+
+    // ── Clearance (offboarding gate) ────────────────────────────
+    Route::get('clearances', [\Modules\HRM\Http\Controllers\ClearanceController::class,'index'])->name('clearance.index');
+    Route::post('clearances/{clearanceTask}/clear', [\Modules\HRM\Http\Controllers\ClearanceController::class,'clear'])->name('clearance.clear');
+    Route::get('employees/{employee}/clearance', [\Modules\HRM\Http\Controllers\ClearanceController::class,'forEmployee'])->name('employees.clearance');
+
+    // ── Attendance Regularization (employee dispute → HR approve) ─
+    Route::get('regularizations', [\Modules\HRM\Http\Controllers\RegularizationController::class,'index'])->name('regularizations.index');
+    Route::post('regularizations', [\Modules\HRM\Http\Controllers\RegularizationController::class,'store'])->name('regularizations.store');
+    Route::post('regularizations/{regularization}/review', [\Modules\HRM\Http\Controllers\RegularizationController::class,'review'])->name('regularizations.review');
+    Route::post('regularizations/{regularization}/cancel', [\Modules\HRM\Http\Controllers\RegularizationController::class,'cancel'])->name('regularizations.cancel');
+
+    // ── Shift Allowances & OT Policies ──────────────────────────────
+    Route::get('shift-allowances', [\Modules\HRM\Http\Controllers\ShiftAllowanceController::class,'index'])->name('shift-allowances.index');
+    Route::post('shift-allowances', [\Modules\HRM\Http\Controllers\ShiftAllowanceController::class,'store'])->name('shift-allowances.store');
+    Route::delete('shift-allowances/{shiftAllowance}', [\Modules\HRM\Http\Controllers\ShiftAllowanceController::class,'destroy'])->name('shift-allowances.destroy');
+    Route::get('overtime-policies', [\Modules\HRM\Http\Controllers\OvertimePolicyController::class,'index'])->name('overtime-policies.index');
+    Route::post('overtime-policies', [\Modules\HRM\Http\Controllers\OvertimePolicyController::class,'store'])->name('overtime-policies.store');
+    Route::post('overtime-policies/{overtimePolicy}/toggle', [\Modules\HRM\Http\Controllers\OvertimePolicyController::class,'toggle'])->name('overtime-policies.toggle');
+    Route::post('overtime-policies/seed', [\Modules\HRM\Http\Controllers\OvertimePolicyController::class,'seed'])->name('overtime-policies.seed');
+
+    // ── Leave Year-End (carry-forward / encashment) ────────────────
+    Route::get('leave-year-end', [\Modules\HRM\Http\Controllers\LeaveYearEndController::class,'index'])->name('leave-year-end.index');
+    Route::post('leave-year-end/settings', [\Modules\HRM\Http\Controllers\LeaveYearEndController::class,'updateSettings'])->name('leave-year-end.settings');
+    Route::post('leave-year-end/close', [\Modules\HRM\Http\Controllers\LeaveYearEndController::class,'closeYear'])->name('leave-year-end.close');
+    Route::get('leave-year-end/encash-preview', [\Modules\HRM\Http\Controllers\LeaveYearEndController::class,'encashPreview'])->name('leave-year-end.encash-preview');
+
+    // ── HR Reports & Analytics (H-P1-7) ──────────────────────────────
+    Route::get('reports', [\Modules\HRM\Http\Controllers\HrmReportsController::class,'index'])->name('reports.index');
+    Route::get('reports/headcount', [\Modules\HRM\Http\Controllers\HrmReportsController::class,'headcount'])->name('reports.headcount');
+    Route::get('reports/attrition', [\Modules\HRM\Http\Controllers\HrmReportsController::class,'attrition'])->name('reports.attrition');
+    Route::get('reports/leave', [\Modules\HRM\Http\Controllers\HrmReportsController::class,'leave'])->name('reports.leave');
+    Route::get('reports/attendance', [\Modules\HRM\Http\Controllers\HrmReportsController::class,'attendance'])->name('reports.attendance');
+    Route::get('reports/ot', [\Modules\HRM\Http\Controllers\HrmReportsController::class,'ot'])->name('reports.ot');
+    Route::get('reports/export', [\Modules\HRM\Http\Controllers\HrmReportsController::class,'export'])->name('reports.export');
 });
 

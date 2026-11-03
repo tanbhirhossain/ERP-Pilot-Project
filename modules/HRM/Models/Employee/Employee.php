@@ -30,6 +30,14 @@ class Employee extends Model {
     public function attendancePairs(): HasMany { return $this->hasMany(\Modules\HRM\Models\Attendance\AttendancePair::class, 'employee_id','employee_id'); }
     public function attendanceDailies(): HasMany { return $this->hasMany(\Modules\HRM\Models\Attendance\AttendanceDaily::class, 'employee_id','employee_id'); }
     public function deviceUsers(): HasMany { return $this->hasMany(\Modules\HRM\Models\DeviceUser::class, 'employee_id','employee_id'); }
+    public function documents(): HasMany { return $this->hasMany(\Modules\HRM\Models\EmployeeDocument::class, 'employee_id','employee_id'); }
+    public function assetAssignments(): HasMany { return $this->hasMany(\Modules\HRM\Models\EmployeeAsset::class, 'employee_id','employee_id'); }
+    public function activeAssets(): HasMany { return $this->hasMany(\Modules\HRM\Models\EmployeeAsset::class, 'employee_id','employee_id')->whereNull('returned_date'); }
+    public function probations(): HasMany { return $this->hasMany(\Modules\HRM\Models\EmployeeProbation::class, 'employee_id','employee_id'); }
+    public function activeProbation(): HasMany { return $this->hasMany(\Modules\HRM\Models\EmployeeProbation::class, 'employee_id','employee_id')->whereIn('status',['Active','Extended']); }
+    public function movements(): HasMany { return $this->hasMany(\Modules\HRM\Models\EmployeeMovement::class, 'employee_id','employee_id'); }
+    public function checklists(): HasMany { return $this->hasMany(\Modules\HRM\Models\EmployeeChecklist::class, 'employee_id','employee_id'); }
+    public function clearanceTasks(): HasMany { return $this->hasMany(\Modules\HRM\Models\ClearanceTask::class, 'employee_id','employee_id'); }
 
     public function getActivitylogOptions(): LogOptions
     {
