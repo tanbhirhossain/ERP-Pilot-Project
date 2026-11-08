@@ -1,0 +1,63 @@
+# Local / single-host stack.
+#
+# No secret is written in this file. Both database passwords are required from the environment and
+# compose refuses to start while either is empty (`${VAR:?message}` rather than `${VAR:-default}`):
+# a password committed to a public repository is not a default, it is a leaked credential — the same
+# reasoning ProductionDebugGuard and PublishedCredentialGuard apply to the app's own defaults.
+# Put them in .env; see the "docker-compose.yml" block in .env.example.
+#
+# The database is not published on the host. The app reaches it by service name over the compose
+# network, so no published port is needed. To inspect it from the host, bind the loopback interface
+# only — never `3306:3306`, which is every interface the host has:
+#
+#     ports: ["127.0.0.1:3306:3306"]
+#
+# The application port is still published on all interfaces, because a development stack is usually
+# reached from another machine (a browser on the host, a phone on the LAN). A deployment exposed to
+# the internet should sit behind a reverse proxy that terminates TLS, not behind this file.
+#
+# NOT VALIDATED BY A COMPOSE RUN: the audit environment that produced this revision has no docker
+# binary, so these settings were checked by parsing the file, not by starting the stack.
+# `build: .` also has no Dockerfile in the repository yet — see AUDIT_REPORT.md item 27.
+
+services:
+  app:
+    build: .
+    ports: ["8000:80"]
+    volumes: [".:/var/www/html", "storage:/var/www/html/storage"]
+    env_file: .env
+    environment:
+      # env_file on its own hands the app the SQLite settings from .env.example, which left the db
+      # service below running and unused. These override it for this stack.
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: ${MYSQL_DATABASE:-erp_pilot}
+      DB_USERNAME: ${MYSQL_USER:-erp_app}
+      DB_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env — docker-compose.yml refuses to start without it}
+    depends_on:
+      db:
+        # Without a health condition the app starts while MySQL is still initialising, and the first
+        # migration run fails for a reason that has nothing to do with the code.
+        condition: service_healthy
+
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-erp_pilot}
+      # Root exists for administration only. The application connects as MYSQL_USER below, which
+      # gets this one database and nothing else.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env — docker-compose.yml refuses to start without it}
+      MYSQL_USER: ${MYSQL_USER:-erp_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env — docker-compose.yml refuses to start without it}
+    volumes: [dbdata:/var/lib/mysql]
+    healthcheck:
+      # $$ is compose's escape for a literal $, so the password is read inside the container and never
+      # appears in `docker inspect` output or in the process list on the host.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes: { storage: {}, dbdata: {} }

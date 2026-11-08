@@ -1,0 +1,485 @@
+/*
+|--------------------------------------------------------------------------
+| Colour schemes — item 42
+|--------------------------------------------------------------------------
+| Eight curated palettes, each a complete light and dark token set. A tenant
+| picks one in UI Settings (company default, per-user override) and the shell
+| sets `data-theme` on <html>; nothing in the component tree knows which
+| palette is active, because every component paints from tokens.
+|
+| Two rules keep this from decaying:
+|
+|   1. A palette may only redefine *brand* tokens — primary, ring, the hero
+|      gradient, the brand wash, the sidebar accent and the five chart
+|      colours. The semantic status colours (success / warning / danger /
+|      info) are defined once per mode below and are deliberately NOT
+|      per-palette: green means the same thing in every scheme, and an
+|      "Amber Copper" tenant must not end up with amber meaning "all good".
+|   2. `ThemePaletteTest` asserts that every scheme the PHP resolver offers
+|      has both blocks here, that both blocks define the same token list,
+|      and that no block exists here without a PHP counterpart. Adding a
+|      palette means editing both, and the test says so.
+|
+| Values are HSL triplets without `hsl()` because that is the format the
+| `@theme inline` mappings in app.css already consume.
+*/
+
+/* ── Semantic status colours: once per mode, never per palette ─────────── */
+:root {
+    --success: 158 74% 30%;
+    --success-tint: 158 74% 96%;
+    --warning: 32 95% 42%;
+    --warning-tint: 38 96% 96%;
+    --danger: 350 84% 48%;
+    --danger-tint: 350 84% 97%;
+    --info: 205 88% 42%;
+    --info-tint: 205 88% 96%;
+    --neutral-ink: 240 5% 46%;
+}
+
+.dark {
+    --success: 158 62% 52%;
+    --success-tint: 158 46% 14%;
+    --warning: 38 92% 60%;
+    --warning-tint: 36 60% 15%;
+    --danger: 350 78% 64%;
+    --danger-tint: 350 48% 15%;
+    --info: 205 84% 62%;
+    --info-tint: 205 52% 15%;
+    --neutral-ink: 240 5% 68%;
+}
+
+/* ── Defaults: the Indigo Executive values, unscoped.
+   `data-theme` is always set by the shell, but a token that only exists under
+   an attribute selector would resolve to nothing in a bare document — a test
+   harness, a print preview, a page rendered before hydration. Specificity
+   keeps this harmless: `:root[data-theme='x']` (0,2,0) beats `:root` (0,1,0). */
+:root {
+    --primary: 234 89% 56%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 234 89% 56%;
+    --hero-from: 234 89% 40%;
+    --hero-via: 234 81% 56%;
+    --hero-to: 272 83% 62%;
+    --hero-ink: 0 0% 100%;
+    --hero-glow: 296 90% 62%;
+    --brand-tint: 234 89% 97%;
+    --brand-tint-ink: 234 89% 30%;
+    --sidebar-primary: 234 89% 56%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 234 89% 56%;
+    --sidebar-accent: 234 89% 96%;
+    --sidebar-accent-foreground: 234 89% 28%;
+    --chart-1: 234 89% 56%;
+    --chart-2: 279 77% 64%;
+    --chart-3: 24 62% 44%;
+    --chart-4: 74 78% 58%;
+    --chart-5: 192 80% 55%;
+}
+
+.dark {
+    --primary: 234 81% 72%;
+    --primary-foreground: 240 10% 6%;
+    --ring: 234 83% 78%;
+    --hero-from: 234 65% 11%;
+    --hero-via: 234 71% 15%;
+    --hero-to: 272 67% 19%;
+    --hero-ink: 0 0% 98%;
+    --hero-glow: 234 88% 58%;
+    --brand-tint: 234 73% 15%;
+    --brand-tint-ink: 234 79% 84%;
+    --sidebar-primary: 234 81% 72%;
+    --sidebar-primary-foreground: 240 10% 6%;
+    --sidebar-ring: 234 83% 78%;
+    --sidebar-accent: 234 69% 17%;
+    --sidebar-accent-foreground: 234 77% 88%;
+    --chart-1: 234 83% 70%;
+    --chart-2: 279 73% 74%;
+    --chart-3: 24 58% 54%;
+    --chart-4: 74 74% 64%;
+    --chart-5: 192 76% 64%;
+}
+
+/* ── Indigo Executive — `indigo`
+   The house default: deep, calm, and the closest match to the shells the ERP already ships. */
+:root[data-theme='indigo'] {
+    --primary: 234 89% 56%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 234 89% 56%;
+    --hero-from: 234 89% 40%;
+    --hero-via: 234 81% 56%;
+    --hero-to: 272 83% 62%;
+    --hero-ink: 0 0% 100%;
+    --hero-glow: 296 90% 62%;
+    --brand-tint: 234 89% 97%;
+    --brand-tint-ink: 234 89% 30%;
+    --sidebar-primary: 234 89% 56%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 234 89% 56%;
+    --sidebar-accent: 234 89% 96%;
+    --sidebar-accent-foreground: 234 89% 28%;
+    --chart-1: 234 89% 56%;
+    --chart-2: 279 77% 64%;
+    --chart-3: 24 62% 44%;
+    --chart-4: 74 78% 58%;
+    --chart-5: 192 80% 55%;
+}
+
+.dark[data-theme='indigo'] {
+    --primary: 234 81% 72%;
+    --primary-foreground: 240 10% 6%;
+    --ring: 234 83% 78%;
+    --hero-from: 234 65% 11%;
+    --hero-via: 234 71% 15%;
+    --hero-to: 272 67% 19%;
+    --hero-ink: 0 0% 98%;
+    --hero-glow: 234 88% 58%;
+    --brand-tint: 234 73% 15%;
+    --brand-tint-ink: 234 79% 84%;
+    --sidebar-primary: 234 81% 72%;
+    --sidebar-primary-foreground: 240 10% 6%;
+    --sidebar-ring: 234 83% 78%;
+    --sidebar-accent: 234 69% 17%;
+    --sidebar-accent-foreground: 234 77% 88%;
+    --chart-1: 234 83% 70%;
+    --chart-2: 279 73% 74%;
+    --chart-3: 24 58% 54%;
+    --chart-4: 74 74% 64%;
+    --chart-5: 192 76% 64%;
+}
+
+/* ── Royal Blue — `royal`
+   Classic finance blue. Reads as trustworthy on a balance sheet and on a projector. */
+:root[data-theme='royal'] {
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 221 83% 53%;
+    --hero-from: 221 83% 37%;
+    --hero-via: 221 75% 53%;
+    --hero-to: 259 77% 59%;
+    --hero-ink: 0 0% 100%;
+    --hero-glow: 283 90% 62%;
+    --brand-tint: 221 83% 97%;
+    --brand-tint-ink: 221 83% 27%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 221 83% 53%;
+    --sidebar-accent: 221 83% 96%;
+    --sidebar-accent-foreground: 221 83% 25%;
+    --chart-1: 221 83% 53%;
+    --chart-2: 266 71% 61%;
+    --chart-3: 11 62% 44%;
+    --chart-4: 61 78% 58%;
+    --chart-5: 179 80% 55%;
+}
+
+.dark[data-theme='royal'] {
+    --primary: 221 75% 69%;
+    --primary-foreground: 240 10% 6%;
+    --ring: 221 77% 75%;
+    --hero-from: 221 59% 11%;
+    --hero-via: 221 65% 15%;
+    --hero-to: 259 61% 19%;
+    --hero-ink: 0 0% 98%;
+    --hero-glow: 221 88% 58%;
+    --brand-tint: 221 67% 15%;
+    --brand-tint-ink: 221 73% 84%;
+    --sidebar-primary: 221 75% 69%;
+    --sidebar-primary-foreground: 240 10% 6%;
+    --sidebar-ring: 221 77% 75%;
+    --sidebar-accent: 221 63% 17%;
+    --sidebar-accent-foreground: 221 71% 88%;
+    --chart-1: 221 77% 67%;
+    --chart-2: 266 67% 71%;
+    --chart-3: 11 58% 54%;
+    --chart-4: 61 74% 64%;
+    --chart-5: 179 76% 64%;
+}
+
+/* ── Emerald Enterprise — `emerald`
+   Green-led for retail and inventory operations where growth is the story. */
+:root[data-theme='emerald'] {
+    --primary: 160 84% 30%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 160 84% 30%;
+    --hero-from: 160 84% 14%;
+    --hero-via: 160 76% 30%;
+    --hero-to: 198 78% 36%;
+    --hero-ink: 0 0% 100%;
+    --hero-glow: 222 90% 62%;
+    --brand-tint: 160 84% 97%;
+    --brand-tint-ink: 160 84% 18%;
+    --sidebar-primary: 160 84% 30%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 160 84% 30%;
+    --sidebar-accent: 160 84% 96%;
+    --sidebar-accent-foreground: 160 84% 18%;
+    --chart-1: 160 84% 30%;
+    --chart-2: 205 72% 38%;
+    --chart-3: 310 62% 44%;
+    --chart-4: 0 78% 58%;
+    --chart-5: 118 80% 55%;
+}
+
+.dark[data-theme='emerald'] {
+    --primary: 160 76% 46%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 160 78% 52%;
+    --hero-from: 160 60% 11%;
+    --hero-via: 160 66% 15%;
+    --hero-to: 198 62% 19%;
+    --hero-ink: 0 0% 98%;
+    --hero-glow: 160 88% 58%;
+    --brand-tint: 160 68% 15%;
+    --brand-tint-ink: 160 74% 84%;
+    --sidebar-primary: 160 76% 46%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 160 78% 52%;
+    --sidebar-accent: 160 64% 17%;
+    --sidebar-accent-foreground: 160 72% 88%;
+    --chart-1: 160 78% 44%;
+    --chart-2: 205 68% 48%;
+    --chart-3: 310 58% 54%;
+    --chart-4: 0 74% 64%;
+    --chart-5: 118 76% 64%;
+}
+
+/* ── Teal Ledger — `teal`
+   Cool and clinical; good contrast against warm status colours. */
+:root[data-theme='teal'] {
+    --primary: 187 74% 32%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 187 74% 32%;
+    --hero-from: 187 74% 16%;
+    --hero-via: 187 66% 32%;
+    --hero-to: 225 68% 38%;
+    --hero-ink: 0 0% 100%;
+    --hero-glow: 249 90% 62%;
+    --brand-tint: 187 74% 97%;
+    --brand-tint-ink: 187 74% 18%;
+    --sidebar-primary: 187 74% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 187 74% 32%;
+    --sidebar-accent: 187 74% 96%;
+    --sidebar-accent-foreground: 187 74% 18%;
+    --chart-1: 187 74% 32%;
+    --chart-2: 232 62% 40%;
+    --chart-3: 337 62% 44%;
+    --chart-4: 27 78% 58%;
+    --chart-5: 145 80% 55%;
+}
+
+.dark[data-theme='teal'] {
+    --primary: 187 66% 48%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 187 68% 54%;
+    --hero-from: 187 50% 11%;
+    --hero-via: 187 56% 15%;
+    --hero-to: 225 52% 19%;
+    --hero-ink: 0 0% 98%;
+    --hero-glow: 187 88% 58%;
+    --brand-tint: 187 58% 15%;
+    --brand-tint-ink: 187 64% 84%;
+    --sidebar-primary: 187 66% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 187 68% 54%;
+    --sidebar-accent: 187 54% 17%;
+    --sidebar-accent-foreground: 187 62% 88%;
+    --chart-1: 187 68% 46%;
+    --chart-2: 232 58% 50%;
+    --chart-3: 337 58% 54%;
+    --chart-4: 27 74% 64%;
+    --chart-5: 145 76% 64%;
+}
+
+/* ── Violet Regent — `violet`
+   A richer, more editorial accent for tenant-facing deployments. */
+:root[data-theme='violet'] {
+    --primary: 268 84% 58%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 268 84% 58%;
+    --hero-from: 268 84% 42%;
+    --hero-via: 268 76% 58%;
+    --hero-to: 306 78% 64%;
+    --hero-ink: 0 0% 100%;
+    --hero-glow: 330 90% 62%;
+    --brand-tint: 268 84% 97%;
+    --brand-tint-ink: 268 84% 32%;
+    --sidebar-primary: 268 84% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 268 84% 58%;
+    --sidebar-accent: 268 84% 96%;
+    --sidebar-accent-foreground: 268 84% 30%;
+    --chart-1: 268 84% 58%;
+    --chart-2: 313 72% 66%;
+    --chart-3: 58 62% 44%;
+    --chart-4: 108 78% 58%;
+    --chart-5: 226 80% 55%;
+}
+
+.dark[data-theme='violet'] {
+    --primary: 268 76% 74%;
+    --primary-foreground: 240 10% 6%;
+    --ring: 268 78% 80%;
+    --hero-from: 268 60% 11%;
+    --hero-via: 268 66% 15%;
+    --hero-to: 306 62% 19%;
+    --hero-ink: 0 0% 98%;
+    --hero-glow: 268 88% 58%;
+    --brand-tint: 268 68% 15%;
+    --brand-tint-ink: 268 74% 84%;
+    --sidebar-primary: 268 76% 74%;
+    --sidebar-primary-foreground: 240 10% 6%;
+    --sidebar-ring: 268 78% 80%;
+    --sidebar-accent: 268 64% 17%;
+    --sidebar-accent-foreground: 268 72% 88%;
+    --chart-1: 268 78% 72%;
+    --chart-2: 313 68% 74%;
+    --chart-3: 58 58% 54%;
+    --chart-4: 108 74% 64%;
+    --chart-5: 226 76% 64%;
+}
+
+/* ── Rose Crimson — `rose`
+   High-energy; used by brands that want the shell to feel alive. */
+:root[data-theme='rose'] {
+    --primary: 347 77% 50%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 347 77% 50%;
+    --hero-from: 347 77% 34%;
+    --hero-via: 347 69% 50%;
+    --hero-to: 25 71% 56%;
+    --hero-ink: 0 0% 100%;
+    --hero-glow: 49 90% 62%;
+    --brand-tint: 347 77% 97%;
+    --brand-tint-ink: 347 77% 24%;
+    --sidebar-primary: 347 77% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 347 77% 50%;
+    --sidebar-accent: 347 77% 96%;
+    --sidebar-accent-foreground: 347 77% 22%;
+    --chart-1: 347 77% 50%;
+    --chart-2: 32 65% 58%;
+    --chart-3: 137 62% 44%;
+    --chart-4: 187 78% 58%;
+    --chart-5: 305 80% 55%;
+}
+
+.dark[data-theme='rose'] {
+    --primary: 347 69% 66%;
+    --primary-foreground: 240 10% 6%;
+    --ring: 347 71% 72%;
+    --hero-from: 347 53% 11%;
+    --hero-via: 347 59% 15%;
+    --hero-to: 25 55% 19%;
+    --hero-ink: 0 0% 98%;
+    --hero-glow: 347 88% 58%;
+    --brand-tint: 347 61% 15%;
+    --brand-tint-ink: 347 67% 84%;
+    --sidebar-primary: 347 69% 66%;
+    --sidebar-primary-foreground: 240 10% 6%;
+    --sidebar-ring: 347 71% 72%;
+    --sidebar-accent: 347 57% 17%;
+    --sidebar-accent-foreground: 347 65% 88%;
+    --chart-1: 347 71% 64%;
+    --chart-2: 32 61% 68%;
+    --chart-3: 137 58% 54%;
+    --chart-4: 187 74% 64%;
+    --chart-5: 305 76% 64%;
+}
+
+/* ── Amber Copper — `amber`
+   Warm and industrial. Distinct from the amber warning tone, which stays semantic. */
+:root[data-theme='amber'] {
+    --primary: 28 92% 44%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 28 92% 44%;
+    --hero-from: 28 92% 28%;
+    --hero-via: 28 84% 44%;
+    --hero-to: 66 86% 50%;
+    --hero-ink: 0 0% 100%;
+    --hero-glow: 90 90% 62%;
+    --brand-tint: 28 92% 97%;
+    --brand-tint-ink: 28 92% 18%;
+    --sidebar-primary: 28 92% 44%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 28 92% 44%;
+    --sidebar-accent: 28 92% 96%;
+    --sidebar-accent-foreground: 28 92% 18%;
+    --chart-1: 28 92% 44%;
+    --chart-2: 73 80% 52%;
+    --chart-3: 178 62% 44%;
+    --chart-4: 228 78% 58%;
+    --chart-5: 346 80% 55%;
+}
+
+.dark[data-theme='amber'] {
+    --primary: 28 84% 60%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 28 86% 66%;
+    --hero-from: 28 68% 11%;
+    --hero-via: 28 74% 15%;
+    --hero-to: 66 70% 19%;
+    --hero-ink: 0 0% 98%;
+    --hero-glow: 28 88% 58%;
+    --brand-tint: 28 76% 15%;
+    --brand-tint-ink: 28 82% 84%;
+    --sidebar-primary: 28 84% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 28 86% 66%;
+    --sidebar-accent: 28 72% 17%;
+    --sidebar-accent-foreground: 28 80% 88%;
+    --chart-1: 28 86% 58%;
+    --chart-2: 73 76% 62%;
+    --chart-3: 178 58% 54%;
+    --chart-4: 228 74% 64%;
+    --chart-5: 346 76% 64%;
+}
+
+/* ── Graphite Neutral — `graphite`
+   No brand hue at all: the conservative shadcn look, for tenants who want ink only. */
+:root[data-theme='graphite'] {
+    --primary: 240 6% 16%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 240 6% 16%;
+    --hero-from: 240 6% 10%;
+    --hero-via: 240 0% 16%;
+    --hero-to: 278 0% 22%;
+    --hero-ink: 0 0% 100%;
+    --hero-glow: 302 90% 62%;
+    --brand-tint: 240 6% 97%;
+    --brand-tint-ink: 240 6% 18%;
+    --sidebar-primary: 240 6% 16%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 240 6% 16%;
+    --sidebar-accent: 240 6% 96%;
+    --sidebar-accent-foreground: 240 6% 18%;
+    --chart-1: 240 6% 16%;
+    --chart-2: 285 0% 24%;
+    --chart-3: 30 62% 44%;
+    --chart-4: 80 78% 58%;
+    --chart-5: 198 80% 55%;
+}
+
+.dark[data-theme='graphite'] {
+    --primary: 240 0% 32%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 240 0% 38%;
+    --hero-from: 240 0% 11%;
+    --hero-via: 240 0% 15%;
+    --hero-to: 278 0% 19%;
+    --hero-ink: 0 0% 98%;
+    --hero-glow: 240 88% 58%;
+    --brand-tint: 240 0% 15%;
+    --brand-tint-ink: 240 0% 84%;
+    --sidebar-primary: 240 0% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 240 0% 38%;
+    --sidebar-accent: 240 0% 17%;
+    --sidebar-accent-foreground: 240 0% 88%;
+    --chart-1: 240 0% 30%;
+    --chart-2: 285 0% 34%;
+    --chart-3: 30 58% 54%;
+    --chart-4: 80 74% 64%;
+    --chart-5: 198 76% 64%;
+}

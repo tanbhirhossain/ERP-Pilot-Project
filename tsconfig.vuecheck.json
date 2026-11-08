@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "skipLibCheck": true },
+  "include": ["resources/**/*.ts", "resources/**/*.vue", "modules/**/*.ts", "modules/**/*.vue"],
+  "exclude": ["node_modules", "vendor", "public", "storage", "bootstrap/cache"]
+}

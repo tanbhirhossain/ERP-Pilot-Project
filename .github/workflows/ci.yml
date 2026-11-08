@@ -1,0 +1,192 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch supersedes the running build.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # PHP: syntax, dependency advisories, full Pest suite, seed integrity
+  # ---------------------------------------------------------------------------
+  php:
+    name: PHP ${{ matrix.php }} · ${{ matrix.database }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+        database: ['sqlite', 'mysql']
+        exclude:
+          # One PHP version is enough for the MySQL leg.
+          - php: '8.3'
+            database: 'mysql'
+
+    services:
+      mysql:
+        image: mysql:8.0
+        if: matrix.database == 'mysql'
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: erp_pilot_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, dom, fileinfo, sqlite3, pdo_sqlite, pdo_mysql, gd, zip, intl, bcmath
+          coverage: none
+          tools: composer:v2
+
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php${{ matrix.php }}-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --ansi
+          if [ "${{ matrix.database }}" = "mysql" ]; then
+            sed -i "s/^DB_CONNECTION=.*/DB_CONNECTION=mysql/" .env
+            sed -i "s/^DB_DATABASE=.*/DB_DATABASE=erp_pilot_test/" .env
+            sed -i "s/^DB_USERNAME=.*/DB_USERNAME=root/" .env
+            sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=/" .env
+          fi
+
+      - name: Lint PHP (syntax)
+        run: find app modules database routes tests config -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /dev/null
+
+      # Blocking. This step used to carry `continue-on-error: true`, because 646
+      # of 832 PHP files diverged from the Laravel preset and normalising them
+      # would have buried every substantive change in one diff. That normalisation
+      # has now happened (pint.json + a whole-tree `vendor/bin/pint` run, reported
+      # as item 28), so there is nothing left to protect and no reason for a style
+      # violation to pass.
+      #
+      # `--test` is what makes it a check: without it pint rewrites the runner's
+      # working tree and exits 0, so the job passes and the fix is thrown away.
+      # `tests/Feature/CORE/CiWorkflowContractTest.php` fails if either property
+      # changes — including if `continue-on-error` comes back on any step.
+      - name: Code style (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Dependency advisories
+        run: composer audit
+
+      # Pest renders the real Blade shell for /login and /dashboard, and
+      # `@vite` throws "Vite manifest not found" when public/build is absent.
+      # The security-header tests then compare the CSP against the inline
+      # scripts that shell emits, so the assets must be built first — without
+      # this the php job fails on a missing build artefact, not on a real bug.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build front-end assets (required by the Pest HTML assertions)
+        run: |
+          npm ci
+          npm run build
+
+      # The suite asserts structural invariants across the whole route table:
+      # every controller/method exists, every middleware class exists, every
+      # Inertia render target has a Vue page, and every permission a route
+      # enforces is actually seeded. It also pins the off-day classification
+      # rules, which previously diverged between SQLite and MySQL.
+      - name: Tests (Pest)
+        run: vendor/bin/pest --colors=never
+
+      # Seeding must be clean, because a seeder that throws mid-way still exits
+      # 0 and leaves the ledger half-populated.
+      - name: Fresh migrate + seed
+        if: matrix.database == 'sqlite'
+        run: |
+          php artisan migrate:fresh --seed --force
+          php artisan tinker --execute="
+            \$a = \DB::table('acc_accounts')->count();
+            \$p = \DB::table('permissions')->count();
+            \$r = \DB::table('roles')->count();
+            if (\$a < 30) { echo 'FAIL: chart of accounts under-seeded ('.\$a.')'.PHP_EOL; exit(1); }
+            if (\$p < 150) { echo 'FAIL: permissions under-seeded ('.\$p.')'.PHP_EOL; exit(1); }
+            if (\$r < 5) { echo 'FAIL: roles under-seeded ('.\$r.')'.PHP_EOL; exit(1); }
+            echo 'seed OK: '.\$a.' accounts, '.\$p.' permissions, '.\$r.' roles'.PHP_EOL;
+          "
+
+  # ---------------------------------------------------------------------------
+  # Front end: lint, unit tests, production build
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Front end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # No --fix here: CI must fail on a violation, not silently rewrite it.
+      - name: Lint (ESLint)
+        run: npx eslint . --max-warnings=0
+
+      - name: Unit tests (Vitest)
+        run: npm run test:unit
+
+      - name: Production build
+        run: npm run build
+
+      - name: Dependency advisories
+        run: npm audit --omit=dev --audit-level=high
+
+  # ---------------------------------------------------------------------------
+  # A single required check for branch protection.
+  # ---------------------------------------------------------------------------
+  ci:
+    name: CI
+    needs: [php, frontend]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All jobs succeeded
+        run: |
+          echo "${{ toJSON(needs.*.result) }}"
+          if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ] \
+             || [ "${{ contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "One or more CI jobs did not pass."
+            exit 1
+          fi
