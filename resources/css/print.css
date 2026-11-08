@@ -1,0 +1,297 @@
+/*
+|--------------------------------------------------------------------------
+| Print architecture — item 43
+|--------------------------------------------------------------------------
+| Three rules, in the order they matter:
+|
+|   1. A page that never opted into a print region still prints its
+|      content. The previous implementation hid `body *` unconditionally and
+|      revealed only `[data-core-print]`, which exactly one component set —
+|      so every report, payslip and profile printed a blank sheet. Isolation
+|      is now opt-in, switched on by `usePrint()` / the `beforeprint` hook
+|      only when a region actually exists on the page.
+|   2. Application chrome never reaches paper: sidebar, sticky header,
+|      toasts, dialogs, progress bar, filters, pagination and every button.
+|   3. Paper is white and ink is dark in *both* screen themes, whatever
+|      palette the tenant picked. Printing the dark theme wastes toner and
+|      is unreadable, so the light token values are reinstated here.
+|
+| These rules are deliberately unlayered: Tailwind v4 puts the theme tokens
+| in `@layer base`, and an unlayered rule wins over a layered one at equal
+| specificity, which is what makes the token override below reliable.
+*/
+
+/* Named page for document-style sheets. Chrome/Edge/Safari honour `page:`;
+   Firefox currently ignores named pages and falls back to the default
+   landscape sheet — the content still prints legibly, which is why the
+   fallback is portrait-safe rather than broken. */
+@page {
+    size: A4 landscape;
+    margin: 10mm 10mm 12mm;
+}
+
+@page portrait-sheet {
+    size: A4 portrait;
+    margin: 14mm 14mm 16mm;
+}
+
+@media print {
+    /* ── 1. Reinstate the light token set ─────────────────────────────── */
+    :root,
+    :root.dark,
+    :root[data-theme] {
+        --background: 0 0% 100%;
+        --foreground: 240 10% 3.9%;
+        --card: 0 0% 100%;
+        --card-foreground: 240 10% 3.9%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 240 10% 3.9%;
+        --primary: 240 5.9% 10%;
+        --primary-foreground: 0 0% 98%;
+        --secondary: 240 4.8% 95.9%;
+        --secondary-foreground: 240 5.9% 10%;
+        --muted: 240 4.8% 96.5%;
+        --muted-foreground: 240 3.8% 38%;
+        --accent: 240 4.8% 95.9%;
+        --accent-foreground: 240 5.9% 10%;
+        --border: 240 5.9% 84%;
+        --input: 240 5.9% 84%;
+        --ring: 240 10% 3.9%;
+        --hero-from: 240 6% 10%;
+        --hero-to: 240 6% 10%;
+        --hero-ink: 0 0% 100%;
+    }
+
+    html,
+    body {
+        height: auto !important;
+        overflow: visible !important;
+        background: #fff !important;
+        color: hsl(var(--foreground)) !important;
+        /* 12pt is the smallest size that survives a 600dpi office printer
+           without greying out; the screen scale is too tight for paper. */
+        font-size: 11pt;
+        line-height: 1.45;
+    }
+
+    /* Gradients, glows and shadows are screen furniture: they cost toner and
+       muddy the sheet. Ink and borders carry the structure instead. */
+    * {
+        box-shadow: none !important;
+        text-shadow: none !important;
+    }
+
+    /* ── 2. Chrome removal ───────────────────────────────────────────── */
+
+    /* The admin shell is `<SidebarProvider class="core-shell">` wrapping the
+       sidebar and `<SidebarInset>`; only the content column is a document. */
+    .core-shell > *:not(main),
+    [data-sidebar='sidebar'],
+    [data-core-toasts],
+    .global-progress,
+    .no-print,
+    [data-print-hide] {
+        display: none !important;
+    }
+
+    /* Anything the shell renders for interaction only. */
+    nav[aria-label='Breadcrumb'],
+    .print-furniture-screen,
+    button:not(.print-keep),
+    [role='dialog'],
+    [data-radix-popper-content-wrapper],
+    input[type='search'] {
+        display: none !important;
+    }
+
+    /* Filter controls are how you got here, not part of the document. Caught
+       by element type rather than by a per-page class, so a report added
+       tomorrow is already correct without anybody remembering to mark it. */
+    input[type='date'],
+    input[type='month'],
+    input[type='search'],
+    select,
+    .print-hide-filters {
+        display: none !important;
+    }
+
+    /* The furniture is `display: none` on screen and a sheet on paper. */
+    .print-furniture {
+        display: block !important;
+    }
+
+    /* ── 3. Region isolation — opt-in only ───────────────────────────── */
+
+    /* `is-printing-region` is added by usePrint()/beforeprint when, and only
+       when, the page carries a `[data-core-print]` element. Without it the
+       content column prints as authored, which is the fallback that makes a
+       blank sheet impossible. */
+    html.is-printing-region body * {
+        visibility: hidden !important;
+    }
+
+    html.is-printing-region [data-core-print],
+    html.is-printing-region [data-core-print] *,
+    html.is-printing-region .print-furniture,
+    html.is-printing-region .print-furniture * {
+        visibility: visible !important;
+    }
+
+    html.is-printing-region [data-core-print] {
+        position: absolute !important;
+        inset-inline-start: 0 !important;
+        inset-block-start: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: #fff !important;
+    }
+
+    /* ── Sheet furniture ─────────────────────────────────────────────── */
+
+    .print-furniture {
+        display: none;
+    }
+
+    .print-sheet-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12mm;
+        border-bottom: 1.5pt solid hsl(var(--foreground));
+        padding-bottom: 2.5mm;
+        margin-bottom: 4mm;
+    }
+
+    .print-sheet-title {
+        font-size: 15pt;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: #000;
+    }
+
+    .print-sheet-org {
+        font-size: 9pt;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: hsl(var(--muted-foreground));
+    }
+
+    .print-sheet-meta {
+        font-size: 8.5pt;
+        text-align: right;
+        color: hsl(var(--muted-foreground));
+        white-space: nowrap;
+    }
+
+    .print-sheet-footer {
+        margin-top: 5mm;
+        padding-top: 2mm;
+        border-top: 0.5pt solid hsl(var(--border));
+        font-size: 8pt;
+        color: hsl(var(--muted-foreground));
+        display: flex;
+        justify-content: space-between;
+        gap: 8mm;
+    }
+
+    /* Page numbers come from the browser's own header/footer setting: CSS
+       margin boxes (`@page { @bottom-center { content: counter(page) } }`)
+       are still unimplemented in every shipping engine, so a sheet that
+       promises them would be lying. */
+
+    /* ── Pagination behaviour ────────────────────────────────────────── */
+
+    /* Repeat column headings on every sheet — the single biggest readability
+       win for a 40-row ledger that spills onto page two. */
+    thead {
+        display: table-header-group;
+    }
+
+    tfoot {
+        display: table-row-group;
+    }
+
+    tr,
+    img,
+    svg,
+    .print-avoid-break,
+    [data-print-block] {
+        break-inside: avoid;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+        break-after: avoid;
+    }
+
+    /* A card that splits across sheets looks like a printing error even when
+       it is not one. */
+    .bg-card,
+    .rounded-2xl {
+        break-inside: avoid;
+    }
+
+    /* Tables print edge to edge; the screen's rounded, padded wrapper is
+       furniture. */
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        font-size: 9.5pt;
+    }
+
+    th,
+    td {
+        padding: 1.4mm 2mm !important;
+        text-align: inherit;
+        vertical-align: top;
+    }
+
+    /* Money and quantity columns keep their tabular alignment on paper. */
+    .font-mono,
+    [data-print-numeric] {
+        font-variant-numeric: tabular-nums;
+    }
+
+    th {
+        border-bottom: 0.75pt solid hsl(var(--foreground)) !important;
+        font-weight: 700;
+    }
+
+    td {
+        border-bottom: 0.25pt solid hsl(var(--border)) !important;
+    }
+
+    /* URLs after links are noise in an ERP sheet: every link is internal. */
+    a[href]::after {
+        content: '' !important;
+    }
+
+    a {
+        color: inherit !important;
+        text-decoration: none !important;
+    }
+
+    /* Document-style sheets opt into portrait — by class on the page, or by
+       `printDocument({ portrait: true })`, which sets it on <html>. */
+    .print-portrait,
+    .print-portrait [data-core-print] {
+        page: portrait-sheet;
+    }
+
+    html.is-printing-portrait,
+    html.is-printing-portrait body {
+        page: portrait-sheet;
+    }
+
+    /* Colour that carries meaning — a barcode, a status dot, a signature
+       seal — must survive the printer's own "drop backgrounds" default. */
+    .print-keep-color,
+    .print-keep-color * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
