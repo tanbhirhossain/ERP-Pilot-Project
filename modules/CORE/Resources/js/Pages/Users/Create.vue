@@ -9,8 +9,10 @@ import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import type { SelectOption } from '../../types';
 
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 interface Props {
     roleOptions: SelectOption[];
 }
@@ -25,6 +27,7 @@ const form = useForm({
     roles: [] as number[],
     verified: false,
 });
+useUnsavedGuard(() => form.isDirty);
 
 function submit() {
     form.post(route('core.users.store'), {
@@ -47,7 +50,7 @@ function submit() {
                 <ArrowLeft class="size-4" />
             </Link>
             <div>
-                <h1 class="text-xl font-bold tracking-tight">Create user</h1>
+                <PageHeader title="Create user" />
                 <p class="mt-0.5 text-sm text-muted-foreground">
                     Onboard a new identity and assign its access profile.
                 </p>
@@ -112,7 +115,7 @@ function submit() {
                     </div>
 
                     <label class="flex cursor-pointer items-center gap-2.5 rounded-lg border bg-muted/30 px-3 py-2.5 text-sm transition hover:bg-muted/60">
-                        <Checkbox v-model="form.verified" />
+                        <Checkbox v-model:checked="form.verified" />
                         <span>
                             <span class="font-medium">Email verified</span>
                             <span class="block text-xs text-muted-foreground">

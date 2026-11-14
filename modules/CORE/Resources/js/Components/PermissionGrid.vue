@@ -102,9 +102,9 @@ function toggleGroup(options: SelectOption[]) {
                             :class="disabled && 'cursor-not-allowed opacity-60'"
                         >
                             <Checkbox
-                                :model-value="isGroupChecked(groupOptions)"
+                                :checked="isGroupChecked(groupOptions)"
                                 :disabled="disabled"
-                                @update:model-value="toggleGroup(groupOptions)"
+                                @update:checked="toggleGroup(groupOptions)"
                             />
                         </label>
                         <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -128,9 +128,9 @@ function toggleGroup(options: SelectOption[]) {
                             "
                         >
                             <Checkbox
-                                :model-value="has(Number(option.value))"
+                                :checked="has(Number(option.value))"
                                 :disabled="disabled"
-                                @update:model-value="toggle(Number(option.value))"
+                                @update:checked="toggle(Number(option.value))"
                             />
                             <span
                                 class="font-mono text-[13px]"

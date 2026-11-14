@@ -522,7 +522,7 @@ const statusPills = [
                 </CardHeader>
                 <CardContent class="ds-demo space-y-4">
                     <label class="flex cursor-pointer items-center gap-2.5 text-sm">
-                        <Checkbox v-model="checkboxOn" />
+                        <Checkbox v-model:checked="checkboxOn" />
                         Send me a summary every Monday
                     </label>
 
