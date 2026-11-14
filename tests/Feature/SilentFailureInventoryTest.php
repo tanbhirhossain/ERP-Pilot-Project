@@ -1,5 +1,7 @@
 <?php
 
+use Tests\Paths;
+
 /**
  * An enforced inventory of silent failure.
  *
@@ -121,6 +123,7 @@ function emptyCatchCount(string $file): int
 function silentFailureInventory(): array
 {
     $root = dirname(__DIR__, 2);
+    // Compared against a forward-slashed relative path, so this list works on every OS.
     $excluded = ['Database/Migrations', 'Database/Seeders', 'Database/Factories'];
     $inventory = [];
     $scanned = 0;
@@ -139,7 +142,7 @@ function silentFailureInventory(): array
                 continue;
             }
 
-            $relative = substr($file->getPathname(), strlen($root) + 1);
+            $relative = Paths::relativePath($file->getPathname());
 
             foreach ($excluded as $skip) {
                 if (str_contains($relative, $skip)) {

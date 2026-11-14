@@ -1,5 +1,7 @@
 <?php
 
+use Tests\Paths;
+
 /**
  * The print contract — item 43.
  *
@@ -55,7 +57,7 @@ function pcVueFiles(): array
         /** @var SplFileInfo $file */
         foreach ($iterator as $file) {
             if ($file->isFile() && $file->getExtension() === 'vue') {
-                $files[] = str_replace(base_path().'/', '', $file->getPathname());
+                $files[] = Paths::relativePath($file->getPathname());
             }
         }
     }
@@ -193,7 +195,21 @@ test('the scanner is looking at the application it claims to describe', function
 
     // Without this the rest of the file passes on an empty glob, which is the quietest way a
     // contract test can stop being one.
-    expect($files)->toHaveCount(396, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
+    // 413 since Phase 3: 411 from Phase 2 plus the Mushak 9.1 VAT return and the withholding desk.
+    // 414 since U19: the language switcher (`CORE/Components/LanguageSwitcher.vue`) joins the tree.
+    // 416 since F15: the fixed-asset register and the depreciation run (`ACCOUNTS::Assets/*`).
+    // 418 since F14: the budget desk and its variance report (`ACCOUNTS::Budgets/*`).
+    // 420 since F13: the two Developer pages — the token screen and the API reference, both
+    // rendered from the published spec (`CORE::Developer/*`).
+    // 422 since F22: the offline queue desk (`SALES::Pos/Offline`) and the header's offline badge
+    // (`CORE/Components/OfflineBadge`). Both are new, neither is a print caller by accident.
+    // 411 since Phase 2: 409 from Phase 1 plus the activity timeline and the attachment
+    // panel (per-record history + document uploads on Show pages).
+    // 430 since F18: eight on the purchase side — the requisition register, its create/edit/show pages,
+    // the shared `RequisitionForm`, and the round's index/create/show.
+    // 431 since SSO: the linked-accounts page (`CORE::Sso/Accounts`). It prints nothing — an SSO page has no
+    // document to hand someone — so the print-caller census stays where it is.
+    expect($files)->toHaveCount(432, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
         ->and($files)->toContain(PC_LAYOUT);
 
     $withStyle = array_filter($files, static fn (string $path): bool => pcStyleBlocks(pcRead($path)) !== []);
@@ -271,7 +287,9 @@ test('the print hook is installed once, at boot, and cleans up after itself', fu
     $engine = pcRead(PC_ENGINE);
 
     expect(substr_count($boot, 'installPrintSupport();'))->toBe(1, 'the global hook is installed zero times (unmigrated window.print() calls print the chrome) or twice (handlers fire twice)');
-    $this->assertStringContainsString("from '../../modules/CORE/Resources/js/Composables/usePrint'", $boot, 'the boot file does not import the engine it calls');
+    // U17 rewrote cross-module imports to the @core alias; the boot file now imports
+    // the engine through it rather than the old ../../modules relative path.
+    $this->assertStringContainsString("from '@core/Composables/usePrint'", $boot, 'the boot file does not import the engine it calls');
 
     $this->assertStringContainsString("window.addEventListener('beforeprint'", $engine, 'a bare window.print() gets no region handling at all');
     $this->assertStringContainsString("window.addEventListener('afterprint'", $engine, 'the shell never comes back after a print');
@@ -314,7 +332,13 @@ test('every page prints through the engine, and nothing calls window.print() dir
     // Measured: the eight accounting reports, the shared DataTable (so every list it renders prints
     // through the engine), the payslip, the leave application, the barcode sheet, the POS receipt,
     // the two day-end screens and the design-system demo.
-    expect($callers)->toHaveCount(16, 'the set of pages that print through the engine changed; re-measure and say why');
+    // 17 since Phase 1: the ESS payslip (HRM::My/Payslip) prints through the engine too.
+    // 18 since Phase 3: the Mushak 9.1 VAT return (ACCOUNTS::Reports/VatReturn) prints through the engine.
+    // 19 since F14: the budget variance report prints through the engine — a controller's plan-vs-books
+    // number is only worth anything pinned to a date in a meeting, and it reads on paper as a working paper.
+    // 20 since F22: the offline queue desk prints a slip for a ticket the ledger has already taken, so a
+    // refusal at day-end has a paper trail; it prints through the engine like every other receipt.
+    expect($callers)->toHaveCount(20, 'the set of pages that print through the engine changed; re-measure and say why');
 
     // With DataTable migrated, nothing in the component tree calls the browser directly any more.
     foreach (pcVueFiles() as $path) {
@@ -405,5 +429,11 @@ test('one page marks at most one print region', function () {
     }
 
     // Measured: the shared table plus the four documents that print themselves rather than a list.
-    expect($marked)->toHaveCount(5, 'the set of pages that mark a print region changed; re-measure and say why');
+    // 6 since Phase 1: the ESS payslip marks its own region so only the slip reaches paper.
+    // 7 since Phase 3: the Mushak 9.1 working paper marks its own region.
+    // 8 since F14: the budget variance page marks its report block, leaving the budget/month picker off
+    // the sheet — the paper should say which plan it was run against, not how it was arrived at.
+    // 9 since F22: the queue desk's print region is the slip only — the queue, the buttons and the
+    // engine/coverage cards stay on screen, so what comes off the printer is a receipt, not a screenshot.
+    expect($marked)->toHaveCount(9, 'the set of pages that mark a print region changed; re-measure and say why');
 });

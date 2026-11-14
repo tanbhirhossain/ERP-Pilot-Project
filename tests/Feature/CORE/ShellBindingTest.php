@@ -1,5 +1,7 @@
 <?php
 
+use Tests\Paths;
+
 /**
  * The shell's template bindings must exist in its script.
  *
@@ -45,7 +47,7 @@ function sbFiles(string $directory): array
     /** @var SplFileInfo $file */
     foreach ($iterator as $file) {
         if ($file->isFile() && $file->getExtension() === 'vue') {
-            $files[] = str_replace(base_path().'/', '', $file->getPathname());
+            $files[] = Paths::relativePath($file->getPathname());
         }
     }
 
