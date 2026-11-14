@@ -170,6 +170,11 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->name('hrm.')->group(function 
     Route::get('extra-duty', [RosterOvertimeController::class, 'extraDutyIndex'])->middleware(PermissionMiddleware::class.':hrm.overtimes.view')->name('extra-duty.index');
     Route::post('overtimes/sync-attendance', [RosterOvertimeController::class, 'syncFromAttendance'])->middleware(PermissionMiddleware::class.':hrm.overtimes.manage')->middleware('throttle:hrm-device-sync')->name('overtimes.sync-attendance');
     Route::get('overtimes', [RosterOvertimeController::class, 'index'])->middleware(PermissionMiddleware::class.':hrm.overtimes.view')->name('overtimes.index');
+    // Must be declared before 'overtimes/{overtime}' or the wildcard swallows it and 'bulk-approve'
+    // arrives as an overtime id.
+    // Throttled like every other HRM bulk write: one press of "Approve selected" can move two thousand
+    // payroll rows, so it belongs behind the same per-person budget as a bulk roster write.
+    Route::post('overtimes/bulk-approve', [RosterOvertimeController::class, 'bulkApprove'])->middleware(PermissionMiddleware::class.':hrm.overtimes.approve')->middleware('throttle:hrm-bulk-write')->name('overtimes.bulk-approve');
     Route::get('overtimes/{overtime}', [RosterOvertimeController::class, 'show'])->middleware(PermissionMiddleware::class.':hrm.overtimes.view')->name('overtimes.show');
     Route::post('overtimes/{overtime}/approve', [RosterOvertimeController::class, 'approve'])->middleware(PermissionMiddleware::class.':hrm.overtimes.approve')->name('overtimes.approve');
     Route::post('overtimes/{overtime}/reject', [RosterOvertimeController::class, 'reject'])->middleware(PermissionMiddleware::class.':hrm.overtimes.approve')->name('overtimes.reject');

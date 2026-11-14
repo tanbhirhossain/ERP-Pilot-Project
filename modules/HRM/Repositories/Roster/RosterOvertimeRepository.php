@@ -32,7 +32,22 @@ class RosterOvertimeRepository implements RosterOvertimeRepositoryInterface
 
     public function attendanceApprovalQueue(DataTableQuery $dt, string $kind): LengthAwarePaginator
     {
+        $q = $this->attendanceQueueQuery($kind);
+        $this->applyDataTable($q, $dt, $this->searchColumns(), $this->sortable(), $this->filters());
+
+        return $q->paginate($dt->perPage, ['roster_overtimes.*'], 'page', $dt->page)->withQueryString();
+    }
+
+    /**
+     * Every filter the approval queue offers, expressed once.
+     *
+     * The list, the footer totals and the printable sheet all read attendance through this method,
+     * so a filter added here can never apply to one of them and silently miss the others.
+     */
+    public function attendanceQueueQuery(string $kind): Builder
+    {
         $q = $this->baseQuery()->where('roster_overtimes.status', 'Pending');
+
         if ($kind === 'Overtime') {
             $q->where('roster_overtimes.overtime_type', 'Overtime')
                 ->whereExists(function ($daily) {
@@ -52,9 +67,21 @@ class RosterOvertimeRepository implements RosterOvertimeRepositoryInterface
                         ->where('attendance_dailies.status', 'Extra Duty');
                 });
         }
+
+        return $q;
+    }
+
+    /**
+     * Apply the operator's search and filters to a queue query without paginating it.
+     *
+     * Public so the footer totals and the printable sheet read exactly the view the table shows;
+     * they would otherwise have to re-implement the filter map and could drift from it.
+     */
+    public function applyQueueFilters(Builder $q, DataTableQuery $dt): Builder
+    {
         $this->applyDataTable($q, $dt, $this->searchColumns(), $this->sortable(), $this->filters());
 
-        return $q->paginate($dt->perPage, ['roster_overtimes.*'], 'page', $dt->page)->withQueryString();
+        return $q;
     }
 
     public function exportBuilder(DataTableQuery $dt): Builder
@@ -87,7 +114,11 @@ class RosterOvertimeRepository implements RosterOvertimeRepositoryInterface
 
     private function filters(): array
     {
-        return ['status' => fn (Builder $q, string $v) => $q->where('status', $v), 'employee_id' => fn (Builder $q, string $v) => $q->where('employee_id', $v), 'overtime_type' => function (Builder $q, string $v) {
+        return ['status' => fn (Builder $q, string $v) => $q->where('status', $v), 'employee_id' => fn (Builder $q, string $v) => $q->where('employee_id', $v),
+            // Inclusive date range. Compared on date() because overtime_date is stored with a
+            // 00:00:00 time component, so a plain `<= '2026-10-17'` would drop the 17th itself.
+            'date_from' => fn (Builder $q, string $v) => $q->whereRaw('date(roster_overtimes.overtime_date) >= ?', [$v]),
+            'date_to' => fn (Builder $q, string $v) => $q->whereRaw('date(roster_overtimes.overtime_date) <= ?', [$v]), 'overtime_type' => function (Builder $q, string $v) {
             if ($v === 'Extra Duty') {
                 $q->whereIn('overtime_type', ['Extra Duty', 'Holiday Duty']);
             } else {

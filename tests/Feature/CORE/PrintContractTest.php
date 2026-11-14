@@ -338,7 +338,9 @@ test('every page prints through the engine, and nothing calls window.print() dir
     // number is only worth anything pinned to a date in a meeting, and it reads on paper as a working paper.
     // 20 since F22: the offline queue desk prints a slip for a ticket the ledger has already taken, so a
     // refusal at day-end has a paper trail; it prints through the engine like every other receipt.
-    expect($callers)->toHaveCount(20, 'the set of pages that print through the engine changed; re-measure and say why');
+    // 22 since P11: the Overtime and Extra Duty approval desks print a signed report of their queue —
+    // a document the payroll clerk signs, not a screenshot of a table with buttons down its side.
+    expect($callers)->toHaveCount(22, 'the set of pages that print through the engine changed; re-measure and say why');
 
     // With DataTable migrated, nothing in the component tree calls the browser directly any more.
     foreach (pcVueFiles() as $path) {
@@ -435,5 +437,9 @@ test('one page marks at most one print region', function () {
     // the sheet — the paper should say which plan it was run against, not how it was arrived at.
     // 9 since F22: the queue desk's print region is the slip only — the queue, the buttons and the
     // engine/coverage cards stay on screen, so what comes off the printer is a receipt, not a screenshot.
-    expect($marked)->toHaveCount(9, 'the set of pages that mark a print region changed; re-measure and say why');
+    // 11 since P11: `HRM::Overtimes/Index` and `HRM::ExtraDuty/Index` each mark their signed report.
+    // Those pages also render a DataTable, so they are the one place the census below matters: the
+    // report is the region that must win, and its `printSheet()` strips the table's marker for the
+    // duration of the print rather than relying on document order to decide.
+    expect($marked)->toHaveCount(11, 'the set of pages that mark a print region changed; re-measure and say why');
 });

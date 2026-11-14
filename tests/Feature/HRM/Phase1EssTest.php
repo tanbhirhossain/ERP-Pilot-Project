@@ -46,9 +46,20 @@ function p1essUserWithEmployee(string $employeeCode): array
 
 function p1essSlip(Employee $employee, int $net): PayrollSlip
 {
+    // A salary sheet is unique per (year, month) — one payroll run per period, enforced by the
+    // database. `random_int(1, 12)` therefore fails roughly one run in twelve with a UNIQUE violation
+    // as soon as a test creates two slips. Claim the next free month instead: deterministic, and it
+    // still exercises distinct periods when a test makes several.
+    $year = (int) now()->year;
+    $taken = PayrollSalarySheet::query()->where('pay_year', $year)->pluck('pay_month')->all();
+    $month = 1;
+    while (in_array($month, $taken, true) && $month <= 12) {
+        $month++;
+    }
+
     $sheet = PayrollSalarySheet::create([
-        'pay_year' => (int) now()->year,
-        'pay_month' => random_int(1, 12),
+        'pay_year' => $year,
+        'pay_month' => $month,
         'status' => 'released',
     ]);
 

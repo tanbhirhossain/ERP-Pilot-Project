@@ -43,6 +43,13 @@
     display: none;
 }
 
+/* A page-level printable document (`Overtimes/Index.vue` and friends). It is the paper version of a
+   screen the operator is still looking at, so it must never occupy space in the app — and it must be
+   the only thing on the sheet when it prints. */
+.print-sheet {
+    display: none;
+}
+
 @media print {
     /* ── 1. Reinstate the light token set ─────────────────────────────── */
     :root,
@@ -297,5 +304,176 @@
     .print-keep-color * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+    }
+
+    /* ── 5. Page-level printable documents ─────────────────────────────── */
+
+    /* When a page ships a `.print-sheet`, that document *is* the paper: the
+       interactive table beside it would otherwise print underneath it, and the
+       operator would get a screenshot glued to the bottom of a report. */
+    .print-sheet {
+        display: block !important;
+        page: portrait-sheet;
+        color: #111827;
+    }
+
+    [data-core-print]:has(.print-sheet) > :not(.print-sheet) {
+        display: none !important;
+    }
+
+    .print-sheet .sheet-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 8mm;
+        padding-bottom: 3mm;
+        border-bottom: 1.5pt solid #111827;
+    }
+
+    .print-sheet .sheet-company {
+        font-size: 15pt;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        color: #111827;
+    }
+
+    .print-sheet .sheet-title {
+        text-align: right;
+    }
+
+    .print-sheet .sheet-title h1 {
+        font-size: 12.5pt;
+        font-weight: 700;
+        color: #111827;
+    }
+
+    .print-sheet .sheet-muted {
+        font-size: 8.5pt;
+        color: #4b5563;
+        line-height: 1.5;
+    }
+
+    .print-sheet .sheet-meta {
+        margin: 4mm 0 3mm;
+    }
+
+    .print-sheet .sheet-meta dl {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 2mm 6mm;
+        margin: 0;
+    }
+
+    .print-sheet .sheet-meta dt {
+        font-size: 7.5pt;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #6b7280;
+    }
+
+    .print-sheet .sheet-meta dd {
+        margin: 0;
+        font-size: 9.5pt;
+        font-weight: 600;
+        color: #111827;
+    }
+
+    .print-sheet .sheet-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 1.5mm 3mm;
+        margin-top: 3mm;
+        font-size: 8.5pt;
+    }
+
+    .print-sheet .sheet-chip {
+        border: 0.4pt solid #d1d5db;
+        border-radius: 2mm;
+        padding: 0.6mm 2mm;
+        color: #111827;
+    }
+
+    .print-sheet .sheet-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 8.5pt;
+    }
+
+    .print-sheet .sheet-table thead {
+        display: table-header-group;
+    }
+
+    .print-sheet .sheet-table th {
+        border-bottom: 1pt solid #111827;
+        padding: 1.6mm 2mm;
+        text-align: left;
+        font-size: 7.5pt;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #374151;
+    }
+
+    .print-sheet .sheet-table td {
+        border-bottom: 0.25pt solid #e5e7eb;
+        padding: 1.4mm 2mm;
+        vertical-align: top;
+    }
+
+    .print-sheet .sheet-table tfoot td {
+        border-top: 1pt solid #111827;
+        border-bottom: none;
+        font-size: 9pt;
+    }
+
+    .print-sheet .sheet-right {
+        text-align: right;
+    }
+
+    .print-sheet .sheet-num {
+        width: 8mm;
+        text-align: right;
+        color: #6b7280;
+    }
+
+    .print-sheet .sheet-mono {
+        font-variant-numeric: tabular-nums;
+        font-family: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', monospace;
+    }
+
+    .print-sheet .sheet-empty {
+        padding: 10mm 2mm;
+        text-align: center;
+        color: #6b7280;
+    }
+
+    .print-sheet .sheet-note {
+        margin-top: 3mm;
+        font-size: 7.5pt;
+        line-height: 1.5;
+    }
+
+    /* The signature block must not be orphaned onto a page of its own. */
+    .print-sheet .sheet-signatures {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12mm;
+        margin-top: 14mm;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .print-sheet .sheet-signatures > div {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5mm;
+    }
+
+    .print-sheet .sheet-line {
+        display: block;
+        height: 10mm;
+        border-bottom: 0.5pt solid #111827;
     }
 }

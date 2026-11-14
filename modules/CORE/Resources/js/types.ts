@@ -27,10 +27,19 @@ export interface SelectOption {
 export interface FilterDef {
     key: string;
     label: string;
-    kind: 'select' | 'endpoint' | 'date';
+    /**
+     * `daterange` renders one control that writes two URL params: `fromKey` and `toKey`.
+     *
+     * A range is one question ("which days?"), so it should be one control — two unrelated date
+     * boxes leave the operator unsure whether they are ANDed, and they cannot be cleared together.
+     */
+    kind: 'select' | 'endpoint' | 'date' | 'daterange';
     options?: SelectOption[];
     endpoint?: string;
     placeholder?: string;
+    /** Only for `kind: 'daterange'` — the two filter keys the control owns. */
+    fromKey?: string;
+    toKey?: string;
 }
 
 export interface FlashProps {

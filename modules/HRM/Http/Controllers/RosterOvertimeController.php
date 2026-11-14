@@ -44,7 +44,11 @@ final class RosterOvertimeController extends Controller
         if ($request->user()?->can('hrm.overtimes.approve')) {
             $this->service->syncFromAttendance($kind, Carbon::now()->subMonths(3)->startOfMonth()->toDateString(), Carbon::now()->subDay()->toDateString());
         }
-        $dt = DataTableQuery::fromRequest($request, ['id', 'overtime_date', 'hours', 'created_at'], ['employee_id', 'department_id', 'designation_id']);
+        $dt = DataTableQuery::fromRequest(
+            $request,
+            ['id', 'overtime_date', 'hours', 'created_at'],
+            ['employee_id', 'department_id', 'designation_id', 'date_from', 'date_to'],
+        );
         $page = $this->service->attendanceApprovalQueue($dt, $kind);
         $rows = $page->getCollection();
         $dates = $rows->pluck('overtime_date')->map(fn ($date) => $date?->toDateString())->filter()->unique();
@@ -79,13 +83,130 @@ final class RosterOvertimeController extends Controller
             'requests' => PaginatedResource::from($mapped),
             'queueRoute' => $isExtra ? 'hrm.extra-duty.index' : 'hrm.overtimes.index',
             'kind' => $kind,
+            // Footer totals cover the whole filtered set, not the 25 rows on screen.
+            'totals' => $this->service->queueTotals($dt, $kind),
+            // The printable sheet is a document: every row of the current view, with the company
+            // letterhead the operator would otherwise retype into Word.
+            'sheet' => [
+                'rows' => $this->service->printableSheet($dt, $kind),
+                'company' => $this->letterhead(),
+                'filters' => $this->filterSummary($dt),
+            ],
             'canApprove' => (bool) (auth()->user()?->can('hrm.overtimes.approve')),
             'filterDefs' => [
+                // One control, two filter keys: a date range is a single question.
+                ['key' => 'date_range', 'label' => 'Date range', 'kind' => 'daterange', 'fromKey' => 'date_from', 'toKey' => 'date_to'],
                 ['key' => 'department_id', 'label' => 'Department', 'kind' => 'endpoint', 'endpoint' => '/hrm/api/options/departments', 'placeholder' => 'Filter department'],
                 ['key' => 'designation_id', 'label' => 'Designation', 'kind' => 'endpoint', 'endpoint' => '/hrm/api/options/designations', 'placeholder' => 'Filter designation'],
                 ['key' => 'employee_id', 'label' => 'Employee', 'kind' => 'endpoint', 'endpoint' => '/hrm/api/options/employees', 'placeholder' => 'Search employee…'],
             ],
         ]);
+    }
+
+    /**
+     * Approve several queued days at once.
+     *
+     * Deliberately a POST of explicit ids rather than "approve everything matching this filter": an
+     * operator can always see exactly which rows they ticked, and the queue can grow between the moment
+     * the filter was applied and the moment the button is pressed. Each id still goes through the same
+     * single-row approval — same transaction, same payroll cutlist — so bulk is a convenience, not a
+     * second, laxer route to money.
+     */
+    public function bulkApprove(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()?->can('hrm.overtimes.approve'), 403);
+
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['integer'],
+            'comments' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $result = $this->service->bulkApprove($data['ids'], (int) $request->user()->id, $data['comments'] ?? null);
+
+        if ($result['approved'] === 0) {
+            return back()->with('error', 'None of the '.count($data['ids']).' selected record(s) could be approved. '.$this->skipSummary($result['skipped']));
+        }
+
+        $message = $result['approved'].' of '.count($data['ids']).' attendance-linked request(s) approved.';
+
+        if ($result['skipped'] !== []) {
+            $message .= ' '.count($result['skipped']).' skipped — '.$this->skipSummary($result['skipped']);
+        }
+
+        return back()->with('success', $message);
+    }
+
+    /** One line naming why rows were skipped, so a partial bulk result is never a silent one. */
+    private function skipSummary(array $skipped): string
+    {
+        if ($skipped === []) {
+            return '';
+        }
+
+        return collect($skipped)
+            ->groupBy('reason')
+            ->map(fn ($group, $reason) => count($group).' × '.$reason)
+            ->take(3)
+            ->implode('; ');
+    }
+
+    /** Company block for the printable sheet's letterhead. */
+    private function letterhead(): array
+    {
+        $org = DB::table('organizations')->orderBy('id')->first();
+
+        return [
+            'name' => $org->name ?? config('app.name', 'Company'),
+            'address' => $org->address ?? '',
+            'phone' => $org->phone ?? '',
+            'email' => $org->email ?? '',
+            'website' => $org->website ?? '',
+        ];
+    }
+
+    /**
+     * A human summary of the filters the sheet was printed under.
+     *
+     * A printed report without its parameters is unverifiable a week later; the signature block can
+     * then be checked against what was actually asked for.
+     */
+    private function filterSummary(DataTableQuery $dt): array
+    {
+        $labels = [
+            'date_from' => 'From',
+            'date_to' => 'To',
+            'department_id' => 'Department',
+            'designation_id' => 'Designation',
+            'employee_id' => 'Employee',
+        ];
+
+        $summary = [];
+
+        foreach ($dt->filters as $key => $value) {
+            if (! isset($labels[$key])) {
+                continue;
+            }
+
+            $summary[] = ['label' => $labels[$key], 'value' => $this->filterDisplayValue($key, (string) $value)];
+        }
+
+        if ($dt->search !== null && trim($dt->search) !== '') {
+            $summary[] = ['label' => 'Search', 'value' => trim($dt->search)];
+        }
+
+        return $summary;
+    }
+
+    /** Turns an id-shaped filter value into the name printed on the sheet. */
+    private function filterDisplayValue(string $key, string $value): string
+    {
+        return match ($key) {
+            'department_id' => (string) (DB::table('departments')->where('id', $value)->value('name') ?? $value),
+            'designation_id' => (string) (DB::table('designations')->where('id', $value)->value('name') ?? $value),
+            'employee_id' => (string) (DB::table('employees')->where('employee_id', $value)->value('full_name') ?? $value),
+            default => $value,
+        };
     }
 
     public function show(RosterOvertime $overtime): Response

@@ -35,6 +35,157 @@ class RosterOvertimeService
         return $this->repo->attendanceApprovalQueue($dt, $kind);
     }
 
+    /**
+     * Footer totals for the whole filtered set, not just the visible page.
+     *
+     * A page-local sum moves every time the operator pages, which makes it useless for the one
+     * question the footer is asked: "how many hours am I about to approve?" The hours are summed in
+     * SQL so a 2,000-row queue costs one query, and the attendance column is joined on date() because
+     * duty_date is stored in both 'Y-m-d' and 'Y-m-d 00:00:00' shapes.
+     */
+    public function queueTotals(DataTableQuery $dt, string $kind): array
+    {
+        $row = $this->filteredQueue($dt, $kind)->selectRaw('count(*) as days, coalesce(sum(roster_overtimes.hours), 0) as approved_hours')
+            ->toBase()
+            ->first();
+
+        $attendance = $this->attendanceAggregate($dt, $kind);
+
+        return [
+            'days' => (int) ($row->days ?? 0),
+            'employees' => $this->employeeCount($dt, $kind),
+            'approved_hours' => round((float) ($row->approved_hours ?? 0), 2),
+            'attendance_hours' => round($attendance['worked'], 2),
+            'source_hours' => round($attendance['source'], 2),
+        ];
+    }
+
+    /**
+     * Every row of the filtered queue, for the printable sheet.
+     *
+     * The sheet is a document, not a screenshot, so this deliberately ignores pagination — but it is
+     * capped, because an unbounded print of a 100k-row queue would be a 4,000-page PDF nobody asked for.
+     */
+    public function printableSheet(DataTableQuery $dt, string $kind, int $limit = 2000): array
+    {
+        $rows = $this->filteredQueue($dt, $kind)->orderBy('roster_overtimes.overtime_date')->orderBy('roster_overtimes.employee_id')
+            ->limit($limit)
+            ->get(['roster_overtimes.*']);
+
+        $daily = $this->dailyMap($rows, $kind);
+
+        return $rows->map(function (RosterOvertime $row) use ($daily, $kind): array {
+            $key = $row->employee_id.'|'.$row->overtime_date?->toDateString();
+            $day = $daily->get($key);
+
+            return [
+                'employee_id' => $row->employee_id,
+                'employee' => $row->employee?->full_name ?: $row->employee_id,
+                'overtime_date' => $row->overtime_date?->toDateString(),
+                'overtime_type' => $row->overtime_type,
+                'hours' => round((float) $row->hours, 2),
+                'source_hours' => round((float) ($kind === 'Overtime' ? ($day?->total_overtime_hours ?? 0) : ($day?->grand_total_hours ?? 0)), 2),
+                'worked_hours' => round((float) ($day?->grand_total_hours ?? 0), 2),
+                'attendance_status' => $day?->status,
+            ];
+        })->all();
+    }
+
+    /**
+     * Approve several queued days in one pass.
+     *
+     * Each row goes through `approve()` — the same transaction, the same payroll cutlist row and the
+     * same refusals — so a bulk action can never be a second, laxer path to money. One row that the
+     * business rules refuse (a salary sheet already exists for its month, the source day vanished)
+     * is reported and skipped rather than aborting the whole selection.
+     */
+    public function bulkApprove(array $ids, ?int $actorId, ?string $comments = null): array
+    {
+        $approved = 0;
+        $skipped = [];
+
+        foreach (RosterOvertime::query()->whereIn('id', $ids)->orderBy('id')->get() as $row) {
+            try {
+                $this->approve($row, (float) $row->hours, $actorId, $comments);
+                $approved++;
+            } catch (ValidationException $e) {
+                $skipped[] = [
+                    'id' => $row->id,
+                    'employee_id' => $row->employee_id,
+                    'date' => $row->overtime_date?->toDateString(),
+                    'reason' => collect($e->errors())->flatten()->first() ?? 'Refused.',
+                ];
+            }
+        }
+
+        return ['approved' => $approved, 'skipped' => $skipped, 'requested' => count($ids)];
+    }
+
+    /**
+     * The filtered queue, unpaginated — one place that applies search and filters.
+     *
+     * `attendanceQueueQuery()` owns the queue's own predicates; this adds the operator's. The list,
+     * the footer totals and the printable sheet all come through here, so they cannot disagree about
+     * what "the current view" means.
+     */
+    private function filteredQueue(DataTableQuery $dt, string $kind): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this->repo->applyQueueFilters($this->repo->attendanceQueueQuery($kind), $dt);
+    }
+
+    /**
+     * Sum the attendance side of the same filtered set, in one statement.
+     *
+     * The queue rows are matched to their attendance day on `date()` — duty_date is stored in both
+     * 'Y-m-d' and 'Y-m-d 00:00:00' shapes — and the join is restricted to the filtered queue by id,
+     * so this counts exactly what the table is showing and not a row more.
+     */
+    private function attendanceAggregate(DataTableQuery $dt, string $kind): array
+    {
+        $idQuery = $this->filteredQueue($dt, $kind)->toBase()->select('roster_overtimes.id');
+
+        $source = $kind === 'Overtime' ? 'attendance_dailies.total_overtime_hours' : 'attendance_dailies.grand_total_hours';
+
+        $row = DB::table('roster_overtimes')
+            ->join('attendance_dailies', function ($join): void {
+                $join->on('attendance_dailies.employee_id', '=', 'roster_overtimes.employee_id')
+                    ->whereRaw('date(attendance_dailies.duty_date) = date(roster_overtimes.overtime_date)');
+            })
+            ->whereIn('roster_overtimes.id', $idQuery)
+            ->selectRaw("coalesce(sum(attendance_dailies.grand_total_hours), 0) as worked, coalesce(sum({$source}), 0) as source")
+            ->first();
+
+        return [
+            'worked' => round((float) ($row->worked ?? 0), 2),
+            'source' => round((float) ($row->source ?? 0), 2),
+        ];
+    }
+
+    private function employeeCount(DataTableQuery $dt, string $kind): int
+    {
+        return (int) $this->filteredQueue($dt, $kind)
+            ->toBase()
+            ->distinct()
+            ->count('roster_overtimes.employee_id');
+    }
+
+    /** Attendance dailies keyed 'employee|date' for a set of queue rows. */
+    private function dailyMap($rows, string $kind): \Illuminate\Support\Collection
+    {
+        $employees = $rows->pluck('employee_id')->unique()->all();
+        $dates = $rows->pluck('overtime_date')->map(fn ($d) => $d?->toDateString())->filter()->unique()->all();
+
+        if ($employees === [] || $dates === []) {
+            return collect();
+        }
+
+        return AttendanceDaily::query()
+            ->whereIn('employee_id', $employees)
+            ->whereIn(DB::raw('date(duty_date)'), $dates)
+            ->get()
+            ->keyBy(fn ($daily) => $daily->employee_id.'|'.$daily->duty_date?->toDateString());
+    }
+
     public function findOrFail(int $id): RosterOvertime
     {
         return $this->repo->findOrFail($id);

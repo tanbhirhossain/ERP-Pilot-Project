@@ -99,6 +99,16 @@ interface Props {
     selectable?: boolean;
     /** Bulk actions offered when rows are selected; parent handles `bulk`. */
     bulkActions?: BulkAction[];
+    /**
+     * Footer cells for a totals row pinned under the last row.
+     *
+     * A footer that scrolls away is a footer nobody reads: on a 25-row page the operator scrolls to
+     * row 20 and the one number they need — how many hours they are about to approve — is off screen.
+     * Keys match column keys; `null` leaves a cell blank.
+     */
+    totals?: Record<string, string | number | null> | null;
+    /** Caption for the totals row, shown in the first non-total column. */
+    totalsLabel?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -112,6 +122,8 @@ const props = withDefaults(defineProps<Props>(), {
     emptyDescription: 'Try adjusting your search or filters to widen the results.',
     selectable: false,
     bulkActions: () => [],
+    totals: null,
+    totalsLabel: 'Total',
 });
 
 const emit = defineEmits<{
@@ -133,10 +145,28 @@ const urlParams = computed(() => new URL(page.url, 'http://core.local').searchPa
 
 const filterValue = (key: string): string => urlParams.value.get(`filters[${key}]`) ?? '';
 
+/**
+ * Filter keys that are rendered by another control, and so must not also become their own chip.
+ *
+ * A `daterange` def owns two keys; listing each of them separately would show "date_from: 2026-10-01"
+ * next to the range chip that already says it.
+ */
+const ownedKeys = computed<Set<string>>(
+    () => new Set(props.filterDefs.filter((def) => def.kind === 'daterange').flatMap((def) => [def.fromKey ?? `${def.key}_from`, def.toKey ?? `${def.key}_to`])),
+);
+
 const activeFilters = computed<Record<string, string>>(() => {
     const result: Record<string, string> = {};
 
     for (const def of props.filterDefs) {
+        if (def.kind === 'daterange') {
+            const from = rangeValue(def, 'from');
+            const to = rangeValue(def, 'to');
+
+            if (from !== '' || to !== '') result[def.key] = `${from || '…'} → ${to || '…'}`;
+            continue;
+        }
+
         const value = filterValue(def.key);
         if (value !== '') result[def.key] = value;
     }
@@ -242,6 +272,29 @@ function toggleSort(column: DataTableColumn) {
 
 /* -------------------------------- filters -------------------------------- */
 
+/**
+ * Apply a date range in one navigation.
+ *
+ * Two separate `navigate()` calls would fire two Inertia visits, and the first one would visibly
+ * strip the other end of the range before the second re-added it.
+ */
+function applyDateRange(def: FilterDef, end: 'from' | 'to', value: string): void {
+    const fromKey = def.fromKey ?? `${def.key}_from`;
+    const toKey = def.toKey ?? `${def.key}_to`;
+    const current = { from: filterValue(fromKey), to: filterValue(toKey) };
+
+    current[end] = value;
+
+    navigate({
+        [`filters[${fromKey}]`]: current.from || null,
+        [`filters[${toKey}]`]: current.to || null,
+    });
+}
+
+function rangeValue(def: FilterDef, end: 'from' | 'to'): string {
+    return filterValue(end === 'from' ? (def.fromKey ?? `${def.key}_from`) : (def.toKey ?? `${def.key}_to`));
+}
+
 function onFilterChange(def: FilterDef, value: unknown) {
     const normalized = value === null || value === undefined || value === '' ? null : String(value);
     applyFilter(def, normalized);
@@ -251,6 +304,22 @@ function applyFilter(def: FilterDef, value: string | null) {
     navigate({ [`filters[${def.key}]`]: value === null || value === '' ? null : String(value) });
 }
 
+/** Clears one filter chip — and both halves when the chip is a date range. */
+function clearFilter(key: string): void {
+    const def = props.filterDefs.find((candidate) => candidate.key === key);
+
+    if (def?.kind === 'daterange') {
+        navigate({
+            [`filters[${def.fromKey ?? `${key}_from`}]`]: null,
+            [`filters[${def.toKey ?? `${key}_to`}]`]: null,
+        });
+        return;
+    }
+
+    applyFilter({ key, label: key, kind: 'select' }, null);
+}
+
+/** Clears everything, including keys that only exist inside a range control. */
 function clearAll() {
     const params = new URLSearchParams(urlParams.value);
     const patch: Record<string, string | null> = { search: null };
@@ -259,6 +328,14 @@ function clearAll() {
         if (key.startsWith('filters[') || key === 'sort' || key === 'dir') {
             patch[key] = null;
         }
+    }
+
+    // A range that was never applied has no params to walk, so clear its keys explicitly.
+    for (const def of props.filterDefs) {
+        if (def.kind !== 'daterange') continue;
+
+        patch[`filters[${def.fromKey ?? `${def.key}_from`}]`] = null;
+        patch[`filters[${def.toKey ?? `${def.key}_to`}]`] = null;
     }
 
     searchInput.value = '';
@@ -633,9 +710,33 @@ onMounted(() => {
 
                 <!-- Filters -->
                 <template v-if="showFilters">
-                    <div v-for="def in filterDefs" :key="def.key" class="w-full sm:w-48">
+                    <div
+                        v-for="def in filterDefs"
+                        :key="def.key"
+                        class="w-full"
+                        :class="def.kind === 'daterange' ? 'sm:w-72' : 'sm:w-48'"
+                    >
+                        <div v-if="def.kind === 'daterange'" class="flex items-center gap-1.5">
+                            <Input
+                                type="date"
+                                :value="rangeValue(def, 'from')"
+                                class="h-9 w-full rounded-lg"
+                                :aria-label="`${def.label}: from`"
+                                :title="`${def.label}: from`"
+                                @update:model-value="applyDateRange(def, 'from', String($event ?? ''))"
+                            />
+                            <span class="text-muted-foreground text-xs" aria-hidden="true">–</span>
+                            <Input
+                                type="date"
+                                :value="rangeValue(def, 'to')"
+                                class="h-9 w-full rounded-lg"
+                                :aria-label="`${def.label}: to`"
+                                :title="`${def.label}: to`"
+                                @update:model-value="applyDateRange(def, 'to', String($event ?? ''))"
+                            />
+                        </div>
                         <Input
-                            v-if="def.kind === 'date'"
+                            v-else-if="def.kind === 'date'"
                             type="date"
                             :value="filterValue(def.key)"
                             class="h-9 w-full rounded-lg"
@@ -813,7 +914,7 @@ onMounted(() => {
                     type="button"
                     class="text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded-full p-0.5 transition focus-visible:ring-2 focus-visible:outline-none"
                     :aria-label="`Remove ${key} filter`"
-                    @click="applyFilter({ key, label: key, kind: 'select' }, null)"
+                    @click="clearFilter(key)"
                 >
                     <X class="size-3" />
                 </button>
@@ -977,6 +1078,31 @@ onMounted(() => {
                             </td>
                         </tr>
                     </tbody>
+
+                    <!-- Totals: pinned to the bottom of the scroll area so it stays in view. -->
+                    <tfoot v-if="totals" class="print:table-footer-group">
+                        <tr class="dt-total bg-card sticky bottom-0 z-[1] border-t-2">
+                            <td v-if="selectable" class="px-3 print:hidden" :class="cellPad" />
+                            <td
+                                v-for="(column, index) in visibleColumns"
+                                :key="`total-${column.key}`"
+                                :class="
+                                    cn(
+                                        'bg-muted/60 backdrop-blur text-sm font-semibold',
+                                        cellPad,
+                                        column.align === 'right' && 'text-right tabular-nums',
+                                        column.align === 'center' && 'text-center',
+                                        column.key === 'actions' && 'print:hidden',
+                                    )
+                                "
+                            >
+                                <span v-if="index === 0" class="text-foreground">{{ totalsLabel }}</span>
+                                <span v-else-if="totals[column.key] !== null && totals[column.key] !== undefined" class="font-mono tabular-nums">
+                                    {{ totals[column.key] }}
+                                </span>
+                            </td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
 
