@@ -33,6 +33,7 @@
  * Helpers are prefixed `mcc`; Pest loads every Feature file into one process.
  */
 
+use Tests\Paths;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Modules\SALES\Models\Invoice;
@@ -71,7 +72,7 @@ function mccModelsByTable(): array
     $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/modules'));
 
     foreach ($iterator as $file) {
-        if ($file->getExtension() !== 'php' || ! str_contains($file->getPathname(), '/Models/')) {
+        if ($file->getExtension() !== 'php' || ! str_contains(Paths::normalise($file->getPathname()), '/Models/')) {
             continue;
         }
 
@@ -92,7 +93,7 @@ function mccModelsByTable(): array
 
         preg_match('/protected\s+\$casts\s*=\s*\[(.*?)\];/s', $source, $casts);
 
-        $relative = str_replace($root.'/', '', $file->getPathname());
+        $relative = Paths::relativePath($file->getPathname());
 
         // More than one class can map to the same table: HRM keeps five one-line aliases
         // (Modules\HRM\Models\RosterOvertime extends Models\Roster\RosterOvertime, and so on)
@@ -215,7 +216,25 @@ test('the model scan recurses into subdirectories and finds the models it should
     // 157 since item 42: `CoreSetting` (the company colour scheme) joins the scan. It holds no
     // decimal columns, so it moves the census and nothing else — which is why the census and the
     // money-column count below are separate assertions.
-    expect($models)->toHaveCount(157)
+    // 160 since Phase 1: `ApprovalPolicy`, `ApprovalRequest` and `OpeningBalanceBatch` join the
+    // scan, each carrying one `decimal(15,2)` column (min_amount / amount / total_amount).
+    // 162 since Phase 2: `SavedView` and `Attachment` join the scan. Neither holds a decimal
+    // column, so they move the census and not the money-column count below.
+    // 165 since Phase 3: the three tax-withholding models (`WithholdingRule`, `TaxDeposit`,
+    // `Withholding`) join the scan for the Bangladesh TDS/VDS + Mushak 9.1 pack.
+    // 169 since F15: the fixed-asset models (`AssetCategory`, `FixedAsset`, `DepreciationRun`,
+    // `AssetDepreciation`) join the scan.
+    // 171 since F14: `Budget` and `BudgetLine` join the scan. `Budget` holds only a currency string
+    // and status, `BudgetLine` holds the planned amount — which is why the money census moves by one.
+    // 178 since F18: the seven requisition/RFQ models join it. Five of them own one of the six new money
+    // columns below; the two that do not (`PurchaseRfq`, `PurchaseRfqLine`) store no money at all — a
+    // round has one total per vendor, not one total, and its lines only ask for a quantity. Every decimal
+    // on those seven tables is `decimal:2` cast regardless, quantities included.
+    // 179 since SSO: `SsoIdentity` joins it. It owns no money column and must not acquire one — the table
+    // records which external subject may sign in as whom, and a "quota" or "credit limit" column added to
+    // it later would be the kind of thing that silently stops being poisha-canonical because nobody wrote a
+    // cast for a model nobody thought about.
+    expect($models)->toHaveCount(179)
         ->and($models)->toHaveKey('sales_invoices')
         ->and($models)->toHaveKey('acc_journals')
         ->and($models['sales_invoices']['class'])->toBe('Invoice');
@@ -227,7 +246,25 @@ test('the classifier actually finds money columns to judge', function () {
     // Pinned exactly, like the model count above. If this moves, either a migration added a money
     // column — in which case the next test judges it — or the classifier's pattern drifted, in which
     // case it may have stopped matching anything at all. Both are worth noticing out loud.
-    expect($columns)->toHaveCount(242, 'the classifier found a different number of money columns than the last audit pass');
+    // 245 since Phase 1: approval_policies.min_amount, approval_requests.amount and
+    // opening_balance_batches.total_amount add three money columns to the census.
+    // 250 since Phase 3: the withholding pack adds five — rules.rate, deposits.amount, and
+    // withholdings' base_amount / rate / amount. (The rules' `threshold` is a decimal too, but
+    // its name is outside MCC_MONEY_PATTERN, so it stays out of the money census by design.)
+    // 255 since F15: the fixed-asset pack adds five more — assets' cost / salvage_value /
+    // net_book_value, runs.total_amount, and the line's opening_nbv. (accumulated_dep, closing_nbv,
+    // charge, disposal_proceeds and the category defaults are decimals too but sit outside the name
+    // pattern — and every one is still `decimal:2` cast regardless, so the next test passes on them.)
+    // 256 since F14: `acc_budget_lines.amount` — one, because `acc_budgets` deliberately stores no money:
+    // actuals are never persisted, they are read live from the posted ledger, so there is nothing to drift.
+    // 262 since F18: six on the requisition/quote tables — `purchase_requisitions.estimated_amount`,
+    // `purchase_requisition_items.expected_unit_price`, `purchase_rfq_quotes.total_amount`,
+    // `purchase_rfq_quote_items.unit_price` + `.line_total`, `purchase_rfq_awards.unit_price`. The other
+    // decimals those tables add (`line_estimate`, `qty`, `qty_ordered`, `awarded_qty`) are measures or
+    // fall outside MCC_MONEY_PATTERN, and are cast all the same. `purchase_rfqs` gains no money column on
+    // purpose: a round has one total per vendor, and a stored "round total" is how a header ends up
+    // disagreeing with the lines under it.
+    expect($columns)->toHaveCount(262, 'the classifier found a different number of money columns than the last audit pass');
 
     // And it is looking at numeric columns, not at varchar columns that happen to be named "rate".
     foreach ($columns as $c) {
@@ -301,7 +338,7 @@ test('no repository concatenates a float into raw SQL', function () {
     $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/modules'));
 
     foreach ($iterator as $file) {
-        if ($file->getExtension() === 'php' && str_contains($file->getPathname(), '/Repositories/')) {
+        if ($file->getExtension() === 'php' && str_contains(Paths::normalise($file->getPathname()), '/Repositories/')) {
             $files[] = $file->getPathname();
         }
     }
@@ -321,7 +358,7 @@ test('no repository concatenates a float into raw SQL', function () {
         // cents, and at the extremes PHP switches to scientific notation. A bound parameter has
         // neither problem.
         if (preg_match('/DB::raw\(\s*[\'"][^\'"]*[\'"]\s*\.\s*\(float\)/', $source)) {
-            $offenders[] = str_replace($root.'/', '', $file);
+            $offenders[] = Paths::relativePath($file);
         }
     }
 

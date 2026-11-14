@@ -1,5 +1,7 @@
 <?php
 
+use Tests\Paths;
+
 /**
  * Native browser dialogs — report P2.1 / §7 item 6, recorded as item 29.
  *
@@ -39,11 +41,13 @@ const ND_ROOTS = ['modules', 'resources/js'];
  *
  * This number may only fall: migrate the page and lower it in the same edit.
  */
-// 46 since item 39, which rewrote `Pos/Show.vue` onto confirmDialog() — the ratchet only falls.
-const ND_BASELINE_CALLS = 46;
+// 45 since the attendance-regularization page, whose reviewer remarks were collected with a native
+// `prompt()` — the ratchet only falls.
+const ND_BASELINE_CALLS = 45;
 
 /** Files that have been migrated and must never grow a native dialog again. */
 const ND_MIGRATED = [
+    'modules/HRM/Resources/js/Pages/Regularizations/Index.vue',
     'modules/HRM/Resources/js/Pages/Overtimes/Index.vue',
     'modules/HRM/Resources/js/Pages/Probations/Index.vue',
     'modules/HRM/Resources/js/Pages/ExtraDuty/Index.vue',
@@ -109,7 +113,7 @@ function ndFiles(): array
                 continue;
             }
 
-            $path = str_replace($root.'/', '', $file->getPathname());
+            $path = Paths::relativePath($file->getPathname());
 
             if (str_contains($path, '/components/ui/') || str_contains($path, '/node_modules/')) {
                 continue;

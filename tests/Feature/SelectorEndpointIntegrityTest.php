@@ -21,6 +21,7 @@
  * walks the seam — it reads the URLs out of the templates and requests them.
  */
 
+use Tests\Paths;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Exceptions\UrlGenerationException;
 use Illuminate\Support\Facades\Route;
@@ -49,7 +50,7 @@ function selectorEndpoints(): array
 
         foreach ($files as $file) {
             /** @var SplFileInfo $file */
-            if ($file->getExtension() !== 'vue' || str_contains($file->getPathname(), 'node_modules')) {
+            if ($file->getExtension() !== 'vue' || str_contains(Paths::normalise($file->getPathname()), 'node_modules')) {
                 continue;
             }
 
@@ -60,7 +61,7 @@ function selectorEndpoints(): array
             }
 
             foreach ($matches[1] as $url) {
-                $found[$url][] = str_replace(base_path().'/', '', $file->getPathname());
+                $found[$url][] = Paths::relativePath($file->getPathname());
             }
         }
     }
