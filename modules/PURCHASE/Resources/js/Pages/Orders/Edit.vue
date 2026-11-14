@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { PurchaseOrder } from '@purchase/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, ReceiptText, Percent, Coins } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { computed } from 'vue';
 
-const props = defineProps<{ order: any }>();
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props = defineProps<{ order: PurchaseOrder }>();
 const form = useForm({
   vendor_id: props.order.vendor_id ?? null as number | null,
   warehouse_id: props.order.warehouse_id ?? null as number | null,
@@ -18,6 +20,7 @@ const form = useForm({
   notes: props.order.notes ?? '',
   items: (props.order.items?.length ? props.order.items : [{ product_id: null, qty: 1, unit_price: null, discount_pct: 0, vat_rate: 0 }]).map((it:any)=>({ product_id: it.product_id, qty: Number(it.qty), unit_price: Number(it.unit_price), discount_pct: Number(it.discount_pct||0), vat_rate: Number(it.vat_rate||0) })),
 });
+useUnsavedGuard(() => form.isDirty);
 
 // Same arithmetic as the create page, and the same reason for spelling it out per line: gross,
 // discount off the gross, VAT on what is left. An edit is where a total is most likely to be

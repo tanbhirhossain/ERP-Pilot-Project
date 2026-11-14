@@ -23,11 +23,15 @@ use Illuminate\Support\Facades\Schema;
  * it held before: one fallback shift, 00:00:00–23:59:00, no buffers.
  *
  * Note for whoever owns demo content: `RosterShiftSeeder` in this same directory contains an
- * identical fallback block, and is one of 22 seeder classes that `DatabaseSeeder` never calls
- * (item 38, finding 39). Both are idempotent on `is_fallback`, so they cannot conflict. That
- * seeder was deliberately *not* wired up here: it also creates six real shifts, and real shifts
- * change how every punch in every install is classified. That is a content decision deserving
- * its own measurement, not a side effect of moving one row out of a migration.
+ * identical fallback block. Both are idempotent on `is_fallback`, so they cannot conflict.
+ *
+ * History: `RosterShiftSeeder` (six real shifts) and `LeaveTypeSeeder` stayed unwired when this
+ * row was moved out of a migration (item 38, finding 39) — real shifts change how every punch is
+ * classified, which deserved its own decision. On 2026-11-10 the shift + leave-type catalogues were
+ * registered in `DatabaseSeeder` on purpose, so a plain `php artisan db:seed` now produces the
+ * standard shift list and the statutory leave types everywhere. Consequence to remember: anything
+ * that used to rely on "no real shifts exist yet" must look up its own rows by name — `DemoDataSeeder
+ * ::roster()` now checks for its 'General Day' shift explicitly for exactly that reason.
  */
 class RosterFallbackShiftSeeder extends Seeder
 {

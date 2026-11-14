@@ -3,13 +3,13 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Undo2, Plus, Eye, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 interface Row { id:number; return_no:string; customer?:{name:string}; invoice?:{invoice_no:string}; return_date:string; total_amount:string; status:string; items_count:number }
 defineProps<{ returns: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -29,7 +29,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Returns' }]">
     <Head title="Sales Returns" />
     <PageHeader title="Sales Returns (Credit Notes)" description="Invoice → Return (resalable → restock, damaged → scrap) → Credit journal." :icon="Undo2" :actions="[{ label:'New Return', route:'sales.returns.create', icon: Plus }]">
-    <DataTable route-name="sales.returns.index" title="Returns" :columns="columns" :rows="(returns.data as unknown as Record<string,unknown>[])" :meta="returns.meta" search-placeholder="Search return no…">
+    <DataTable route-name="sales.returns.index" title="Returns" :columns="columns" :rows="returns.data" :meta="returns.meta" search-placeholder="Search return no…">
       <template #cell-return_no="{row}"><span class="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-600">{{ row.return_no }}</span></template>
       <template #cell-customer="{row}"><span class="text-sm">{{ row.customer?.name || '—' }}</span></template>
       <template #cell-invoice="{row}"><span class="font-mono text-xs">{{ row.invoice?.invoice_no || '—' }}</span></template>

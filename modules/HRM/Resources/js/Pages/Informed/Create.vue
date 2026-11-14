@@ -6,12 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props=defineProps<{ employeeOptions:{value:string,label:string}[]; informed?: any }>();
 const isEdit=computed(()=> !!props.informed);
 const form=useForm({ employee_id: props.informed?.employee_id ?? '', informed_date: props.informed?.informed_date ?? new Date().toISOString().slice(0,10), informed_type: props.informed?.informed_type ?? 'Late Coming', expected_time: props.informed?.expected_time ?? '', reason: props.informed?.reason ?? '' });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ if(isEdit.value) form.put(route('hrm.informed.update', props.informed.id)); else form.post(route('hrm.informed.store')); }
 </script>
 <template>

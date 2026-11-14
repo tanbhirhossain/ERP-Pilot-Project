@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { LeaveRequest } from '@hrm/types';
 import {ArrowLeft, CalendarDays, Check, X, Clock, User, Printer, FileText} from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { printDocument } from '../../../../../CORE/Resources/js/Composables/usePrint';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-const props=defineProps<{ leave:any; canApprove:boolean }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import { printDocument } from '@core/Composables/usePrint';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
+const props=defineProps<{ leave:LeaveRequest; canApprove:boolean }>();
 const processing=ref(false);
-function approve(){ processing.value=true; router.post(route('hrm.leaves.approve', props.leave.id),{},{onFinish(){processing.value=false;}}); }
-function reject(){ if(!confirm('Reject?')) return; processing.value=true; router.post(route('hrm.leaves.reject', props.leave.id),{},{onFinish(){processing.value=false;}}); }
-function printSlip(){ printDocument({ portrait: true }); }
+async function approve(){ processing.value=true; router.post(route('hrm.leaves.approve', props.leave.id),{},{onFinish(){processing.value=false;}}); }
+async function reject(){ if(!await confirm({ description: 'Reject?', danger: true })) return; processing.value=true; router.post(route('hrm.leaves.reject', props.leave.id),{},{onFinish(){processing.value=false;}}); }
+async function printSlip(){ printDocument({ portrait: true }); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Leave' }, { title: 'Leaves', href: route('hrm.leaves.index') }, { title: `#${leave.id}` }]">

@@ -34,6 +34,7 @@ use Modules\ACCOUNTS\Database\Seeders\AccountsPermissionSeeder;
 use Modules\ACCOUNTS\Models\Account;
 use Modules\ACCOUNTS\Models\Bank;
 use Modules\CORE\Database\Seeders\CoreSeeder;
+use Modules\CORE\Database\Seeders\Phase1Seeder;
 use Modules\CORE\Database\Seeders\SuperAdminSeeder;
 use Modules\CORE\Http\Controllers\OptionsController;
 use Modules\CORE\Models\Permission;
@@ -42,6 +43,7 @@ use Modules\CORE\Models\User;
 use Modules\CORE\Support\OptionAccess;
 use Modules\HRM\Database\Seeders\HRMPermissionSeeder;
 use Modules\INVENTORY\Database\Seeders\InventoryPermissionSeeder;
+use Modules\INVENTORY\Http\Controllers\PosCatalogController;
 use Modules\INVENTORY\Http\Controllers\PosLookupController;
 use Modules\INVENTORY\Models\Product;
 use Modules\PARTNER\Database\Seeders\PartnerPermissionSeeder;
@@ -64,6 +66,9 @@ function optAuthEndpoints(): array
         Modules\PURCHASE\Http\Controllers\OptionsController::class => 'purchase.api.options',
         Modules\HRM\Http\Controllers\OptionsController::class => 'hrm.api.options',
         PosLookupController::class => 'inventory.api.pos-product',
+        // F22: the offline till's bulk catalogue read. Same payload class of sensitivity — every
+        // product with its price and stock — so it belongs in this matrix rather than beside it.
+        PosCatalogController::class => 'inventory.api.pos-catalog',
     ];
 }
 
@@ -83,7 +88,11 @@ function optAuthMatrix(): array
     }
 
     // A scan that finds nothing passes vacuously.
-    expect($rows)->toHaveCount(38, 'the option-type matrix drifted; update this test deliberately');
+    // 39 since F22: `pos-catalog` (the offline till's bulk catalogue read) joins the matrix.
+    // 40 since F18: `purchase/requisitions`, the picker that lets a quote round be attached to the demand
+    // behind it. It is in the matrix rather than skipped because it filters — only approved requisitions
+    // with quantity still outstanding are offered — and a filter is where a leak would happen.
+    expect($rows)->toHaveCount(40, 'the option-type matrix drifted; update this test deliberately');
 
     return $rows;
 }
@@ -99,6 +108,9 @@ function optAuthSeedPermissions(): void
         AccountsPermissionSeeder::class,
         SalesPermissionSeeder::class,
         PurchasePermissionSeeder::class,
+        // Phase 1 joins the production vocabulary (DatabaseSeeder), so the test's
+        // reconstruction of it must seed the same permissions.
+        Phase1Seeder::class,
     ]);
 }
 
@@ -233,14 +245,34 @@ test('no permission named by an option controller is a phantom', function () {
 
     $declared = OptionAccess::declaredPermissions(array_keys(optAuthEndpoints()));
 
-    expect($declared)->toHaveCount(8, 'a controller stopped declaring a PERMISSIONS map');
+    // 9 since F22: `PosCatalogController` declares its own map, so it counts here and in the matrix.
+    expect($declared)->toHaveCount(9, 'a controller stopped declaring a PERMISSIONS map');
 
     $known = Permission::query()->pluck('name')->all();
     // 179 since item 42, which added `settings.appearance.manage` — the gate on the company-wide
     // colour scheme. Choosing your own needs no permission, so it has no `.view` sibling and no
     // option endpoint is gated on it: the maps below are unchanged, which is what this test is
     // really asking when the vocabulary moves.
-    expect($known)->toHaveCount(179, 'the seeded permission vocabulary changed; re-check the option maps against it');
+    // 183 since Phase 1: approvals.view, approvals.manage, imports.manage and
+    // accounts.opening.manage join the vocabulary. None gates an option endpoint, so the maps
+    // below are unchanged.
+    // 185 since Phase 3: accounts.withholding.view and accounts.withholding.manage join the
+    // vocabulary (TDS/VDS). They gate a page and its mutating actions, not an option endpoint, so
+    // the option maps stay untouched.
+    // 187 since F15: accounts.assets.view and accounts.assets.manage join it (fixed assets). Same
+    // situation — a register and its actions, no option endpoint — so the maps are still untouched.
+    // 195 since F18: six on the purchase side — requisitions split view/manage/approve and RFQs split
+    // view/manage/award, because "asking for it" and "agreeing to it" are different people. Five of the
+    // six gate a picker (products, warehouses, uoms, vendors, accounts) and one — `purchase.rfq.view` —
+    // joins the requisition picker's any-of list, so a buyer running a round can read the demand behind
+    // it without being handed the requisition register.
+    // 189 since F14: accounts.budgets.view and accounts.budgets.manage join it, gating the budget desk,
+    // its lines and the approve/lock actions. The variance report reads accounts, not a picker source,
+    // so it borrows the accounts option endpoint the asset pages already use — no new map entry.
+    // 196 since the cutlist review stage: payroll.cutlists.review joins the vocabulary, gating the
+    // review desk (index/show/approve/reopen/adjust). It is deliberately NOT in any option map — the
+    // cutlist pages take no pickers — the pin exists so the map audit stays exhaustive.
+    expect($known)->toHaveCount(196, 'the seeded permission vocabulary changed; re-check the option maps against it');
 
     $phantoms = [];
 
@@ -289,7 +321,7 @@ test('every route that serves options points at a controller with a permission m
     foreach (Route::getRoutes() as $route) {
         $uri = $route->uri();
 
-        if (! str_contains($uri, 'api/options/') && ! str_contains($uri, 'api/pos-product')) {
+        if (! str_contains($uri, 'api/options/') && ! str_contains($uri, 'api/pos-product') && ! str_contains($uri, 'api/pos-catalog')) {
             continue;
         }
 

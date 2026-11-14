@@ -3,10 +3,12 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props=defineProps<{ device:{id:number;name:string;device_name?:string;ip_address:string;port:number;serial_number?:string;device_model?:string;location?:string;status:string;is_enabled:boolean;auto_sync_enabled:boolean;sync_interval_minutes:number} }>();
 const form=useForm({name:props.device.name,device_name:props.device.device_name||'',ip_address:props.device.ip_address,port:props.device.port,serial_number:props.device.serial_number||'',device_model:props.device.device_model||'',location:props.device.location||'',status:props.device.status,is_enabled:props.device.is_enabled,auto_sync_enabled:props.device.auto_sync_enabled,sync_interval_minutes:props.device.sync_interval_minutes});
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('hrm.devices.update',props.device.id)); }
 </script>
 <template>

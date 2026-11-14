@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { SalarySheet } from '../../types';
 import { Landmark, CreditCard, FileBarChart, CheckCircle2, Clock3, AlertTriangle, Building2, ArrowRight, Download, ShieldCheck, Wallet } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { confirmDialog, promptDialog } from '../../../../../CORE/Resources/js/Composables/useConfirm';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import { confirmDialog, promptDialog } from '@core/Composables/useConfirm';
 import { Button } from '@/components/ui/button';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-const p = defineProps<{ sheet:any; posts:any[]; accrualPost:any; bankAdvices:any[]; banks:any[]; accountsReady:Record<string,boolean> }>();
+import StaticTable from '@core/Components/StaticTable.vue';
+const p = defineProps<{ sheet:SalarySheet; posts:any[]; accrualPost:any; bankAdvices:any[]; banks:any[]; accountsReady:Record<string,boolean> }>();
 function money(v:any){ return Number(v||0).toLocaleString('en-BD',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 async function postAccrual(){
   const proceed = await confirmDialog({ title: 'Post accrual journal', description: `Post accrual JV for ${p.sheet.pay_year}-${String(p.sheet.pay_month).padStart(2,'0')}? Dr Expense by dept → Cr Payables. This creates the official accounting entry.`, confirmLabel: 'Post accrual', danger: false });

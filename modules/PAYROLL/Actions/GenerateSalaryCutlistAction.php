@@ -82,7 +82,9 @@ final class GenerateSalaryCutlistAction
                             'missing_punch_count' => $summary->missingPunchCount,
                             'unpaid_leave_deduction' => round($dailyRate * $summary->unpaidLeaveDays, 2),
                             'late_penalty_deduction' => round($punishmentDeduction, 2),
-                            'missing_punch_deduction' => round($summary->missingPunchCount * (float) ($settings?->missing_punch_penalty_amount ?? 0), 2),
+                            // A missing punch is attendance discipline, so a non-punishable HRM policy zeroes it
+                            // like the punishment above. Unpaid leave stays: it is a factual absence, not a penalty.
+                            'missing_punch_deduction' => $summary->punishable ? round($summary->missingPunchCount * (float) ($settings?->missing_punch_penalty_amount ?? 0), 2) : 0.0,
                             'overtime_pay' => round($overtimePay, 2),
                             'extra_duty_pay' => round($extraDutyPay, 2),
                             'source_breakdown' => array_merge($summary->sourceBreakdown, [

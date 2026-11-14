@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Head, router, Link } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import type { EmployeeMovement } from '@hrm/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { Button } from '@/components/ui/button';
-defineProps<{ movement:any }>();
-function submit(id:number){ router.post(route('hrm.movements.submit', id)); }
-function approve(id:number){ if(confirm('Approve? Employee master + salary history will be updated.')) router.post(route('hrm.movements.approve', id)); }
-function reject(id:number){ const r=prompt('Reject reason:'); if(r) router.post(route('hrm.movements.reject', id), {reason:r}); }
-function cancel(id:number){ if(confirm('Cancel this movement?')) router.post(route('hrm.movements.cancel', id)); }
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
+defineProps<{ movement:EmployeeMovement }>();
+async function submit(id:number){ router.post(route('hrm.movements.submit', id)); }
+async function approve(id:number){ if(await confirm({ description: 'Approve? Employee master + salary history will be updated.', danger: false })) router.post(route('hrm.movements.approve', id)); }
+async function reject(id:number){ const r=prompt('Reject reason:'); if(r) router.post(route('hrm.movements.reject', id), {reason:r}); }
+async function cancel(id:number){ if(await confirm({ description: 'Cancel this movement?', danger: true })) router.post(route('hrm.movements.cancel', id)); }
 const tone=(s:string)=>({Draft:'bg-slate-400 text-white',Pending:'bg-amber-500 text-white',Approved:'bg-emerald-500 text-white',Rejected:'bg-red-500 text-white',Cancelled:'bg-zinc-500 text-white'}[s]||'bg-muted');
 </script>
 <template>

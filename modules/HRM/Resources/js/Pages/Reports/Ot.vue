@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { Timer, Download } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 
 const props = defineProps<{ data: any }>();
 const d = props.data;

@@ -11,11 +11,11 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { ArrowLeft, Banknote, CalendarClock, FileText, HandCoins, Landmark, Printer, ReceiptText, TriangleAlert } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { printDocument } from '../../../../../CORE/Resources/js/Composables/usePrint';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import { printDocument } from '@core/Composables/usePrint';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
 
 interface JournalLine { code: string | null; account: string | null; debit: string; credit: string; description: string | null }
 

@@ -3,12 +3,12 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, Eye, Shield } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import type { Paginator } from '@core/types';
+import { formatDate } from '@core/Utils/format';
 interface Row {
   id:number; employee_id:string; employee:string; supervisor_kind:string;
   supervisor:{kind:string;id:string;name:string;email?:string}; supervisor_type:string;
@@ -44,7 +44,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
     </div>
 
     <PageHeader title="Employee Supervisors" description="Map employees to their supervisors — supports User and Employee supervisors." :icon="Shield" :actions="[{ label:'Assign Supervisor', route:'hrm.supervisors.create', icon: Plus }]">
-    <DataTable route-name="hrm.supervisors.index" title="Supervisors" :columns="columns" :rows="(supervisors.data as unknown as Record<string,unknown>[])" :meta="supervisors.meta" search-placeholder="Search employee or type...">
+    <DataTable route-name="hrm.supervisors.index" title="Supervisors" :columns="columns" :rows="supervisors.data" :meta="supervisors.meta" search-placeholder="Search employee or type...">
       <template #cell-employee="{row}"><span class="font-semibold">{{ row.employee }}</span><span class="text-xs text-muted-foreground ml-1">({{ row.employee_id }})</span></template>
       <template #cell-supervisor="{row}">
         <div class="flex items-center gap-2">

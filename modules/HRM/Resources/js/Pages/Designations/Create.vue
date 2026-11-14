@@ -3,11 +3,13 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 defineProps<{ departmentOptions:{value:number;label:string}[] }>();
 const form=useForm({name:'',code:'',description:'',department_id:null as number|null,grade:'',level:0,is_active:true});
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.post(route('hrm.designations.store')); }
 </script>
 <template>

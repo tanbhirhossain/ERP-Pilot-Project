@@ -6,12 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props=defineProps<{ employeeOptions:{value:string,label:string}[]; leaveTypeOptions:{value:number,label:string,color?:string}[]; leave?: any }>();
 const isEdit=computed(()=> !!props.leave);
 const form=useForm({ employee_id: props.leave?.employee_id ?? '', leave_type_id: props.leave?.leave_type_id ?? null as number|null, from_date: props.leave?.from_date ?? new Date().toISOString().slice(0,10), to_date: props.leave?.to_date ?? new Date().toISOString().slice(0,10), is_half_day: props.leave?.is_half_day ?? false, reason: props.leave?.reason ?? '' });
+useUnsavedGuard(() => form.isDirty);
 const liveBalance=ref<any>(null), balanceLoading=ref(false), balanceError=ref('');
 let balanceController:AbortController|null=null;
 watch(()=>[form.employee_id,form.leave_type_id,form.from_date,form.to_date,form.is_half_day],async()=>{

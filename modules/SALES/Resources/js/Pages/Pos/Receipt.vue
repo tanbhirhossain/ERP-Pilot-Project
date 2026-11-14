@@ -2,10 +2,10 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { Printer, ArrowLeft, Ban } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { printDocument } from '../../../../../CORE/Resources/js/Composables/usePrint';
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import { printDocument } from '@core/Composables/usePrint';
+import { formatCurrency } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ sale: any }>();
 // `window` is not in a template's scope: the button used to call
 // `window.print()` inline, which compiled to `_ctx.window.print()` and threw

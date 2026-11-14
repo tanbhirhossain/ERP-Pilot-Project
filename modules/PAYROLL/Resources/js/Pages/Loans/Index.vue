@@ -2,17 +2,17 @@
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import {LayoutDashboard, Plus} from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
 import EmployeeMultiSearchSelect from '../../Components/EmployeeMultiSearchSelect.vue';
 import EmployeeSearchSelect from '../../Components/EmployeeSearchSelect.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { confirmDialog, promptDialog } from '../../../../../CORE/Resources/js/Composables/useConfirm';
-import { useToast } from '../../../../../CORE/Resources/js/Composables/useToast';
+import type { Paginator } from '@core/types';
+import { confirmDialog, promptDialog } from '@core/Composables/useConfirm';
+import { useToast } from '@core/Composables/useToast';
 
 interface Row {
   id: number;
@@ -161,7 +161,7 @@ const columns: DataTableColumn[] = [
       route-name="payroll.loans.index"
       title="Employee loans"
       :columns="columns"
-      :rows="loans.data as unknown as Record<string, unknown>[]"
+      :rows="loans.data"
       :meta="loans.meta"
       :filter-defs="[{ key: 'status', label: 'Status', kind: 'select', options: [{ value: 'pending', label: 'Pending' }, { value: 'active', label: 'Active' }, { value: 'completed', label: 'Completed' }, { value: 'rejected', label: 'Rejected' }, { value: 'cancelled', label: 'Cancelled' }] }]"
     >

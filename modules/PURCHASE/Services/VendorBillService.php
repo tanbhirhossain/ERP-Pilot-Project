@@ -10,6 +10,7 @@ use Modules\ACCOUNTS\DTO\JournalLineData;
 use Modules\ACCOUNTS\Interfaces\AccountsPostingProviderInterface;
 use Modules\ACCOUNTS\Models\Bank;
 use Modules\ACCOUNTS\Support\ChartOfAccounts;
+use Modules\CORE\Services\ApprovalService;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\INVENTORY\Models\Product;
 use Modules\PURCHASE\Interfaces\VendorBillRepositoryInterface;
@@ -55,6 +56,11 @@ class VendorBillService
         if (! $bill->isDraft()) {
             throw new \DomainException('Only draft can be posted.');
         }
+
+        // Generic approval matrix (Phase 1) — before the transaction so the
+        // pending request survives a refusal. No-op without an active policy.
+        app(ApprovalService::class)
+            ->assertAllowed('vendor_bill', $bill->id, (float) $bill->total_amount, $bill->bill_no);
 
         return DB::transaction(function () use ($bill): VendorBill {
             $bill->load(['items.product', 'vendor']);

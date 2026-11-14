@@ -3,20 +3,22 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {ArrowLeft, Timer, Check, X, Clock3, User, CalendarDays, FileText} from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useToast } from '@core/Composables/useToast';
+const toast = useToast();
 const props=defineProps<{ overtime: { id: number; hours: number; source_attendance_hours: number; [key: string]: any }; canApprove: boolean }>();
 const processing=ref(false);
 const hours=ref(Number(props.overtime.hours));
-function approve(){
+async function approve(){
   if (!Number.isFinite(hours.value) || hours.value <= 0 || hours.value > Number(props.overtime.source_attendance_hours) || hours.value > 24) {
-    window.alert(`Approved hours must be positive and no more than the source attendance amount (${Number(props.overtime.source_attendance_hours).toFixed(2)} h).`);
+    toast.warning(`Approved hours must be positive and no more than the source attendance amount (${Number(props.overtime.source_attendance_hours).toFixed(2)} h).`);
     return;
   }
   processing.value=true;
   router.post(route('hrm.overtimes.approve', props.overtime.id),{hours:hours.value},{onFinish(){processing.value=false;}});
 }
-function reject(){
+async function reject(){
   const reason=window.prompt('Enter a rejection reason (required for the audit trail):');
   if(reason===null || reason.trim().length<3) return;
   processing.value=true;

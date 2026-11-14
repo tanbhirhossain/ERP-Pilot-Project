@@ -1,6 +1,6 @@
 import { onMounted, ref } from 'vue';
 
-import { DEFAULT_MODE, initializeUiTheme, setUiLocally, type UiMode } from '../../../modules/CORE/Resources/js/Composables/useUiTheme';
+import { DEFAULT_MODE, initializeUiTheme, setUiLocally, type UiMode } from '@core/Composables/useUiTheme';
 
 /**
  * Light/dark/system, kept as the API the shell header toggle already calls. The starter kit's

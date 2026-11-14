@@ -31,11 +31,16 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    title: 'Are you absolutely sure?',
-    description: 'This action cannot be undone.',
-    confirmLabel: 'Delete',
+    // The defaults have to be honest on their own, because most call sites do not override them. They used
+    // to read `Are you absolutely sure? / This action cannot be undone. / [Delete]`, so every page that
+    // asked anything — "Award this round?", "Approve anyway?", "Backfill approval requests?" — got a red
+    // Delete button and a promise that the action is irreversible. `useConfirm` now derives the verb from
+    // the wording; these are the floor for anyone who renders this component directly.
+    title: 'Please confirm',
+    description: undefined,
+    confirmLabel: 'Confirm',
     cancelLabel: 'Cancel',
-    danger: true,
+    danger: false,
     processing: false,
     input: false,
     inputLabel: undefined,
@@ -100,7 +105,7 @@ watch(
                 <div class="min-w-0 flex-1">
                     <DialogHeader class="text-left">
                         <DialogTitle class="text-base">{{ title }}</DialogTitle>
-                        <DialogDescription class="text-sm leading-relaxed">
+                        <DialogDescription v-if="description" class="text-sm leading-relaxed">
                             {{ description }}
                         </DialogDescription>
                     </DialogHeader>

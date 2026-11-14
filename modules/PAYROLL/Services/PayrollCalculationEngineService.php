@@ -44,7 +44,7 @@ final class PayrollCalculationEngineService
             'punishable' => (bool) ($cutlistItem?->punishable ?? false),
             'punishment' => $includePunishments ? (float) ($cutlistItem?->late_penalty_deduction ?? 0) : 0.0,
             'missing_punch_count' => (int) ($cutlistItem?->missing_punch_count ?? 0),
-            'missing_punch' => (float) ($cutlistItem?->missing_punch_deduction ?? 0),
+            'missing_punch' => (bool) ($cutlistItem?->punishable ?? false) ? (float) ($cutlistItem?->missing_punch_deduction ?? 0) : 0.0,
             'overtime_hours' => (float) ($cutlistItem?->approved_overtime_minutes ?? 0) / 60,
             'overtime_pay' => (float) ($cutlistItem?->overtime_pay ?? 0),
             'extra_duty_hours' => (float) ($cutlistItem?->approved_extra_duty_minutes ?? 0) / 60,
@@ -112,6 +112,9 @@ final class PayrollCalculationEngineService
                 'loan_installments' => $loans['installments'],
                 'cutlist' => $cutlist,
                 'salary_sheet_mode' => ['with_punishment' => $includePunishments],
+                'payroll_notes' => ($employee->notes['salary_rate_fallback_days'] ?? 0) > 0
+                    ? [(int) $employee->notes['salary_rate_fallback_days'].' day(s) of this month had no HRM salary record; paid at the nearest known rate because this employee\'s attendance policy is not punishable. Backfill the salary history in HRM.']
+                    : [],
                 'totals' => [
                     'gross' => $gross,
                     'deductions' => $deductionTotal,

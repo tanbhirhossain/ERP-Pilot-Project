@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import type { Partner } from '@partner/types';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Building2, Phone, MapPin, Landmark, FileText, Clock, ShieldCheck, Ban, CheckCircle, AlertTriangle, CreditCard, Send } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 
-const props = defineProps<{ partner:any; creditCheck?:any }>();
+const props = defineProps<{ partner:Partner; creditCheck?:any }>();
 
 const noteForm = useForm({ title:'', content:'', is_private:false, is_pinned:false });
 function submitNote(){ noteForm.post(route('partner.partners.notes.store', props.partner.id), { preserveScroll:true, onSuccess:()=>noteForm.reset() }); }

@@ -5,13 +5,14 @@ import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import type { Paginator, SelectOption } from '@core/types';
 interface Row { id:number; employee_id:string; employee:string; shift?:{shift_name:string;start_time:string;end_time:string}; roster_date:string; status:string; scheduled_start_time?:string; scheduled_end_time?:string }
-defineProps<{ duties: Paginator<Row>; shiftOptions:any[]; employeeOptions:any[] }>();
+defineProps<{ duties: Paginator<Row>; shiftOptions:SelectOption[]; employeeOptions:SelectOption[] }>();
 const columns: DataTableColumn[] = [
   {key:'employee_id',label:'Employee',sortable:true},{key:'roster_date',label:'Date',sortable:true},{key:'shift',label:'Shift'},{key:'status',label:'Status',align:'center'},{key:'actions',label:'',align:'right',exportable:false,width:'1rem'}
 ];
@@ -27,7 +28,7 @@ function submitBulk(){ router.post(route('hrm.duties.bulk'),{employee_ids:bulk.v
   <AdminLayout :breadcrumbs="[{ title: 'Roster' }, { title: 'Roster Duties' }]">
     <Head title="Roster Duties"/>
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div><h1 class="text-xl font-bold">Roster Duties</h1><p class="text-sm text-muted-foreground">Assign shifts per employee per date — bulk assign supported.</p></div>
+      <div><PageHeader title="Roster Duties" /><p class="text-sm text-muted-foreground">Assign shifts per employee per date — bulk assign supported.</p></div>
       <div class="flex gap-2">
         <Link :href="route('hrm.duties.bulk-week')"><Button size="sm" class="bg-violet-600 text-white hover:bg-violet-700"><CalendarDays class="size-4"/> Week Bulk</Button></Link>
         <Link :href="route('hrm.swaps.index')"><Button size="sm" variant="outline" class="bg-indigo-600 text-white hover:bg-indigo-700"><ArrowLeftRight class="size-4"/> Roster Swaps</Button></Link>
@@ -46,7 +47,7 @@ function submitBulk(){ router.post(route('hrm.duties.bulk'),{employee_ids:bulk.v
       <div class="space-y-1"><Label>Employees * (select multiple via type)</Label><SearchableSelect v-model="bulk.employee_ids" :options="employeeOptions" endpoint="/hrm/api/options/employees" placeholder="Select employees" multiple/></div>
       <Button size="sm" @click="submitBulk" :disabled="!bulk.shift_id||!bulk.from_date||!bulk.to_date||!bulk.employee_ids.length">Assign Bulk</Button>
     </div>
-    <DataTable route-name="hrm.duties.index" title="Roster Duties" :columns="columns" :rows="(duties.data as unknown as Record<string,unknown>[])" :meta="duties.meta">
+    <DataTable route-name="hrm.duties.index" title="Roster Duties" :columns="columns" :rows="duties.data" :meta="duties.meta">
       <template #cell-employee_id="{row}"><div><p class="font-mono font-semibold text-sm">{{ row.employee_id }}</p><p class="text-xs text-muted-foreground">{{ row.employee }}</p></div></template>
       <template #cell-roster_date="{row}"><span class="text-sm">{{ row.roster_date }}</span></template>
       <template #cell-shift="{row}"><span class="text-sm">{{ row.shift?.shift_name || '—' }} <span v-if="row.shift" class="text-muted-foreground text-xs">({{ row.shift.start_time }}-{{ row.shift.end_time }})</span></span></template>

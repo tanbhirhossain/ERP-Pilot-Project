@@ -3,12 +3,12 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, Network, Users } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
 
 interface Row { id:number; name:string; code?:string; type:string; parent?:{name:string}; description?:string; sort_order:number; is_active:boolean; partners_count:number; created_at:string }
 defineProps<{ groups: Paginator<Row>; tree:any[]; parentOptions:any[] }>();
@@ -29,7 +29,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
   <AdminLayout :breadcrumbs="[{ title: 'Ven & Cust' }, { title: 'Groups' }]">
     <Head title="Partner Groups" />
     <PageHeader title="Partner Groups" description="Organize vendors & customers hierarchically — like departments for partners." :icon="Network" :actions="[{ label:'Add Group', route:'partner.groups.create', icon: Plus }]">
-    <DataTable route-name="partner.groups.index" title="Partner Groups" :columns="columns" :rows="(groups.data as unknown as Record<string,unknown>[])" :meta="groups.meta" search-placeholder="Search groups…">
+    <DataTable route-name="partner.groups.index" title="Partner Groups" :columns="columns" :rows="groups.data" :meta="groups.meta" search-placeholder="Search groups…">
       <template #cell-name="{row}"><div><p class="font-semibold">{{ row.name }}</p><p class="text-xs text-muted-foreground">{{ row.description || '' }}</p></div></template>
       <template #cell-code="{row}"><span class="font-mono text-xs px-1.5 py-0.5 rounded bg-muted">{{ row.code || '—' }}</span></template>
       <template #cell-type="{row}"><StatusBadge :label="row.type" :tone="row.type==='vendor'?'info':row.type==='customer'?'success':'primary'" /></template>

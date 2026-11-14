@@ -17,10 +17,12 @@ import {
     UsersRound,
 } from 'lucide-vue-next';
 import AdminLayout from '../Layouts/AdminLayout.vue';
+import BaseChart from '../Components/BaseChart.vue';
 import { useAcl } from '../Composables/useAcl';
 import type { ActivityRow } from '../types';
-import { eventTone, formatNumber, timeAgo } from '../Utils/format';
+import { eventTone, formatCurrencyCompact, formatNumber, timeAgo } from '../Utils/format';
 import { computed, onBeforeUnmount, onMounted, ref, type Component } from 'vue';
+import { Banknote, ClipboardCheck, Package, TrendingDown, TrendingUp } from 'lucide-vue-next';
 
 interface Props {
     stats: {
@@ -32,10 +34,73 @@ interface Props {
     };
     recentActivities: ActivityRow[];
     roleDistribution: { name: string; users_count: number }[];
+    businessKpis: {
+        revenue_mtd: number;
+        invoices_mtd: number;
+        receivables: number;
+        payables: number;
+        inventory_value: number;
+        pending_approvals: number;
+    };
+    revenueVsPurchases: { labels: string[]; revenue: number[]; purchases: number[] };
+    receivablesAging: { labels: string[]; values: number[] };
 }
 
 const props = defineProps<Props>();
 const { can } = useAcl();
+
+/* ----------------------------- business charts (Phase 1) ----------------- */
+
+// Track light/dark so the charts re-theme with the shell. A MutationObserver on
+// the <html> class is robust no matter how the theme is toggled.
+const isDark = ref(typeof document !== 'undefined' && document.documentElement.classList.contains('dark'));
+let themeObserver: MutationObserver | null = null;
+
+const AXIS = computed(() => (isDark.value ? '#94a3b8' : '#64748b'));
+const SPLIT = computed(() => (isDark.value ? 'rgba(148,163,184,0.12)' : 'rgba(100,116,139,0.12)'));
+
+const revenueChartOption = computed(() => ({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', valueFormatter: (v: number) => formatCurrencyCompact(v) },
+    legend: { data: ['Revenue', 'Purchases'], textStyle: { color: AXIS.value }, bottom: 0 },
+    grid: { left: 8, right: 16, top: 24, bottom: 36, containLabel: true },
+    xAxis: { type: 'category', data: props.revenueVsPurchases.labels, axisLine: { lineStyle: { color: SPLIT.value } }, axisLabel: { color: AXIS.value } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: SPLIT.value } }, axisLabel: { color: AXIS.value, formatter: (v: number) => formatCurrencyCompact(v) } },
+    series: [
+        { name: 'Revenue', type: 'bar', data: props.revenueVsPurchases.revenue, itemStyle: { color: '#10b981', borderRadius: [4, 4, 0, 0] }, barMaxWidth: 26 },
+        { name: 'Purchases', type: 'bar', data: props.revenueVsPurchases.purchases, itemStyle: { color: '#6366f1', borderRadius: [4, 4, 0, 0] }, barMaxWidth: 26 },
+    ],
+}));
+
+const agingChartOption = computed(() => ({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'item', valueFormatter: (v: number) => formatCurrencyCompact(v) },
+    legend: { bottom: 0, textStyle: { color: AXIS.value }, type: 'scroll' },
+    series: [
+        {
+            name: 'Receivables',
+            type: 'pie',
+            radius: ['48%', '72%'],
+            center: ['50%', '44%'],
+            avoidLabelOverlap: true,
+            itemStyle: { borderRadius: 6, borderColor: isDark.value ? '#0f172a' : '#ffffff', borderWidth: 2 },
+            label: { show: false },
+            data: props.receivablesAging.labels.map((label, i) => ({
+                name: label,
+                value: props.receivablesAging.values[i],
+                itemStyle: { color: ['#10b981', '#38bdf8', '#f59e0b', '#fb923c', '#ef4444'][i] },
+            })),
+        },
+    ],
+}));
+
+const businessCards = computed(() => [
+    { key: 'revenue', label: 'Revenue this month', value: props.businessKpis.revenue_mtd, icon: TrendingUp, tint: 'from-emerald-500 to-teal-500', money: true, hint: `${props.businessKpis.invoices_mtd} posted invoice(s)` },
+    { key: 'receivables', label: 'Receivables outstanding', value: props.businessKpis.receivables, icon: Banknote, tint: 'from-sky-500 to-cyan-500', money: true, hint: 'Open AR balance' },
+    { key: 'payables', label: 'Payables outstanding', value: props.businessKpis.payables, icon: TrendingDown, tint: 'from-amber-500 to-orange-500', money: true, hint: 'Open AP balance' },
+    { key: 'inventory', label: 'Inventory value', value: props.businessKpis.inventory_value, icon: Package, tint: 'from-violet-500 to-purple-500', money: true, hint: 'Stock at average cost' },
+    { key: 'approvals', label: 'Pending approvals', value: props.businessKpis.pending_approvals, icon: ClipboardCheck, tint: 'from-rose-500 to-pink-500', money: false, hint: 'Awaiting a decision' },
+]);
 
 /* ----------------------------- entrance + count-up ----------------------- */
 
@@ -59,9 +124,18 @@ onMounted(() => {
 
         progressFrame = requestAnimationFrame(tick);
     }
+
+    // Keep the charts in step with the shell's light/dark mode.
+    themeObserver = new MutationObserver(() => {
+        isDark.value = document.documentElement.classList.contains('dark');
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 });
 
-onBeforeUnmount(() => cancelAnimationFrame(progressFrame));
+onBeforeUnmount(() => {
+    cancelAnimationFrame(progressFrame);
+    themeObserver?.disconnect();
+});
 
 function display(value: number): number {
     return Math.round(value * progress.value);
@@ -217,6 +291,52 @@ onMounted(() => {
                 </div>
             </div>
         </div>
+
+        <!-- Business KPIs (Phase 1 — U4/U5) -->
+        <section class="d-rise space-y-4">
+            <div class="flex items-center gap-2">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Business overview</h2>
+                <span class="h-px flex-1 bg-border" />
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                <div
+                    v-for="(card, index) in businessCards"
+                    :key="card.key"
+                    class="group relative overflow-hidden rounded-xl border bg-card p-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-lg"
+                    :style="{ 'animation-delay': `${120 + index * 60}ms` }"
+                >
+                    <span class="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r" :class="card.tint" aria-hidden="true" />
+                    <div class="flex items-center justify-between">
+                        <span class="grid size-9 place-items-center rounded-lg bg-gradient-to-br text-hero-ink shadow-sm" :class="card.tint">
+                            <component :is="card.icon" class="size-4.5" />
+                        </span>
+                    </div>
+                    <p class="mt-3 text-xl font-bold tabular-nums tracking-tight">
+                        {{ card.money ? formatCurrencyCompact(card.value) : formatNumber(card.value) }}
+                    </p>
+                    <p class="mt-0.5 text-[13px] font-medium">{{ card.label }}</p>
+                    <p class="text-[11px] text-muted-foreground">{{ card.hint }}</p>
+                </div>
+            </div>
+
+            <!-- Charts (Phase 1 — U3) -->
+            <div class="grid gap-4 lg:grid-cols-5">
+                <div class="rounded-xl border bg-card p-5 shadow-sm lg:col-span-3">
+                    <div class="mb-1 flex items-center justify-between">
+                        <h3 class="text-sm font-semibold">Revenue vs purchases</h3>
+                        <span class="text-[11px] text-muted-foreground">Last 6 months · posted documents</span>
+                    </div>
+                    <BaseChart :option="revenueChartOption" :dark="isDark" height="280px" />
+                </div>
+                <div class="rounded-xl border bg-card p-5 shadow-sm lg:col-span-2">
+                    <div class="mb-1 flex items-center justify-between">
+                        <h3 class="text-sm font-semibold">Receivables aging</h3>
+                        <Link v-if="can('accounts.receivables.view')" :href="route('accounts.reports.receivables-aging')" class="text-[11px] font-medium text-primary hover:underline">Details →</Link>
+                    </div>
+                    <BaseChart :option="agingChartOption" :dark="isDark" height="280px" />
+                </div>
+            </div>
+        </section>
 
         <!-- Stat cards -->
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

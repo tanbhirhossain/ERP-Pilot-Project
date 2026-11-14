@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { formatCurrency } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ products:any[]; warehouses:any[]; filters:any; valuation:any; layers:any[] }>();
 function change(e:any, key:string){ router.get(route('inventory.reports.fifo'), {...(route().params as any), [key]: e.target.value}); }
 </script>
@@ -10,7 +11,7 @@ function change(e:any, key:string){ router.get(route('inventory.reports.fifo'), 
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'FIFO Valuation' }]">
     <Head title="FIFO Valuation — Layers" />
     <div class="space-y-4 max-w-6xl mx-auto">
-      <div><h1 class="text-xl font-bold">🥞 FIFO Valuation — Earliest Layers First</h1><p class="text-sm text-muted-foreground">For FIFO products, COGS is taken from oldest <code>inventory_fifo_layers</code> (qty_remaining). Weighted products use avg_cost. Filter by product + warehouse to see remaining layers.</p></div>
+      <div><PageHeader title="FIFO Valuation" description="Earliest Layers First" /><p class="text-sm text-muted-foreground">For FIFO products, COGS is taken from oldest <code>inventory_fifo_layers</code> (qty_remaining). Weighted products use avg_cost. Filter by product + warehouse to see remaining layers.</p></div>
       <div class="bg-card border rounded-xl p-4 flex gap-3 items-end">
         <div class="space-y-1 flex-1"><label class="text-xs font-medium">Product (FIFO vs Weighted)</label><select :value="filters.product_id" @change="e=>change(e,'product_id')" class="h-9 w-full rounded border bg-background px-3 text-sm"><option value="">— Select product —</option><option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }} — {{ p.sku }} [{{ p.valuation_method }}]</option></select></div>
         <div class="space-y-1"><label class="text-xs font-medium">Warehouse</label><select :value="filters.warehouse_id" @change="e=>change(e,'warehouse_id')" class="h-9 rounded border bg-background px-3 text-sm"><option value="">All WH</option><option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option></select></div>

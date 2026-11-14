@@ -11,6 +11,10 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { Check, ChevronRight, Moon, Palette, Search, Sun } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import CommandPalette from '../Components/CommandPalette.vue';
+import LanguageSwitcher from '../Components/LanguageSwitcher.vue';
+// F22: the offline till's queue signal, read from storage so CORE stays ignorant of SALES.
+import OfflineBadge from '../Components/OfflineBadge.vue';
+import NotificationBell from '../Components/NotificationBell.vue';
 import ConfirmDialogHost from '../Components/ConfirmDialogHost.vue';
 import ToastStack from '../Components/ToastStack.vue';
 import type { AuthUser, Breadcrumb } from '../types';
@@ -189,6 +193,8 @@ watch(mode, () => {
                         </button>
                         <Button variant="ghost" size="icon" class="md:hidden size-9 rounded-full" aria-label="Search" @click="open()"><Search class="size-4" /></Button>
                     </CommandPalette>
+                    <!-- Notifications — the bell inbox (Phase 1 F2) -->
+                    <NotificationBell />
                     <!-- Colour scheme — the eight palettes, one click away -->
                     <DropdownMenu v-if="schemes.length">
                         <DropdownMenuTrigger as-child>
@@ -216,6 +222,10 @@ watch(mode, () => {
                             </Link>
                         </DropdownMenuContent>
                     </DropdownMenu>
+                    <!-- Offline till (F22) — what this device is still holding -->
+                    <OfflineBadge />
+                    <!-- Language (U19) — EN / বাংলা, RTL follows automatically -->
+                    <LanguageSwitcher />
                     <!-- Theme toggle -->
                     <Button variant="ghost" size="icon" class="size-8 rounded-full text-muted-foreground hover:bg-accent" :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
                         <Sun v-if="isDark" class="size-4" /><Moon v-else class="size-4" />

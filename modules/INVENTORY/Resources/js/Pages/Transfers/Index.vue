@@ -3,13 +3,13 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, ArrowLeftRight, Eye} from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatDate } from '@core/Utils/format';
 interface Row { id:number; transfer_no:string; from_warehouse?:{name:string}; to_warehouse?:{name:string}; status:string; items_count:number; requester?:string; created_at:string }
 defineProps<{ transfers: Paginator<Row>; warehouseOptions:any[] }>();
 const columns: DataTableColumn[] = [
@@ -30,7 +30,7 @@ function tone(s:string){ if(s==='received') return 'success'; if(s==='in_transit
   <AdminLayout :breadcrumbs="[{title:'Inventory'},{title:'Transfers'}]">
     <Head title="Stock Transfers" />
     <PageHeader title="Stock Transfers" description="Move stock between warehouses — ship → receive with ledger postings." :icon="ArrowLeftRight" :actions="[{ label:'New Transfer', route:'inventory.transfers.create', icon: Plus }]">
-    <DataTable route-name="inventory.transfers.index" title="Transfers" :columns="columns" :rows="(transfers.data as unknown as Record<string,unknown>[])" :meta="transfers.meta" search-placeholder="Search transfer no…">
+    <DataTable route-name="inventory.transfers.index" title="Transfers" :columns="columns" :rows="transfers.data" :meta="transfers.meta" search-placeholder="Search transfer no…">
       <template #cell-transfer_no="{row}"><span class="font-mono text-sm font-semibold bg-indigo-500/10 text-indigo-600 px-1.5 py-0.5 rounded">{{ row.transfer_no }}</span></template>
       <template #cell-from_warehouse="{row}"><span class="text-sm">{{ row.from_warehouse?.name || '—' }}</span></template>
       <template #cell-to_warehouse="{row}"><span class="text-sm">{{ row.to_warehouse?.name || '—' }}</span></template>

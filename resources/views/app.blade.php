@@ -4,11 +4,31 @@
     // Inertia by HandleInertiaRequests. UiTheme memoises the settings read, so this is not a second
     // query — and rendering it server-side is what keeps the first paint in the right palette.
     $ui = \Modules\CORE\Support\UiTheme::share(request()->user());
+    // U19: SetLocale has already run, so app()->getLocale() is the effective language; deriving the
+    // direction here (not only in JS) is what mirrors the whole document on the first paint.
+    $locale = app()->getLocale();
+    $dir = \Modules\CORE\Support\Locale::direction($locale);
 @endphp
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="{{ $ui['scheme'] }}" @class(['dark' => $ui['dark']])>
+<html lang="{{ str_replace('_', '-', $locale) }}" dir="{{ $dir }}" data-theme="{{ $ui['scheme'] }}" @class(['dark' => $ui['dark']])>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        {{-- F22: five components (DataTable's saved views, the notification bell, the barcode sheet,
+             the roster bulk editor and the offline till's sync) read this tag for the token they put in
+             `X-CSRF-TOKEN`. Nothing in the repo ever emitted it, so each of those posts carried an
+             empty token and would have failed 419 the moment a test stopped running unit tests, where
+             Laravel skips CSRF verification. `csrf_token()` is the same value the session holds. --}}
+        <meta name="csrf-token" content="{{ csrf_token() }}">
+
+        {{-- U21: the installable shell. `asset()` rather than a leading slash, because a deployment
+             under a subdirectory would otherwise look for /manifest.webmanifest at the domain root.
+             The service worker is registered from app.ts, and only in production — a dev server's HMR
+             and a cached shell are a bad combination. --}}
+        <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
+        <meta name="theme-color" content="#2b3ff3">
+        <link rel="apple-touch-icon" href="{{ asset('pwa/apple-touch-icon.png') }}">
+        <meta name="mobile-web-app-capable" content="yes">
 
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
 

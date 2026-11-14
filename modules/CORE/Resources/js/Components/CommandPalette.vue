@@ -70,6 +70,41 @@ const filtered = computed(() => {
   return allItems.filter(i => i.keywords?.includes(q) || i.label.toLowerCase().includes(q)).slice(0, 10);
 });
 
+/* ----------------------- global record search (U9) ----------------------- */
+interface RecordResult { type: string; label: string; sublabel: string; url: string }
+const records = ref<RecordResult[]>([]);
+const searching = ref(false);
+let recordTimer: number | undefined;
+
+const TYPE_TONE: Record<string, string> = {
+  Product: 'bg-violet-500/10 text-violet-600',
+  Customer: 'bg-sky-500/10 text-sky-600',
+  Vendor: 'bg-amber-500/10 text-amber-600',
+  Invoice: 'bg-emerald-500/10 text-emerald-600',
+  'Purchase Order': 'bg-rose-500/10 text-rose-600',
+};
+
+watch(query, (q) => {
+  window.clearTimeout(recordTimer);
+  const term = q.trim();
+  if (term.length < 2) { records.value = []; searching.value = false; return; }
+  searching.value = true;
+  recordTimer = window.setTimeout(async () => {
+    try {
+      const res = await fetch(`${route('core.global-search')}?q=${encodeURIComponent(term)}`, { headers: { Accept: 'application/json' } });
+      records.value = res.ok ? ((await res.json()).results ?? []) : [];
+    } catch { records.value = []; }
+    finally { searching.value = false; }
+  }, 300);
+});
+
+function navigateRecord(r: RecordResult) {
+  open.value = false;
+  query.value = '';
+  records.value = [];
+  router.visit(r.url);
+}
+
 function navigate(item: PaletteItem) {
   if (!item.route) return;
   pushRecent(item.key);
@@ -100,7 +135,10 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 onMounted(() => document.addEventListener('keydown', onKeydown));
-onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKeydown);
+  window.clearTimeout(recordTimer);
+});
 
 watch(open, (v) => {
   if (v) setTimeout(() => document.getElementById('cmd-input')?.focus(), 50);
@@ -143,7 +181,29 @@ watch(open, (v) => {
           <ArrowRight class="size-3.5 text-muted-foreground" />
         </button>
 
-        <div v-if="filtered.length === 0" class="p-6 text-center text-sm text-muted-foreground">
+        <!-- Global record results (U9) -->
+        <template v-if="query.trim().length >= 2">
+          <p class="mt-1 flex items-center gap-1 px-2 py-1 text-[11px] uppercase tracking-widest text-muted-foreground">
+            Records
+            <span v-if="searching" class="text-muted-foreground/60 normal-case tracking-normal">searching…</span>
+          </p>
+          <button
+            v-for="(r, i) in records"
+            :key="`rec-${i}`"
+            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent text-left"
+            @click="navigateRecord(r)"
+          >
+            <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold" :class="TYPE_TONE[r.type] ?? 'bg-muted text-muted-foreground'">{{ r.type }}</span>
+            <div class="min-w-0 flex-1">
+              <div class="truncate font-medium">{{ r.label }}</div>
+              <div class="truncate text-xs text-muted-foreground">{{ r.sublabel }}</div>
+            </div>
+            <ArrowRight class="size-3.5 shrink-0 text-muted-foreground" />
+          </button>
+          <div v-if="!searching && records.length === 0" class="px-3 py-2 text-xs text-muted-foreground">No matching records.</div>
+        </template>
+
+        <div v-if="filtered.length === 0 && records.length === 0 && !searching" class="p-6 text-center text-sm text-muted-foreground">
           No matches for “{{ query }}”. Try a different keyword.
         </div>
       </div>

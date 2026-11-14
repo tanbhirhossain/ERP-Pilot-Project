@@ -6,8 +6,8 @@ import { Save, Copy, ClipboardPaste, Trash2, Search, ChevronLeft, ChevronRight, 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 
 interface Shift { id:number; shift_name:string; start_time:string; end_time:string; crosses_midnight:boolean; color?:string }
 interface Employee { employee_id:string; full_name:string; department?:string; designation?:string }

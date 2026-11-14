@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-defineProps<{ parentOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+defineProps<{ parentOptions:SelectOption[] }>();
 const form=useForm({ code:'', name:'', name_bn:'', account_type:'asset', nature:'debit', parent_id:null as number|null, is_group:false, is_active:true, opening_balance:0, opening_side:'debit', description:'' });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.post(route('accounts.coa.store')); }
 </script>
 <template>

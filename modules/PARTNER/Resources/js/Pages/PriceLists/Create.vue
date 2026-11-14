@@ -5,9 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {Plus, Trash2, Package} from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const form = useForm({ name:'', code:'', currency:'BDT', is_default:false, is_active:true, effective_from:'', effective_to:'', notes:'', items:[{ sku:'', product_name:'', unit_price:null as number|null, min_qty:1, discount_pct:0 }] });
+useUnsavedGuard(() => form.isDirty);
 function addItem(){ form.items.push({ sku:'', product_name:'', unit_price:null, min_qty:1, discount_pct:0 }); }
 function removeItem(i:number){ form.items.splice(i,1); if(!form.items.length) addItem(); }
 function submit(){ form.post(route('partner.pricelists.store')); }

@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import type { Bank } from '@accounts/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { formatCurrency} from '../../../../../CORE/Resources/js/Utils/format';
+import { formatCurrency} from '@core/Utils/format';
 import { ref } from 'vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{ banks:any[]; bank:any; statements:any[]; unreconciledTxns:any[] }>();
+import StaticTable from '@core/Components/StaticTable.vue';
+defineProps<{ banks:any[]; bank:Bank; statements:any[]; unreconciledTxns:any[] }>();
 function changeBank(e:any){ router.get(route('accounts.banks.reconcile'), {bank_id: e.target.value}); }
 const stmtId=ref(''), txnId=ref('');
 function importCsv(e:any){
@@ -21,12 +23,11 @@ function match(){ router.post(route('accounts.banks.reconcile.match'), {statemen
   <AdminLayout :breadcrumbs="[{ title: 'Accounts' }, { title: 'Banks', href: route('accounts.banks.index') }, { title: 'Reconciliation' }]">
     <Head title="Bank Reconciliation" />
     <div class="space-y-4 max-w-6xl mx-auto">
-      <div class="flex items-center justify-between gap-3">
-        <h1 class="text-xl font-bold">🏦 Bank Reconciliation — Statement vs Ledger</h1>
-        <select @change="changeBank" :value="bank?.id" class="h-9 rounded border bg-background px-3 text-sm">
+      <PageHeader title="Bank Reconciliation" description="Statement vs Ledger">
+      <template #actions><select @change="changeBank" :value="bank?.id" class="h-9 rounded border bg-background px-3 text-sm">
           <option v-for="b in banks" :key="b.id" :value="b.id">{{ b.name }} — {{ b.account_no }} ({{ b.bank_name }})</option>
-        </select>
-      </div>
+        </select></template>
+    </PageHeader>
       <p class="text-sm text-muted-foreground">Import bank CSV (Date, Description, Reference, Amount, Balance). Then match each statement line to a pending Bank Transaction. Amount must match ±0.01.</p>
 
       <div class="bg-card border rounded-xl p-4">

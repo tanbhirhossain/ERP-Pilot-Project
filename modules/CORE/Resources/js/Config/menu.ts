@@ -1,9 +1,10 @@
 /* Declarative collapsible-tree sidebar menu for the CORE admin shell. */
 import type { LucideIcon } from 'lucide-vue-next';
 import {
-  SwatchBook, LayoutDashboard, ShieldCheck, Users, Shield, KeyRound, Palette, ScrollText, History, Calculator, Wallet, PiggyBank, Settings2,
+  SwatchBook, LayoutDashboard, ShieldCheck, Users, Shield, KeyRound, Palette, ScrollText, History, Calculator, Wallet, PiggyBank, Settings2, HardDrive, CalendarClock,
   Building2, Network, BadgeCent, Fingerprint, Link2, UserCog, Clock3, CalendarRange, CalendarCheck, FileClock, Layers, CalendarDays, RefreshCw, UsersRound, ArrowLeftRight, Timer, Tag, Plane, Bell, ClipboardList, UserCheck, RotateCcw,
-  Handshake, Truck, Package, Warehouse, Boxes, Receipt, BookOpen, ShoppingCart, FileText, ClipboardCheck,  Monitor, CreditCard, Landmark, BarChart3, Scale, TrendingUp, FileBarChart, HandCoins, BookMarked, ListTree, Undo2, FolderOpen, Archive
+  Handshake, Truck, Package, Warehouse, Boxes, Receipt, BookOpen, ShoppingCart, FileText, ClipboardCheck, CloudOff, Monitor, CreditCard, Landmark, BarChart3, Scale, TrendingUp, FileBarChart, HandCoins, BookMarked, ListTree, Undo2, FolderOpen, Archive,
+  UserRound, FileSpreadsheet
 } from 'lucide-vue-next';
 
 export interface SidebarItem {
@@ -22,10 +23,47 @@ export interface SidebarItem {
    */
   group?: string;
   children?: SidebarItem[];
+  /**
+   * Words an operator is likely to type that the label does not contain.
+   *
+   * "Tax Profiles" is the screen, "tax allocation" is what the person looking for it calls it. A filter
+   * that only reads labels cannot bridge that, and the result reads as "the feature does not exist".
+   * Lowercase, comma-separated, and only for names the product genuinely uses elsewhere — an alias is a
+   * pointer to the real label, not a second name for the page.
+   */
+  keywords?: string;
+}
+
+/**
+ * Does this item answer the query typed into the sidebar filter?
+ *
+ * The whole phrase is matched first (label, translated label, key, keywords); if that finds nothing and the
+ * query has more than one word, every word must appear somewhere. That fallback is what makes
+ * "tax allocation" reach a page called **Tax Profiles** — the phrase is in neither label, but both words are
+ * in the item's keywords — while still refusing to turn a two-word search into "everything that mentions
+ * tax". Before it, a two-word query was a substring test against a label, i.e. a guaranteed empty list,
+ * which is how "I have no idea where it is" ends up reported as a missing feature.
+ */
+export function menuMatchesQuery(item: SidebarItem, q: string, translatedLabel = ''): boolean {
+    const haystack = [item.label, item.key, item.keywords ?? '', translatedLabel].join(' ').toLowerCase();
+
+    if (haystack.includes(q)) return true;
+
+    if (!q.includes(' ')) return false;
+
+    const words = q.split(/\s+/).filter(Boolean);
+
+    return words.length > 0 && words.every((word) => haystack.includes(word));
 }
 
 export const sidebarMenu: SidebarItem[] = [
   { key: 'dashboard', label: 'Dashboard', route: 'core.dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
+  // Phase 1 — employee self-service. No permission gate: every signed-in user sees
+  // their own scoped data (or an actionable "link your account" page).
+  { key: 'my-hr', label: 'My HR', route: 'hrm.my.dashboard', icon: UserRound },
+  // Phase 1 — the approval inbox. Gated so only people who raise or decide
+  // requests see it; the service enforces the actual decision authority.
+  { key: 'approvals', label: 'Approvals', route: 'core.approvals.index', icon: ClipboardCheck, permission: 'approvals.view' },
   // ── People: everyone the business employs, and everything that happens to them
   {
     key: 'hrm', label: 'HRM', group: 'People', icon: UserCog,
@@ -49,11 +87,17 @@ export const sidebarMenu: SidebarItem[] = [
     key: 'payroll', label: 'Payroll', group: 'People', icon: Calculator,
     children: [
       { key: 'payroll-dashboard', label: 'Payroll Overview', route: 'payroll.dashboard', icon: LayoutDashboard },
-      { key: 'payroll-sheets', label: 'Salary Sheets', route: 'payroll.sheets.index', icon: ScrollText },
+      { key: 'payroll-sheets', label: 'Salary Sheets', route: 'payroll.sheets.index', icon: ScrollText, keywords: 'payroll run, generate salary sheet, release payslips, month close' },
+      { key: 'payroll-cutlists', label: 'Salary Cutlists', route: 'payroll.cutlists.index', icon: ClipboardCheck, keywords: 'cutlist, cut list, salary review, pre payroll, deduction review, approve cutlist, review before payroll' },
       { key: 'payroll-increments', label: 'Salary Increments', route: 'payroll.increments.index', icon: BadgeCent },
       { key: 'payroll-loans', label: 'Employee Loans', route: 'payroll.loans.index', icon: Wallet },
       { key: 'payroll-adjustments', label: 'Salary Adjustments', route: 'payroll.adjustments.index', icon: ClipboardList },
-      { key: 'payroll-tax', label: 'Tax Profiles', route: 'payroll.tax.index', icon: ScrollText },
+      {
+        key: 'payroll-tax', label: 'Tax Profiles', route: 'payroll.tax.index', icon: ScrollText,
+        // The page holds the annual slabs *and* the per-employee overrides, which is where "whose tax is
+        // which" is decided — the thing people go looking for under half a dozen names.
+        keywords: 'tax allocation, tax configuration, tax slabs, tax override, employee tax, annual tax, nbr tax rules',
+      },
       { key: 'payroll-pf', label: 'Provident Fund', route: 'payroll.pf.index', icon: PiggyBank },
       { key: 'payroll-bonuses', label: 'Festival Bonuses', route: 'payroll.bonuses.index', icon: BadgeCent },
       { key: 'payroll-settlements', label: 'Settlements', route: 'payroll.settlements.index', icon: UserCheck },
@@ -128,7 +172,11 @@ export const sidebarMenu: SidebarItem[] = [
   {
     key: 'purchase', label: 'Purchase', group: 'Supply & Sales', icon: ShoppingCart,
     children: [
+      // Demand before supply: a requisition is what starts the sequence, and a quote round is how it
+      // gets priced. Both sit ahead of the order they become, so the sidebar reads in workflow order.
+      { key: 'pur-requisitions', label: 'Requisitions', route: 'purchase.requisitions.index', icon: ClipboardList, permission: 'purchase.requisitions.view' },
       { key: 'pur-orders', label: 'Purchase Orders', route: 'purchase.orders.index', icon: FileText, permission: 'purchase.orders.view' },
+      { key: 'pur-rfqs', label: 'Quote Rounds (RFQ)', route: 'purchase.rfqs.index', icon: Handshake, permission: 'purchase.rfq.view' },
       { key: 'pur-receipts', label: 'Goods Receipts (GRN)', route: 'purchase.receipts.index', icon: Truck, permission: 'purchase.receipts.view' },
       { key: 'pur-bills', label: 'Vendor Bills', route: 'purchase.bills.index', icon: Receipt, permission: 'purchase.bills.view' },
       { key: 'pur-returns', label: 'Purchase Returns', route: 'purchase.returns.index', icon: Undo2, permission: 'purchase.returns.view' },
@@ -151,12 +199,16 @@ export const sidebarMenu: SidebarItem[] = [
       // The register behind that report's collection figures: per collector, per customer, per
       // method, including money taken with no drawer open.
       { key: 'sales-pos-collections', label: 'POS Collections', route: 'sales.pos.collections', icon: HandCoins, permission: 'pos.reports.view' },
+      // F22: what the device is holding and what the ledger took from it. Same grant as the till,
+      // because a cashier who can sell is a cashier who has to see the queue.
+      { key: 'sales-pos-offline', label: 'Offline POS Queue', route: 'sales.pos.offline', icon: CloudOff, permission: 'pos.terminal.sell' },
     ] },
   // ── Finance: the books
   {
     key: 'accounts', label: 'Accounts', group: 'Finance', icon: BookOpen,
     children: [
       { key: 'acc-coa', label: 'Chart of Accounts', route: 'accounts.coa.index', icon: ListTree, permission: 'accounts.chart.view' },
+      { key: 'acc-opening', label: 'Opening Balances', route: 'accounts.opening-balances.index', icon: Landmark, permission: 'accounts.opening.manage' },
       { key: 'acc-vouchers', label: 'Vouchers', route: 'accounts.vouchers.index', icon: Receipt, permission: 'accounts.vouchers.view' },
       { key: 'acc-payables', label: 'Payables (AP)', route: 'accounts.payables.index', icon: CreditCard, permission: 'accounts.payables.view' },
       { key: 'acc-receivables', label: 'Receivables (AR)', route: 'accounts.receivables.index', icon: Wallet, permission: 'accounts.receivables.view' },
@@ -169,7 +221,18 @@ export const sidebarMenu: SidebarItem[] = [
         { key: 'acc-aging-ap', label: 'AP Aging', route: 'accounts.reports.payables-aging', icon: FileClock },
         { key: 'acc-aging-ar', label: 'AR Aging', route: 'accounts.reports.receivables-aging', icon: FileClock },
         { key: 'acc-reconcile', label: 'Bank Reconcile', route: 'accounts.banks.reconcile', icon: Landmark },
+        { key: 'acc-vat-return', label: 'VAT Return · Mushak 9.1', route: 'accounts.reports.vat-return', icon: Receipt },
       ]},
+      {
+        key: 'acc-withholding', label: 'TDS / VDS Withholding', route: 'accounts.tax.withholding.index', icon: HandCoins, permission: 'accounts.withholding.view',
+        // Depositing is the allocation step: withheld amounts are grouped onto one treasury challan per tax
+        // type and posted. Nobody finds that by the word "withholding" alone.
+        keywords: 'tax allocation, tax deposit, challan, treasury, tds, vds, mushak 6.6, mushak 6.3, tax head',
+      },
+      { key: 'acc-assets', label: 'Fixed Assets', route: 'accounts.assets.index', icon: HardDrive, permission: 'accounts.assets.view' },
+      { key: 'acc-depreciation', label: 'Depreciation Run', route: 'accounts.assets.depreciation', icon: CalendarClock, permission: 'accounts.assets.view' },
+      { key: 'acc-budgets', label: 'Budgets', route: 'accounts.budgets.index', icon: PiggyBank, permission: 'accounts.budgets.view' },
+      { key: 'acc-budget-variance', label: 'Budget Variance', route: 'accounts.budgets.variance', icon: Wallet, permission: 'accounts.budgets.view' },
     ] },
   // ── Administration: access, audit and the UI kit
   {
@@ -182,7 +245,18 @@ export const sidebarMenu: SidebarItem[] = [
   {
     key: 'compliance', label: 'Audit & Compliance', group: 'Administration', icon: ScrollText,
     children: [{ key: 'activities', label: 'Audit Trail', route: 'core.activities.index', icon: History, permission: 'audit.view' }] },
+  // Phase 1 — bulk data take-on from Excel/CSV.
+  { key: 'imports', label: 'Data Import', group: 'Administration', route: 'core.imports.index', icon: FileSpreadsheet, permission: 'imports.manage' },
   { key: 'design-system', label: 'Design System', group: 'Administration', route: 'core.ui-kit', icon: Palette, permission: 'dashboard.view' },
+  // F13: self-service, so no `permission` — the route has none either, and a token can
+  // only ever reach what its owner can. Gating the list behind a role would just push
+  // teams onto shared "integration" accounts, which is what breaks auditing.
+  { key: 'api-tokens', label: 'API Tokens', group: 'Administration', route: 'core.developer.tokens.index', icon: KeyRound },
+  // SSO: self-service for the same reason, so no `permission`. It is also the one page that stays useful
+  // while the feature is off — it says so, and names the two config keys that would turn it on — which is
+  // why the entry is not conditioned on `sso.enabled`.
+  { key: 'sso-accounts', label: 'Sign-in Methods', group: 'Administration', route: 'core.sso.accounts', icon: Link2 },
+  { key: 'api-reference', label: 'API Reference', group: 'Administration', route: 'core.developer.api.index', icon: ScrollText },
   // Item 42: colour scheme and mode. `dashboard.view` is the gate because choosing your own
   // interface is not a privilege — the company default inside it is gated separately, on
   // `settings.appearance.manage`.

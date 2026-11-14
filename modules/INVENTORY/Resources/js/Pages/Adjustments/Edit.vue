@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { Adjustment } from '@inventory/types';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-const props=defineProps<{ adjustment:any; warehouseOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props=defineProps<{ adjustment:Adjustment; warehouseOptions:SelectOption[] }>();
 const form=useForm({ warehouse_id:props.adjustment.warehouse_id, type:props.adjustment.type, reason:props.adjustment.reason, notes:props.adjustment.notes??'', items:props.adjustment.items.map((i:any)=>({ product_id:i.product_id, qty:i.qty, unit_cost:i.unit_cost, reason:i.reason??'' })) });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('inventory.adjustments.update', props.adjustment.id)); }
 </script>
 <template>

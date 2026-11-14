@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import type { VendorBill } from '@purchase/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import VendorBillForm from '../../Components/VendorBillForm.vue';
 
-const props = defineProps<{ bill: any }>();
+const props = defineProps<{ bill: VendorBill }>();
 </script>
 
 <template>

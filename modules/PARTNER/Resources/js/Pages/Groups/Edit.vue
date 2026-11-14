@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { PartnerGroup } from '@partner/types';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-const props = defineProps<{ group:any; parentOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props = defineProps<{ group:PartnerGroup; parentOptions:SelectOption[] }>();
 const form = useForm({ name: props.group.name, code: props.group.code ?? '', type: props.group.type, parent_id: props.group.parent_id, description: props.group.description ?? '', sort_order: props.group.sort_order ?? 0, is_active: props.group.is_active });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('partner.groups.update', props.group.id)); }
 </script>
 <template>

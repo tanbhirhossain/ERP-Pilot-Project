@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {Plus, Trash2, Package} from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-defineProps<{ warehouseOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+defineProps<{ warehouseOptions:SelectOption[] }>();
 const form=useForm({ warehouse_id:null as number|null, type:'correction', reason:'', notes:'', items:[{ product_id:null as number|null, variant_id:null as number|null, location_id:null as number|null, qty:null as number|null, unit_cost:null as number|null, reason:'' }] });
+useUnsavedGuard(() => form.isDirty);
 function addItem(){ form.items.push({ product_id:null, variant_id:null, location_id:null, qty:null, unit_cost:null, reason:'' }); }
 function removeItem(i:number){ form.items.splice(i,1); if(!form.items.length) addItem(); }
 function submit(){ form.post(route('inventory.adjustments.store')); }

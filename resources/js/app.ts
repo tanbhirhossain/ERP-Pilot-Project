@@ -9,8 +9,8 @@ import { createApp, h } from 'vue';
 // depend on `composer install` having already run. `ziggy-js` is already a
 // direct dependency and exports the same ZiggyVue plugin.
 import { ZiggyVue } from 'ziggy-js';
-import { installPrintSupport } from '../../modules/CORE/Resources/js/Composables/usePrint';
-import { initializeUiTheme } from '../../modules/CORE/Resources/js/Composables/useUiTheme';
+import { installPrintSupport } from '@core/Composables/usePrint';
+import { initializeUiTheme } from '@core/Composables/useUiTheme';
 
 // Extend ImportMeta interface for Vite...
 declare module 'vite/client' {
@@ -54,6 +54,28 @@ createInertiaApp({
         color: '#e01f29',
     },
 });
+
+/*
+ * U21 — the installable shell.
+ *
+ * Registered here rather than from an inline script for one reason: the app's Content-Security-Policy
+ * allows `script-src 'self'` with a per-request nonce, and a nonce is only minted for what the server
+ * knows about. A module script is 'self' and needs no nonce; a service worker also has to be served
+ * from the origin root, which `public/sw.js` is.
+ *
+ * Production only. In development, Vite's HMR rewrites module URLs constantly and a cached shell
+ * fighting a hot-reloading server produces the most confusing class of bug there is — a page that is
+ * stale in a way nobody can see.
+ */
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker
+            .register('/sw.js', { scope: '/' })
+            // A failure to register must not look like a failure of the app: the till still queues
+            // sales (that is IndexedDB, not the worker), it just cannot cold-start offline.
+            .catch(() => undefined);
+    });
+}
 
 document.documentElement.classList.add('page-ready');
 router.on('start', () => document.documentElement.classList.add('inertia-nav'));

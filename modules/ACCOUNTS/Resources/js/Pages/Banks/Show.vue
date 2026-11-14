@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
+import type { Bank } from '@accounts/types';
 import { Landmark } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
-defineProps<{ bank:any }>();
+import { formatCurrency } from '@core/Utils/format';
+defineProps<{ bank:Bank }>();
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Accounts' }, { title: 'Banks', href: route('accounts.banks.index') }, { title: bank.code }]">

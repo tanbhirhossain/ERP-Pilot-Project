@@ -8,13 +8,22 @@ import { Label } from '@/components/ui/label';
 import AuthBase from '@/layouts/AuthLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { LoaderCircle } from 'lucide-vue-next';
+import { computed } from 'vue';
 
-defineProps<{
+const props = defineProps<{
     status?: string;
     canResetPassword: boolean;
     /** Shared globally by HandleInertiaRequests; false unless registration is enabled. */
     canRegister?: boolean;
+    /** provider key => label, limited to providers that are enabled *and* fully configured. */
+    ssoProviders?: Record<string, string>;
+    /** Why a provider said no, carried across the redirect so the answer appears where it belongs. */
+    ssoError?: string;
 }>();
+
+// An empty object is still truthy in JS, so the separator has to be gated on the entry list, not on the
+// prop's presence — otherwise every installation with SSO off gets a stray "or".
+const providers = computed(() => Object.entries(props.ssoProviders ?? {}));
 
 const form = useForm({
     email: '',
@@ -89,5 +98,29 @@ const submit = () => {
                 <TextLink :href="route('register')" :tabindex="5">Sign up</TextLink>
             </div>
         </form>
+
+        <!--
+            SSO. Real anchors, not <Link>: `core.sso.redirect` answers with a 302 to a third-party origin,
+            and an Inertia XHR visit cannot follow that — the browser blocks the cross-origin fetch and the
+            user sees a spinner. A plain navigation lets the redirect chain run.
+        -->
+        <div v-if="providers.length" class="grid gap-3">
+            <div class="flex items-center gap-3">
+                <span class="h-px flex-1 bg-border" />
+                <span class="text-muted-foreground text-xs uppercase tracking-wide">or</span>
+                <span class="h-px flex-1 bg-border" />
+            </div>
+
+            <a v-for="[key, label] in providers" :key="key" :href="route('core.sso.redirect', key)" class="block">
+                <Button type="button" variant="outline" class="w-full" tabindex="6">
+                    Continue with {{ label }}
+                </Button>
+            </a>
+
+        </div>
+
+        <!-- Outside the provider block on purpose: a refusal can arrive when nothing is configured any
+             more (or the domain gate rejected a valid identity), and the reason must still be shown. -->
+        <p v-if="ssoError" class="text-destructive text-center text-sm">{{ ssoError }}</p>
     </AuthBase>
 </template>

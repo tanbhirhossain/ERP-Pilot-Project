@@ -5,11 +5,11 @@ import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import DataTable, { type DataTableColumn } from '../../../../../../CORE/Resources/js/Components/DataTable.vue';
-import type { FilterDef, Paginator } from '../../../../../../CORE/Resources/js/types';
-import { formatDateTime } from '../../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import type { FilterDef, Paginator } from '@core/types';
+import { formatDateTime } from '@core/Utils/format';
 interface Row { id:number; device_user_id:string; employee_id?:string; employee?:string; department?:string; designation?:string; punch_time:string; device_id?:number; punch_type:string; is_processed:boolean; created_at:string }
 defineProps<{ logs: Paginator<Row>; filterDefs: FilterDef[] }>();
 const columns: DataTableColumn[] = [
@@ -30,7 +30,7 @@ function addManual(){ router.post(route('hrm.attendance.manual'),manual.value,{o
         <div class="space-y-1"><Label>Punch Time</Label><Input v-model="manual.punch_time" type="datetime-local" class="w-56 h-9" /></div>
         <Button size="sm" @click="addManual" class="rounded-full">Add Log</Button>
       </div>
-      <DataTable route-name="hrm.attendance.logs.index" title="Attendance Logs" :columns="columns" :rows="(logs.data as unknown as Record<string,unknown>[])" :meta="logs.meta" :filter-defs="filterDefs" search-placeholder="Search by name, device UID or Employee ID…">
+      <DataTable route-name="hrm.attendance.logs.index" title="Attendance Logs" :columns="columns" :rows="logs.data" :meta="logs.meta" :filter-defs="filterDefs" search-placeholder="Search by name, device UID or Employee ID…">
         <template #cell-device_user_id="{row}"><span class="font-mono text-sm bg-muted px-1.5 py-0.5 rounded">{{ row.device_user_id }}</span></template>
         <template #cell-employee_id="{row}"><div class="leading-tight"><div class="text-sm font-medium">{{ row.employee_id || '—' }}<span v-if="row.employee" class="text-muted-foreground text-xs"> ({{ row.employee }})</span></div><div v-if="row.department" class="text-[11px] text-muted-foreground">{{ row.department }}<span v-if="row.designation"> · {{ row.designation }}</span></div></div></template>
         <template #cell-punch_time="{row}"><span class="text-sm font-mono">{{ formatDateTime(row.punch_time) }}</span></template>

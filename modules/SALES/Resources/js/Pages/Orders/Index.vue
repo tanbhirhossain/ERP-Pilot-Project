@@ -3,13 +3,13 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, ClipboardCheck, Eye } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 interface Row { id:number; order_no:string; customer?:{name:string}; warehouse?:{name:string}; order_date:string; total_amount:string; status:string; payment_status:string; items_count:number; created_at:string }
 defineProps<{ orders: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -30,7 +30,7 @@ function tone(s:string){ if(s==='confirmed') return 'info'; if(s==='invoiced') r
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Orders' }]">
     <Head title="Sales Orders" />
     <PageHeader title="Sales Orders" description="Draft → Confirmed (stock reserved) → Invoiced. Linked to quotations." :icon="ClipboardCheck" :actions="[{ label:'New Order', route:'sales.orders.create', icon: Plus }]">
-    <DataTable route-name="sales.orders.index" title="Orders" :columns="columns" :rows="(orders.data as unknown as Record<string,unknown>[])" :meta="orders.meta" search-placeholder="Search order no…">
+    <DataTable route-name="sales.orders.index" title="Orders" :columns="columns" :rows="orders.data" :meta="orders.meta" search-placeholder="Search order no…">
       <template #cell-order_no="{row}"><span class="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600">{{ row.order_no }}</span></template>
       <template #cell-customer="{row}"><span class="text-sm">{{ row.customer?.name || '—' }}</span></template>
       <template #cell-warehouse="{row}"><span class="text-sm">{{ row.warehouse?.name || '—' }}</span></template>

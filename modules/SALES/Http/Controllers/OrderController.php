@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Modules\CORE\Services\ActivityTimelineService;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\CORE\Support\PaginatedResource;
 use Modules\SALES\Models\Order;
@@ -43,11 +44,14 @@ class OrderController extends Controller
         return redirect()->route('sales.orders.show', $o->id)->with('success', "Order {$o->order_no} created.");
     }
 
-    public function show(Order $order): Response
+    public function show(Order $order, ActivityTimelineService $timeline): Response
     {
         $order->load(['customer', 'warehouse', 'quotation', 'items.product', 'invoices']);
 
-        return Inertia::render('SALES::Orders/Show', ['order' => $order]);
+        return Inertia::render('SALES::Orders/Show', [
+            'order' => $order,
+            'activities' => $timeline->for($order),
+        ]);
     }
 
     public function edit(Order $order): Response

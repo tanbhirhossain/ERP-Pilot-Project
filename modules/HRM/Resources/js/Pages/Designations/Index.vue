@@ -3,12 +3,12 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import type { Paginator } from '@core/types';
+import { formatDate } from '@core/Utils/format';
 interface Row { id:number; name:string; code?:string; department?:{name:string}; grade?:string; level?:number; is_active:boolean; created_at:string }
 defineProps<{ designations: Paginator<Row>; departmentOptions:any[] }>();
 const columns: DataTableColumn[] = [
@@ -28,7 +28,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Designations'}]">
     <Head title="Designations"/>
     <PageHeader title="Designations" description="Manage job titles & grades." :icon="Pencil" :actions="[{ label:'New Designation', route:'hrm.designations.create', icon: Plus }]">
-    <DataTable route-name="hrm.designations.index" title="Designations" :columns="columns" :rows="(designations.data as unknown as Record<string,unknown>[])" :meta="designations.meta">
+    <DataTable route-name="hrm.designations.index" title="Designations" :columns="columns" :rows="designations.data" :meta="designations.meta">
       <template #cell-name="{row}"><span class="font-semibold">{{ row.name }}</span></template>
       <template #cell-code="{row}"><span class="text-sm text-muted-foreground">{{ row.code || '—' }}</span></template>
       <template #cell-department="{row}"><span class="text-sm">{{ row.department?.name || '—' }}</span></template>

@@ -4,6 +4,7 @@ namespace Modules\PURCHASE\Services;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Modules\CORE\Services\ApprovalService;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\INVENTORY\Models\Product;
 use Modules\PURCHASE\Interfaces\PurchaseOrderRepositoryInterface;
@@ -56,6 +57,13 @@ class PurchaseOrderService
                 throw new \DomainException('PO total '.number_format($total, 2).' exceeds threshold '.number_format($threshold, 2).' — approval required (purchase.orders.approve).');
             }
         }
+
+        // Generic approval matrix (Phase 1). No-op until an admin activates a
+        // policy for purchase_order; runs before the confirm write so a pending
+        // request + approver notification survive the refusal.
+        app(ApprovalService::class)
+            ->assertAllowed('purchase_order', $order->id, $total, $order->order_no);
+
         $order->update(['status' => 'confirmed', 'confirmed_by' => auth()->id(), 'confirmed_at' => now()]);
 
         return $order->fresh();

@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import type { VendorBill } from '@purchase/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 import { ref } from 'vue';
 import { FileText } from 'lucide-vue-next';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-const props = defineProps<{ bill: any }>();
+import StaticTable from '@core/Components/StaticTable.vue';
+const props = defineProps<{ bill: VendorBill }>();
 const pay = ref({ amount: '', payment_date: new Date().toISOString().slice(0,10), method: 'bank', reference_no: '' });
 function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') return 'warning'; if(s==='paid') return 'success'; return 'neutral'; }
 function submitPay(){ router.post(route('purchase.bills.pay', props.bill.id), pay.value); }
@@ -28,6 +29,7 @@ function submitPay(){ router.post(route('purchase.bills.pay', props.bill.id), pa
           </div>
           <div class="flex gap-2">
             <Link :href="route('purchase.bills.edit', bill.id)"><Button variant="outline" size="sm">Edit</Button></Link>
+            <a :href="route('core.documents.pdf', { type: 'bill', id: bill.id })" target="_blank"><Button variant="outline" size="sm">⬇ PDF</Button></a>
             <Button v-if="bill.status==='draft'" size="sm" @click="router.post(route('purchase.bills.post', bill.id))">Post — AP</Button>
             <Button v-if="bill.status==='posted'" size="sm" variant="destructive" @click="router.post(route('purchase.bills.void', bill.id))">Void — Reverse AP</Button>
             <Link v-if="bill.status==='posted'" :href="route('purchase.returns.create', { bill_id: bill.id })"><Button size="sm" variant="outline">Return / Debit Note</Button></Link>

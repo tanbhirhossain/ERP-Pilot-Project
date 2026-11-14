@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ lots:any; products:any[]; filters:any }>();
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Lots & Expiry' }]">
     <Head title="Lots & Expiry Tracking" />
     <div class="space-y-4 max-w-6xl mx-auto">
-      <div><h1 class="text-xl font-bold">📦 Lot / Batch Tracking + Expiry</h1><p class="text-sm text-muted-foreground">Batch-tracked products generate <code>LOT-XXXXX</code> on receipt. Track <code>qty_remaining</code> per FIFO layer + expiry warnings.</p></div>
+      <div><PageHeader title="Lot / Batch Tracking + Expiry" /><p class="text-sm text-muted-foreground">Batch-tracked products generate <code>LOT-XXXXX</code> on receipt. Track <code>qty_remaining</code> per FIFO layer + expiry warnings.</p></div>
       <div class="bg-card border rounded-xl p-4 flex gap-2">
         <select :value="filters.product_id" @change="(e:any)=>router.get(route('inventory.reports.lots'), {...filters, product_id: e.target.value})" class="h-9 rounded border bg-background px-3 text-sm flex-1"><option value="">All batch-tracked products</option><option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }} — {{ p.sku }}</option></select>
         <label class="flex items-center gap-1 text-sm"><input type="checkbox" :checked="!!filters.expired" @change="(e:any)=>router.get(route('inventory.reports.lots'), {...filters, expired: e.target.checked?1:''})" /> Expired only</label>

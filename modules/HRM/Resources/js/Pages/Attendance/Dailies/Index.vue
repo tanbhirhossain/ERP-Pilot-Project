@@ -2,13 +2,13 @@
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { CalendarCheck, Clock3 } from 'lucide-vue-next';
 import { Trash2 } from 'lucide-vue-next';
-import AdminLayout from '../../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import DataTable, { type DataTableColumn } from '../../../../../../CORE/Resources/js/Components/DataTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { FilterDef, Paginator } from '../../../../../../CORE/Resources/js/types';
+import type { FilterDef, Paginator } from '@core/types';
 interface Row { id:number; employee_id:string; employee?:string; department?:string; designation?:string; duty_date:string; primary_punch_in?:string; primary_punch_out?:string; primary_worked_hours:number; total_overtime_hours:number; grand_total_hours:number; status:string; shift?:string; expected_in_time?:string; expected_out_time?:string }
 const props=defineProps<{ dailies: Paginator<Row>; filterDefs: FilterDef[]; reconcileFrom:string; reconcileTo:string }>();
 const reconcileForm=useForm({from:props.reconcileFrom,to:props.reconcileTo});
@@ -45,7 +45,7 @@ function statusClass(s:string){
           <span class="text-xs text-muted-foreground ml-auto hidden sm:inline">Runs duty resolver for missing statuses</span>
         </form>
       </div>
-      <DataTable route-name="hrm.attendance.dailies.index" title="Daily Attendance" :columns="columns" :rows="(dailies.data as unknown as Record<string,unknown>[])" :meta="dailies.meta" :filter-defs="filterDefs" search-placeholder="Search employee name or ID…">
+      <DataTable route-name="hrm.attendance.dailies.index" title="Daily Attendance" :columns="columns" :rows="dailies.data" :meta="dailies.meta" :filter-defs="filterDefs" search-placeholder="Search employee name or ID…">
         <template #cell-employee_id="{row}"><div class="leading-tight"><div class="font-mono text-sm font-semibold">{{ row.employee_id }}</div><div v-if="row.employee" class="text-xs text-foreground">{{ row.employee }}</div><div v-if="row.department || row.designation" class="text-[11px] text-muted-foreground">{{ row.department ?? '' }}<span v-if="row.department && row.designation"> · </span>{{ row.designation ?? '' }}</div></div></template>
         <template #cell-duty_date="{row}"><span class="font-mono text-sm">{{ row.duty_date }}</span><div v-if="row.shift" class="text-[11px] text-muted-foreground">{{ row.shift }}</div></template>
         <template #cell-primary_punch_in="{row}"><span class="text-sm font-mono">{{ fmt(row.primary_punch_in) }} → {{ fmt(row.primary_punch_out) }}</span><div class="text-xs text-muted-foreground" v-if="row.expected_in_time">Exp: {{ row.expected_in_time }}–{{ row.expected_out_time }}</div></template>

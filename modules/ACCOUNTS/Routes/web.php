@@ -4,10 +4,17 @@ use Illuminate\Support\Facades\Route;
 use Modules\ACCOUNTS\Http\Controllers\AccountController;
 use Modules\ACCOUNTS\Http\Controllers\BankController;
 use Modules\ACCOUNTS\Http\Controllers\BankReconciliationController;
+use Modules\ACCOUNTS\Http\Controllers\BudgetController;
+use Modules\ACCOUNTS\Http\Controllers\BudgetVarianceController;
+use Modules\ACCOUNTS\Http\Controllers\DepreciationController;
 use Modules\ACCOUNTS\Http\Controllers\FiscalYearController;
+use Modules\ACCOUNTS\Http\Controllers\FixedAssetController;
 use Modules\ACCOUNTS\Http\Controllers\JournalController;
+use Modules\ACCOUNTS\Http\Controllers\OpeningBalanceController;
 use Modules\ACCOUNTS\Http\Controllers\OptionsController;
 use Modules\ACCOUNTS\Http\Controllers\ReportController;
+use Modules\ACCOUNTS\Http\Controllers\VatReturnController;
+use Modules\ACCOUNTS\Http\Controllers\WithholdingController;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 
 Route::middleware(['web', 'auth'])->prefix('accounts')->name('accounts.')->group(function (): void {
@@ -76,4 +83,41 @@ Route::middleware(['web', 'auth'])->prefix('accounts')->name('accounts.')->group
     Route::get('reports/receivables-aging', [ReportController::class, 'receivablesAging'])->middleware(PermissionMiddleware::class.':accounts.receivables.view')->name('reports.receivables-aging');
     Route::get('payables', [ReportController::class, 'payables'])->middleware(PermissionMiddleware::class.':accounts.payables.view')->name('payables.index');
     Route::get('receivables', [ReportController::class, 'receivables'])->middleware(PermissionMiddleware::class.':accounts.receivables.view')->name('receivables.index');
+
+    // ── F17: Mushak 9.1 VAT return ───────────────────────────────────────
+    Route::get('reports/vat-return', [VatReturnController::class, 'index'])->middleware(PermissionMiddleware::class.':accounts.reports.view')->name('reports.vat-return');
+    Route::get('reports/vat-return/pdf', [VatReturnController::class, 'pdf'])->middleware(PermissionMiddleware::class.':accounts.reports.view')->name('reports.vat-return.pdf');
+
+    // ── F17: TDS/VDS withholding ─────────────────────────────────────────
+    Route::get('tax/withholding', [WithholdingController::class, 'index'])->middleware(PermissionMiddleware::class.':accounts.withholding.view')->name('tax.withholding.index');
+    Route::post('tax/withholding/rules', [WithholdingController::class, 'storeRule'])->middleware(PermissionMiddleware::class.':accounts.withholding.manage')->name('tax.withholding.rules.store');
+    Route::post('tax/withholding/rules/{rule}/toggle', [WithholdingController::class, 'toggleRule'])->middleware(PermissionMiddleware::class.':accounts.withholding.manage')->name('tax.withholding.rules.toggle');
+    Route::post('tax/withholding/apply', [WithholdingController::class, 'applyToBill'])->middleware(PermissionMiddleware::class.':accounts.withholding.manage')->name('tax.withholding.apply');
+    Route::post('tax/withholding/outward', [WithholdingController::class, 'recordOutward'])->middleware(PermissionMiddleware::class.':accounts.withholding.manage')->name('tax.withholding.outward');
+    Route::post('tax/withholding/{withholding}/certify', [WithholdingController::class, 'certify'])->middleware(PermissionMiddleware::class.':accounts.withholding.manage')->name('tax.withholding.certify');
+    Route::post('tax/withholding/deposit', [WithholdingController::class, 'deposit'])->middleware(PermissionMiddleware::class.':accounts.withholding.manage')->name('tax.withholding.deposit');
+
+    // ── F15: Fixed assets & depreciation ────────────────────────────────
+    Route::get('assets', [FixedAssetController::class, 'index'])->middleware(PermissionMiddleware::class.':accounts.assets.view')->name('assets.index');
+    Route::post('assets', [FixedAssetController::class, 'store'])->middleware(PermissionMiddleware::class.':accounts.assets.manage')->name('assets.store');
+    Route::post('assets/{asset}/capitalize', [FixedAssetController::class, 'capitalize'])->middleware(PermissionMiddleware::class.':accounts.assets.manage')->name('assets.capitalize');
+    Route::post('assets/{asset}/dispose', [FixedAssetController::class, 'dispose'])->middleware(PermissionMiddleware::class.':accounts.assets.manage')->name('assets.dispose');
+    Route::get('assets/depreciation', [DepreciationController::class, 'index'])->middleware(PermissionMiddleware::class.':accounts.assets.view')->name('assets.depreciation');
+    Route::post('assets/depreciation', [DepreciationController::class, 'store'])->middleware(PermissionMiddleware::class.':accounts.assets.manage')->name('assets.depreciation.run');
+
+    // ── F14: Budgets & variance ──────────────────────────────────────────
+    Route::get('budgets/variance', [BudgetVarianceController::class, 'index'])->middleware(PermissionMiddleware::class.':accounts.budgets.view')->name('budgets.variance');
+    Route::get('budgets', [BudgetController::class, 'index'])->middleware(PermissionMiddleware::class.':accounts.budgets.view')->name('budgets.index');
+    Route::post('budgets', [BudgetController::class, 'store'])->middleware(PermissionMiddleware::class.':accounts.budgets.manage')->name('budgets.store');
+    Route::post('budgets/{budget}/lines', [BudgetController::class, 'addLine'])->middleware(PermissionMiddleware::class.':accounts.budgets.manage')->name('budgets.lines.store');
+    Route::delete('budgets/lines/{line}', [BudgetController::class, 'removeLine'])->middleware(PermissionMiddleware::class.':accounts.budgets.manage')->name('budgets.lines.destroy');
+    Route::post('budgets/{budget}/approve', [BudgetController::class, 'approve'])->middleware(PermissionMiddleware::class.':accounts.budgets.manage')->name('budgets.approve');
+    Route::post('budgets/{budget}/lock', [BudgetController::class, 'lock'])->middleware(PermissionMiddleware::class.':accounts.budgets.manage')->name('budgets.lock');
+
+    // ── Opening-balance take-on wizard (Phase 1 F4) ─────────────────────
+    Route::get('opening-balances', [OpeningBalanceController::class, 'index'])->middleware(PermissionMiddleware::class.':accounts.opening.manage')->name('opening-balances.index');
+    Route::post('opening-balances/coa', [OpeningBalanceController::class, 'postCoa'])->middleware(PermissionMiddleware::class.':accounts.opening.manage')->name('opening-balances.coa');
+    Route::post('opening-balances/ar', [OpeningBalanceController::class, 'postAr'])->middleware(PermissionMiddleware::class.':accounts.opening.manage')->name('opening-balances.ar');
+    Route::post('opening-balances/ap', [OpeningBalanceController::class, 'postAp'])->middleware(PermissionMiddleware::class.':accounts.opening.manage')->name('opening-balances.ap');
+    Route::post('opening-balances/stock', [OpeningBalanceController::class, 'postStock'])->middleware(PermissionMiddleware::class.':accounts.opening.manage')->name('opening-balances.stock');
 });

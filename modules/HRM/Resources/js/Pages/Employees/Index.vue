@@ -3,12 +3,12 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, Eye } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import type { Paginator } from '@core/types';
+import { formatDate } from '@core/Utils/format';
 interface Row { id:number; employee_id:string; biometric_id?:string|null; full_name:string; email?:string; phone?:string; department?:{name:string}; designation?:{name:string}; employment_type:string; status:string; joining_date?:string }
 defineProps<{ employees: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -29,7 +29,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Employees'}]">
     <Head title="Employees"/>
     <PageHeader title="Employees" description="Central HR directory — profiles, salaries, policies linked." :icon="Pencil" :actions="[{ label:'Add Employee', route:'hrm.employees.create', icon: Plus }]">
-    <DataTable route-name="hrm.employees.index" title="Employees" :columns="columns" :rows="(employees.data as unknown as Record<string,unknown>[])" :meta="employees.meta" search-placeholder="Search by ID, name, email...">
+    <DataTable route-name="hrm.employees.index" title="Employees" :columns="columns" :rows="employees.data" :meta="employees.meta" search-placeholder="Search by ID, name, email...">
       <template #cell-employee_id="{row}"><span class="font-mono text-sm font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded">{{ row.employee_id }}</span></template>
       <template #cell-biometric_id="{row}"><span class="font-mono text-xs px-1.5 py-0.5 rounded" :class="row.biometric_id ? 'bg-emerald-500/10 text-emerald-600 font-semibold' : 'bg-amber-500/10 text-amber-600'">{{ row.biometric_id || '—' }}</span></template>
       <template #cell-full_name="{row}"><div><p class="font-semibold">{{ row.full_name }}</p><p class="text-xs text-muted-foreground">{{ row.email || row.phone || '' }}</p></div></template>

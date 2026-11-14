@@ -10,6 +10,7 @@ use Modules\ACCOUNTS\DTO\JournalLineData;
 use Modules\ACCOUNTS\Interfaces\AccountsPostingProviderInterface;
 use Modules\ACCOUNTS\Models\Bank;
 use Modules\ACCOUNTS\Support\ChartOfAccounts;
+use Modules\CORE\Services\ApprovalService;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\INVENTORY\Interfaces\InventoryStockProviderInterface;
 use Modules\INVENTORY\Interfaces\InventoryValuationProviderInterface;
@@ -20,6 +21,7 @@ use Modules\SALES\Models\Delivery;
 use Modules\SALES\Models\Invoice;
 use Modules\SALES\Models\Order;
 use Modules\SALES\Models\Payment;
+use Modules\SALES\Support\LinePricer;
 
 class InvoiceService
 {
@@ -59,6 +61,19 @@ class InvoiceService
     {
         if (! $invoice->isDraft()) {
             throw new \DomainException('Only draft can be posted.');
+        }
+
+        // Generic approval matrix (Phase 1) — before the transaction so the
+        // pending request survives a refusal. No-op without an active policy.
+        app(ApprovalService::class)
+            ->assertAllowed('sales_invoice', $invoice->id, (float) $invoice->total_amount, $invoice->invoice_no);
+
+        // Credit control (Phase 1): only the unpaid portion is new credit. A
+        // cash-paid invoice adds nothing to exposure. Before the transaction so
+        // a refusal never deducts stock.
+        if (config('sales.credit.enforce_on_invoice', true)) {
+            $due = (float) $invoice->total_amount - (float) $invoice->paid_amount;
+            app(CreditControlService::class)->assertWithinLimit($invoice->customer_id, $due, 'invoice');
         }
 
         return DB::transaction(function () use ($invoice): Invoice {
@@ -260,6 +275,8 @@ class InvoiceService
                     $it['uom_id'] = $it['uom_id'] ?? $p->uom_id;
                 }
             }
+            // Contract/tier pricing when no explicit price was typed (Phase 1).
+            LinePricer::apply($it, isset($data['customer_id']) ? (int) $data['customer_id'] : null, $data['invoice_date'] ?? null);
             $qty = (float) ($it['qty'] ?? 0);
             $price = (float) ($it['unit_price'] ?? 0);
             $discPct = (float) ($it['discount_pct'] ?? 0);

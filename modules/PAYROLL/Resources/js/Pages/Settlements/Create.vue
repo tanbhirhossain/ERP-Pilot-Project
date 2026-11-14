@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import EmployeeSearchSelect from '../../Components/EmployeeSearchSelect.vue';
+import type { SelectOption } from '@core/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-defineProps<{ employeeOptions: any[] }>();
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+defineProps<{ employeeOptions: SelectOption[] }>();
 const f = useForm({
   employee_id: '',
   settlement_date: new Date().toISOString().slice(0, 10),
@@ -18,6 +21,7 @@ const f = useForm({
   deductions: 0,
   deductions_reason: '',
 });
+useUnsavedGuard(() => f.isDirty);
 function save() { f.post(route('payroll.settlements.store')); }
 </script>
 
@@ -25,7 +29,7 @@ function save() { f.post(route('payroll.settlements.store')); }
   <AdminLayout :breadcrumbs="[{ title: 'Payroll' }, { title: 'Settlements', href: route('payroll.settlements.index') }, { title: 'New' }]">
     <Head title="Calculate final settlement" />
     <div class="max-w-4xl rounded-xl border bg-card p-6">
-      <h1 class="text-xl font-bold">Calculate final settlement</h1>
+      <PageHeader title="Calculate final settlement" />
       <p class="mt-1 text-sm text-muted-foreground">Salary and gratuity are calculated from HRM salary history and the active gratuity policy. Leave encashment and manual adjustments require review and a reason.</p>
       <form @submit.prevent="save" class="mt-5 space-y-4">
         <div><Label>Employee</Label><EmployeeSearchSelect v-model="f.employee_id" :options="employeeOptions" /></div>

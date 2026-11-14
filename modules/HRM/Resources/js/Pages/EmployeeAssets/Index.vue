@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { Head, router} from '@inertiajs/vue3';
 import { ref, reactive } from 'vue';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import { Archive, Package, AlertTriangle, CheckCircle, ArrowRightLeft, Plus, Undo2 } from 'lucide-vue-next';
-import Pagination from '../../../../../CORE/Resources/js/Components/Pagination.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import Pagination from '@core/Components/Pagination.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 
 defineProps<{ assets: any; assignments: any; stats: any }>();
 
@@ -17,8 +17,8 @@ const showCreate = ref(false);
 const showIssue = ref(false);
 
 const createForm = reactive({ name: '', category: 'ID Card', serial_no: '', unit_cost: 0 as any, description: '' });
-const issueForm = reactive({ employee_id: null as any, asset_id: null as any, issued_date: new Date().toISOString().slice(0,10), expected_return_date: '', issue_condition: 'Good', remarks: '' });
-const returnState = reactive({ id: null as any, returned_date: new Date().toISOString().slice(0,10), return_condition: 'Good', recovery_amount: 0 as any, remarks: '' });
+const issueForm = reactive({ employee_id: null as number | string | null, asset_id: null as number | string | null, issued_date: new Date().toISOString().slice(0,10), expected_return_date: '', issue_condition: 'Good', remarks: '' });
+const returnState = reactive({ id: null as number | string | null, returned_date: new Date().toISOString().slice(0,10), return_condition: 'Good', recovery_amount: 0 as any, remarks: '' });
 
 const categories = ['ID Card','Laptop','Mobile','SIM','Uniform','Locker','Tool','Vehicle','Access Card','Other'];
 

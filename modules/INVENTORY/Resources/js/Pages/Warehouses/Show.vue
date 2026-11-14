@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
+import type { Warehouse as WarehouseEntity } from '@inventory/types';
 import { Warehouse, MapPin, Boxes } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-defineProps<{ warehouse:any; stockSummary:any }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+defineProps<{ warehouse:WarehouseEntity; stockSummary:any }>();
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Warehouses', href: route('inventory.warehouses.index') }, { title: warehouse.code }]">

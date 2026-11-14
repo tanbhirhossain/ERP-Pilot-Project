@@ -3,13 +3,13 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Truck, Plus, Eye, Pencil, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatDate } from '@core/Utils/format';
 interface Row { id:number; delivery_no:string; customer?:{name:string}; warehouse?:{name:string}; delivery_date:string; status:string; items_count:number }
 defineProps<{ deliveries: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -29,7 +29,7 @@ function tone(s:string){ if(s==='shipped') return 'success'; if(s==='delivered')
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Deliveries' }]">
     <Head title="Delivery Challans" />
     <PageHeader title="Delivery Challans" description="Order → Delivery (stock deducted on Ship) → Invoice. Challan print ready." :icon="Truck" :actions="[{ label:'New Delivery', route:'sales.deliveries.create', icon: Plus }]">
-    <DataTable route-name="sales.deliveries.index" title="Deliveries" :columns="columns" :rows="(deliveries.data as unknown as Record<string,unknown>[])" :meta="deliveries.meta" search-placeholder="Search delivery no…">
+    <DataTable route-name="sales.deliveries.index" title="Deliveries" :columns="columns" :rows="deliveries.data" :meta="deliveries.meta" search-placeholder="Search delivery no…">
       <template #cell-delivery_no="{row}"><span class="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600">{{ row.delivery_no }}</span></template>
       <template #cell-customer="{row}"><span class="text-sm">{{ row.customer?.name || '—' }}</span></template>
       <template #cell-warehouse="{row}"><span class="text-sm">{{ row.warehouse?.name || '—' }}</span></template>

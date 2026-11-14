@@ -3,13 +3,13 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, Eye, Users} from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatCurrency } from '@core/Utils/format';
 
 interface Row { id:number; partner_code:string; name:string; legal_name?:string; type:string; group?:{name:string}; phone?:string; credit_limit:string|number; current_balance:string|number; is_active:boolean; is_verified:boolean; verification_status:string; created_at:string }
 defineProps<{ partners: Paginator<Row>; groupOptions:any[]; type?:string }>();
@@ -35,7 +35,7 @@ function statusTone(s:string){ if(s==='approved') return 'success' as const; if(
   <AdminLayout :breadcrumbs="[{ title: 'Ven & Cust' }, { title: 'Customers' }]">
     <Head title="Customers" />
     <PageHeader title="Customers — Customer directory" description="Manage customers, credit limits, price lists." :icon="Users" :actions="[{ label:'Groups', route:'partner.customers.create', icon: Plus }]">
-    <DataTable route-name="partner.customers.index" title="Customers" :columns="columns" :rows="(partners.data as unknown as Record<string,unknown>[])" :meta="partners.meta" search-placeholder="Search by code, name, phone, TIN…">
+    <DataTable route-name="partner.customers.index" title="Customers" :columns="columns" :rows="partners.data" :meta="partners.meta" search-placeholder="Search by code, name, phone, TIN…">
       <template #cell-partner_code="{row}"><span class="font-mono text-sm font-semibold bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded">{{ row.partner_code }}</span></template>
       <template #cell-name="{row}"><div><p class="font-semibold">{{ row.name }}</p><p class="text-xs text-muted-foreground">{{ row.legal_name || row.type }}</p></div></template>
       <template #cell-group="{row}"><span class="text-sm">{{ row.group?.name || '—' }}</span></template>

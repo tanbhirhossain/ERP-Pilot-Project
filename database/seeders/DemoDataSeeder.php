@@ -14,6 +14,7 @@ use Modules\ACCOUNTS\Services\BankService;
 use Modules\ACCOUNTS\Services\JournalService;
 use Modules\CORE\Models\User;
 use Modules\HRM\Models\Employee\Employee;
+use Modules\HRM\Models\Leave\LeaveType;
 use Modules\HRM\Models\Roster\RosterOvertime;
 use Modules\HRM\Services\Attendance\AttendanceProcessingService;
 use Modules\HRM\Services\LeaveRequestService;
@@ -235,13 +236,25 @@ class DemoDataSeeder extends Seeder
     /** Holidays, the payroll-settings row and a tax configuration. */
     private function referenceData(): void
     {
-        if (! DB::table('hrm_holidays')->exists()) {
-            $now = now();
-            DB::table('hrm_holidays')->insert([
-                ['name' => 'Eid-ul-Fitr', 'holiday_date' => self::PAY_YEAR.'-03-20', 'holiday_type' => 'Festival Holiday', 'notes' => self::MARKER, 'created_at' => $now, 'updated_at' => $now],
-                ['name' => 'Independence Day', 'holiday_date' => self::PAY_YEAR.'-03-26', 'holiday_type' => 'Public Holiday', 'notes' => self::MARKER, 'created_at' => $now, 'updated_at' => $now],
-                ['name' => 'Victory Day', 'holiday_date' => self::PAY_YEAR.'-12-16', 'holiday_type' => 'Public Holiday', 'notes' => self::MARKER, 'created_at' => $now, 'updated_at' => $now],
-            ]);
+        // Per-name guard: the base seed now carries a calendar of its own (AMZOctober2026CalendarSeeder
+        // puts Durga puja on the books), so "is the table empty at all" would silently skip all three
+        // demo holidays and take the hrm_holidays floor down with it.
+        $now = now();
+        $demoHolidays = [];
+        foreach ([
+            ['Eid-ul-Fitr', self::PAY_YEAR.'-03-20', 'Festival Holiday'],
+            ['Independence Day', self::PAY_YEAR.'-03-26', 'Public Holiday'],
+            ['Victory Day', self::PAY_YEAR.'-12-16', 'Public Holiday'],
+        ] as [$name, $date, $type]) {
+            if (DB::table('hrm_holidays')->where('name', $name)->exists()) {
+                continue;
+            }
+
+            $demoHolidays[] = ['name' => $name, 'holiday_date' => $date, 'holiday_type' => $type, 'notes' => self::MARKER, 'created_at' => $now, 'updated_at' => $now];
+        }
+
+        if ($demoHolidays !== []) {
+            DB::table('hrm_holidays')->insert($demoHolidays);
         }
 
         if (! DB::table('payroll_settings')->exists()) {
@@ -386,7 +399,11 @@ class DemoDataSeeder extends Seeder
     {
         $now = now();
 
-        if (! DB::table('roster_shifts')->where('is_fallback', false)->exists()) {
+        // Named lookup, deliberately: `RosterShiftSeeder` is now registered in the main DatabaseSeeder,
+        // so real shift rows exist on a fresh base seed. Probing "does any non-fallback shift exist"
+        // (the old guard) made this block skip while the lookup below still wanted 'General Day'
+        // specifically — shift_id came back 0 and every demo duty hit the foreign key.
+        if (! DB::table('roster_shifts')->where('shift_name', 'General Day')->exists()) {
             DB::table('roster_shifts')->insert([
                 [
                     'shift_name' => 'General Day',
@@ -404,6 +421,7 @@ class DemoDataSeeder extends Seeder
         }
 
         $shiftId = (int) DB::table('roster_shifts')->where('shift_name', 'General Day')->value('id');
+        abort_if($shiftId <= 0, 500, 'DemoDataSeeder: the \'General Day\' shift is missing after insert.');
         $duties = app(RosterDutyService::class);
 
         foreach ($this->employees as $employee) {
@@ -438,6 +456,18 @@ class DemoDataSeeder extends Seeder
             ['Maternity Leave', 'ML', 90],
             ['Study Leave', 'STL', 7],
         ] as [$name, $code, $days]) {
+            // `LeaveTypeSeeder` is registered in the main DatabaseSeeder now, so the canonical types
+            // already exist on a fresh base seed and `leave_types.name` is UNIQUE — a blind create threw.
+            // Reuse whatever the catalogue provides (untouched, entitlement and all) and only add the
+            // demo-only types it does not carry. Same pattern as the shifts and holidays below.
+            $existing = LeaveType::query()->where('name', $name)->first();
+
+            if ($existing !== null) {
+                $leaveTypes[] = $existing;
+
+                continue;
+            }
+
             $leaveTypes[] = $types->create([
                 'name' => $name,
                 'code' => $code,

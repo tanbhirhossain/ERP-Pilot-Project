@@ -37,6 +37,11 @@
             /* Specify a set of entries that re-map imports to additional lookup locations. */ "@/*": ["./resources/js/*"],
             "@core/*": ["./modules/CORE/Resources/js/*"],
             "@hrm/*": ["./modules/HRM/Resources/js/*"],
+            "@partner/*": ["./modules/PARTNER/Resources/js/*"],
+            "@inventory/*": ["./modules/INVENTORY/Resources/js/*"],
+            "@accounts/*": ["./modules/ACCOUNTS/Resources/js/*"],
+            "@sales/*": ["./modules/SALES/Resources/js/*"],
+            "@purchase/*": ["./modules/PURCHASE/Resources/js/*"],
             "ziggy-js": ["./vendor/tightenco/ziggy"]
         },
         // "rootDirs": [],                                   /* Allow multiple folders to be treated as one when resolving modules. */

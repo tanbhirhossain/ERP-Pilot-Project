@@ -17,11 +17,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { HandCoins, Banknote, CreditCard, Users, ReceiptText, AlertCircle, ArrowLeft, Filter, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
 
 interface Row {
   id: number;

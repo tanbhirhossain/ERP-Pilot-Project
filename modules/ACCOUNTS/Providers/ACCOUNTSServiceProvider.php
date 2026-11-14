@@ -3,6 +3,7 @@
 namespace Modules\ACCOUNTS\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Modules\ACCOUNTS\Imports\CoaImport;
 use Modules\ACCOUNTS\Interfaces\AccountRepositoryInterface;
 use Modules\ACCOUNTS\Interfaces\AccountsPostingProviderInterface;
 use Modules\ACCOUNTS\Interfaces\BankRepositoryInterface;
@@ -13,6 +14,7 @@ use Modules\ACCOUNTS\Repositories\BankRepository;
 use Modules\ACCOUNTS\Repositories\FiscalYearRepository;
 use Modules\ACCOUNTS\Repositories\JournalRepository;
 use Modules\ACCOUNTS\Services\AccountsPostingProvider;
+use Modules\CORE\Services\ImportService;
 
 class ACCOUNTSServiceProvider extends ServiceProvider
 {
@@ -37,5 +39,9 @@ class ACCOUNTSServiceProvider extends ServiceProvider
             $this->loadRoutesFrom(__DIR__.'/../Routes/api.php');
         }
         $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
+
+        // Register this module's importer into the shared orchestrator (Phase 1).
+        $this->app->make(ImportService::class)
+            ->register('coa', CoaImport::class);
     }
 }

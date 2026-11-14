@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { Category } from '@inventory/types';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-const props=defineProps<{ category:any; parentOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props=defineProps<{ category:Category; parentOptions:SelectOption[] }>();
 const form=useForm({ name:props.category.name, code:props.category.code??'', parent_id:props.category.parent_id, description:props.category.description??'', sort_order:props.category.sort_order??0, is_active:props.category.is_active });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('inventory.categories.update', props.category.id)); }
 </script>
 <template>

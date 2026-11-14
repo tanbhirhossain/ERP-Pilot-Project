@@ -3,12 +3,12 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, Wifi, WifiOff, Play } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import type { Paginator } from '@core/types';
+import { formatDate } from '@core/Utils/format';
 interface Row { id:number; name:string; ip_address:string; port:number; serial_number?:string; location?:string; status:string; is_enabled:boolean; auto_sync_enabled:boolean; last_sync_at?:string }
 defineProps<{ devices: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -23,7 +23,7 @@ function testDevice(id:number){ router.post(route('hrm.devices.test',id),{},{pre
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Biometric Devices'}]">
     <Head title="Biometric Devices"/>
     <PageHeader title="Biometric Devices" description="ZKTeCo machines — configure IP/port & sync settings." :icon="Wifi" :actions="[{ label:'Add Device', route:'hrm.devices.create', icon: Plus }]">
-    <DataTable route-name="hrm.devices.index" title="Biometric Devices" :columns="columns" :rows="(devices.data as unknown as Record<string,unknown>[])" :meta="devices.meta">
+    <DataTable route-name="hrm.devices.index" title="Biometric Devices" :columns="columns" :rows="devices.data" :meta="devices.meta">
       <template #cell-name="{row}"><div><p class="font-semibold flex items-center gap-1.5"><Fingerprint class="size-4 text-muted-foreground"/>{{ row.name }}</p><p class="text-xs text-muted-foreground">{{ row.port }} • {{ row.serial_number || 'No SN' }}</p></div></template>
       <template #cell-ip_address="{row}"><span class="font-mono text-sm bg-muted px-1.5 py-0.5 rounded">{{ row.ip_address }}:{{ row.port }}</span></template>
       <template #cell-location="{row}"><span class="text-sm">{{ row.location || '—' }}</span></template>

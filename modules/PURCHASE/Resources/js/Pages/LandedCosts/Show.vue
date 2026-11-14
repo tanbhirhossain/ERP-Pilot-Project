@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Head, router, Link } from '@inertiajs/vue3';
+import type { LandedCost } from '@purchase/types';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{landedCost:any}>();
-function allocate(id:number){ if(confirm('Allocate landed cost? Will bump FIFO layers & stock avg_cost and post JV (Dr Inventory / Cr Expenses).')) router.post(route('purchase.landed-costs.allocate', id)); }
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
+defineProps<{landedCost:LandedCost}>();
+async function allocate(id:number){ if(await confirm({ description: 'Allocate landed cost? Will bump FIFO layers & stock avg_cost and post JV (Dr Inventory / Cr Expenses).', danger: false })) router.post(route('purchase.landed-costs.allocate', id)); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: 'Landed Costs', href: route('purchase.landed-costs.index') }, { title: landedCost.lc_no }]">

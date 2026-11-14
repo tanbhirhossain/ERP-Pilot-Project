@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
+import type { Product } from '@inventory/types';
 import { Pencil, Tag, Warehouse, Layers } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
-defineProps<{ product:any; totalStock:number; totalValue:number }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
+defineProps<{ product:Product; totalStock:number; totalValue:number }>();
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Products', href: route('inventory.products.index') }, { title: product.sku }]">

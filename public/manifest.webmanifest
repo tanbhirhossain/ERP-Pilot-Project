@@ -1,0 +1,58 @@
+{
+  "name": "ERP Pilot — Point of Sale",
+  "short_name": "ERP POS",
+  "description": "The ERP Pilot till, installable on a counter tablet: scan, tender and keep selling when the network drops, with the queue posting itself when it returns.",
+  "id": "/sales/pos/terminal",
+  "start_url": "/sales/pos/terminal",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#2b3ff3",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "/pwa/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/pwa/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Offline queue",
+      "short_name": "Queue",
+      "description": "What this device has queued, and what the ledger has accepted from it.",
+      "url": "/sales/pos/offline",
+      "icons": [{ "src": "/pwa/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Day-end & collections",
+      "short_name": "Day-end",
+      "description": "Each drawer's takings, and the journal the day posted to.",
+      "url": "/sales/pos/reports/day-end",
+      "icons": [{ "src": "/pwa/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

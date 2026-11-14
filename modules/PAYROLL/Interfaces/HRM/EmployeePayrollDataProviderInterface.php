@@ -15,6 +15,13 @@ interface EmployeePayrollDataProviderInterface
 
     public function countEmployeesForPayroll(string $periodStart, string $periodEnd): int;
 
+    /**
+     * Active employees a sheet for this period cannot build a slip for, with a reason.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function unpayableForPeriod(string $periodStart, string $periodEnd, int $limit = 200): Collection;
+
     public function employeeForPayroll(string $employeeId, string $periodStart, string $periodEnd): ?EmployeePayrollData;
 
     public function employeeForSettlement(string $employeeId, string $periodStart, string $periodEnd): ?EmployeePayrollData;

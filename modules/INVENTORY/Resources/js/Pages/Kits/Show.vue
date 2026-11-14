@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
+import type { Kit } from '@inventory/types';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{kit:any}>();
-function complete(id:number){ if(confirm('Complete kitting? Components will be consumed (FIFO) and finished kit produced.')) router.post(route('inventory.kits.complete', id)); }
-function cancel(id:number){ if(confirm('Cancel kit?')) router.post(route('inventory.kits.cancel', id)); }
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
+defineProps<{kit:Kit}>();
+async function complete(id:number){ if(await confirm({ description: 'Complete kitting? Components will be consumed (FIFO) and finished kit produced.', danger: false })) router.post(route('inventory.kits.complete', id)); }
+async function cancel(id:number){ if(await confirm({ description: 'Cancel kit?', danger: true })) router.post(route('inventory.kits.cancel', id)); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Kits / BOM Production', href: route('inventory.kits.index') }, { title: kit.kit_no }]">

@@ -11,7 +11,7 @@ class PayrollCutlist extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['generated_at' => 'datetime'];
+    protected $casts = ['generated_at' => 'datetime', 'approved_at' => 'datetime', 'approved_by' => 'integer'];
 
     public function items(): HasMany
     {

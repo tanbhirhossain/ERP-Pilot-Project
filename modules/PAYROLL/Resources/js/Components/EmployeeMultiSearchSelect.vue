@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 interface EmployeeOption {
   value: string;
@@ -22,6 +22,13 @@ const remoteOptions = ref<EmployeeOption[]>([]);
 const selectedCache = ref<Record<string, EmployeeOption>>({});
 const loading = ref(false);
 const searchError = ref('');
+const WINDOW_START = 80;
+const WINDOW_STEP = 120;
+const BROWSE_LIMIT = 200;
+const SEARCH_LIMIT = 50;
+const DEBOUNCE_MS = 250;
+
+const browseTruncated = ref(false);
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 let controller: AbortController | null = null;
 let requestVersion = 0;
@@ -34,15 +41,27 @@ const allOptions = computed(() => {
   return [...unique.values()];
 });
 
-const visibleOptions = computed(() => {
+const filteredOptions = computed(() => {
   const term = query.value.trim().toLowerCase();
-  const matches = term
-    ? allOptions.value.filter((item) => item.label.toLowerCase().includes(term)
-      || (item.description ?? '').toLowerCase().includes(term)
-      || String(item.value).toLowerCase().includes(term))
-    : allOptions.value;
-  return matches.slice(0, 50);
+  if (!term) return allOptions.value;
+
+  return allOptions.value.filter((item) => item.label.toLowerCase().includes(term)
+    || (item.description ?? '').toLowerCase().includes(term)
+    || String(item.value).toLowerCase().includes(term));
 });
+
+/**
+ * Windowed, with the remainder one click away. A silent 50-row ceiling is what made these pickers look as
+ * though they "cannot see all employees": everyone past the first 50 names was unreachable, and nothing on
+ * screen said a 51st existed.
+ */
+const visibleCount = ref(WINDOW_START);
+const visibleOptions = computed(() => filteredOptions.value.slice(0, visibleCount.value));
+const hiddenCount = computed(() => Math.max(0, filteredOptions.value.length - visibleOptions.value.length));
+
+function showMore(): void {
+  visibleCount.value += WINDOW_STEP;
+}
 
 const selectedOptions = computed(() => props.modelValue.map((id) =>
   allOptions.value.find((item) => String(item.value) === String(id)) ?? { value: id, label: id },
@@ -74,43 +93,58 @@ function remove(id: string): void {
   emit('update:modelValue', props.modelValue.filter((value) => value !== id));
 }
 
+async function runSearch(term: string): Promise<void> {
+  const requestController = new AbortController();
+  controller = requestController;
+  const version = ++requestVersion;
+  loading.value = true;
+
+  try {
+    const endpoint = route('hrm.api.options', { type: 'employees' });
+    // An empty term means "give me the roster", not "give me nothing" — that is the browse path.
+    const limit = term ? SEARCH_LIMIT : BROWSE_LIMIT;
+    const response = await fetch(`${endpoint}?search=${encodeURIComponent(term)}&limit=${limit}`, {
+      signal: requestController.signal,
+      headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin',
+    });
+    if (!response.ok) throw new Error(`Employee search failed (${response.status}).`);
+    const payload = await response.json() as { items?: EmployeeOption[] };
+
+    if (version === requestVersion) {
+      remoteOptions.value = Array.isArray(payload.items) ? payload.items : [];
+      browseTruncated.value = term === '' && remoteOptions.value.length >= limit;
+    }
+  } catch (error) {
+    if ((error as Error).name !== 'AbortError' && version === requestVersion) {
+      searchError.value = 'Could not search employees. Check your connection or permissions and try again.';
+    }
+  } finally {
+    if (version === requestVersion) loading.value = false;
+  }
+}
+
 watch(query, (value) => {
   if (debounceTimer) clearTimeout(debounceTimer);
   controller?.abort();
-  const version = ++requestVersion;
+  requestVersion++;
   searchError.value = '';
+  visibleCount.value = WINDOW_START;
   const term = value.trim();
 
-  if (term.length < 2) {
-    remoteOptions.value = [];
+  if (!term) {
+    // Keep the browse list that is already there: clearing the box must not empty the picker.
     loading.value = false;
     return;
   }
 
-  remoteOptions.value = [];
-  debounceTimer = setTimeout(async () => {
-    const requestController = new AbortController();
-    controller = requestController;
-    loading.value = true;
+  debounceTimer = setTimeout(() => { void runSearch(term); }, DEBOUNCE_MS);
+});
 
-    try {
-      const endpoint = route('hrm.api.options', { type: 'employees' });
-      const response = await fetch(`${endpoint}?search=${encodeURIComponent(term)}&limit=50`, {
-        signal: requestController.signal,
-        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        credentials: 'same-origin',
-      });
-      if (!response.ok) throw new Error(`Employee search failed (${response.status}).`);
-      const payload = await response.json() as { items?: EmployeeOption[] };
-      if (version === requestVersion) remoteOptions.value = Array.isArray(payload.items) ? payload.items : [];
-    } catch (error) {
-      if ((error as Error).name !== 'AbortError' && version === requestVersion) {
-        searchError.value = 'Could not search employees. Check your connection or permissions and try again.';
-      }
-    } finally {
-      if (version === requestVersion) loading.value = false;
-    }
-  }, 250);
+// The multi picker has no dropdown to open, so the roster is fetched as soon as the form mounts —
+// provided the page seeded it with nothing, which is the case when it has more employees than its cap.
+onMounted(() => {
+  if (!props.options.length) void runSearch('');
 });
 
 watch(() => props.modelValue, (ids) => {
@@ -162,8 +196,14 @@ onBeforeUnmount(() => {
         <span>{{ employee.label }}</span>
       </label>
       <p v-if="!visibleOptions.length" class="p-2 text-xs text-muted-foreground">
-        {{ loading ? 'Searching…' : query.trim().length < 2 ? 'Type at least 2 characters to search.' : 'No employees match.' }}
+        {{ loading ? 'Searching…' : query.trim() ? 'No employees match.' : 'Type a name or employee ID to search the whole roster.' }}
       </p>
+      <div v-else-if="browseTruncated || hiddenCount" class="border-t px-2 pt-2 text-xs text-muted-foreground">
+        <p v-if="browseTruncated && !query.trim()">Showing the first {{ BROWSE_LIMIT }} employees — type to search all of them.</p>
+        <button v-if="hiddenCount" type="button" class="font-medium text-primary hover:underline" @click="showMore">
+          Show {{ Math.min(WINDOW_STEP, hiddenCount) }} more · {{ visibleOptions.length }} of {{ filteredOptions.length }} listed
+        </button>
+      </div>
     </div>
     <p class="text-xs text-muted-foreground">{{ modelValue.length }} employee(s) selected.</p>
   </div>

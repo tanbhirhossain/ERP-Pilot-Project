@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { Warehouse } from '@inventory/types';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-const props=defineProps<{ warehouse:any; userOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props=defineProps<{ warehouse:Warehouse; userOptions:SelectOption[] }>();
 const form=useForm({ name:props.warehouse.name, code:props.warehouse.code, type:props.warehouse.type, address_line:props.warehouse.address_line??'', city:props.warehouse.city??'', district:props.warehouse.district??'', phone:props.warehouse.phone??'', email:props.warehouse.email??'', manager_user_id:props.warehouse.manager_user_id, is_default:props.warehouse.is_default, is_active:props.warehouse.is_active, allow_negative_stock:props.warehouse.allow_negative_stock });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('inventory.warehouses.update', props.warehouse.id)); }
 </script>
 <template>

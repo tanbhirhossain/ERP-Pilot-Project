@@ -17,7 +17,20 @@ class SyncDeviceJob implements ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 300;
+    /**
+     * Ceiling for this job alone: the service's own budget (`hrm.sync.budget_seconds`, 240s default) plus
+     * room for the device to answer. Note that enforcing it needs ext-pcntl, which a Windows PHP usually
+     * has not — there, `set_time_limit(0)` below plus the service's budget are what actually bound the run,
+     * which is why the budget is the primary control and this number the safety net.
+     */
+    public int $timeout = 420;
+
+    /**
+     * The worker re-reserves a job after `queue.connections.database.retry_after` (400s in this app), and a job
+     * that is still legitimately running at that point is handed to a second worker while the first is mid
+     * flight. So the reserve window for this job has to outlast its own ceiling — the sync bounds itself at hrm.sync.budget_seconds (240s default) plus the device transfer.
+     */
+    public int $retryAfter = 480;
 
     public int $backoff = 5;
 
@@ -30,12 +43,11 @@ class SyncDeviceJob implements ShouldQueue
 
     public function handle(AttendanceSyncService $sync): void
     {
+        // A queue worker is a long-lived process that owns its own lifetime, so nothing here may *shorten*
+        // PHP's limit: doing that is what killed `queue:work` at 300s while the sync still had records to
+        // read. The bounded work is `hrm.sync.budget_seconds` inside AttendanceSyncService, which stops the
+        // sync politely and reports `partial` instead of dying.
         @set_time_limit(0);
-        @ini_set('max_execution_time', '0');
-        // Also set max for worker process
-        if (function_exists('set_time_limit')) {
-            @set_time_limit(0);
-        }
         $device = BiometricDevice::find($this->deviceId);
         if (! $device) {
             Log::warning('SyncDeviceJob: device not found', ['id' => $this->deviceId]);

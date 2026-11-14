@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { Head, useForm} from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import { computed } from 'vue';
+import type { SelectOption } from '@core/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import EmployeeMultiSearchSelect from '../../Components/EmployeeMultiSearchSelect.vue';
 
-const p = defineProps<{ defaultYear: number; defaultMonth: number; defaultIncludePunishments: boolean; employeeOptions: any[] }>();
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const p = defineProps<{ defaultYear: number; defaultMonth: number; defaultIncludePunishments: boolean; employeeOptions: SelectOption[]; payrollWarnings: Array<{employee_id:string;employee_name:string|null;department:string|null;joining_date:string|null;reason:string}> }>();
 const form = useForm({
   pay_year: p.defaultYear,
   pay_month: p.defaultMonth,
@@ -14,6 +18,12 @@ const form = useForm({
   excluded_employee_ids: [] as string[],
   exclusion_reason: '',
 });
+useUnsavedGuard(() => form.isDirty);
+// Catch-all for validation errors that have no bound field on this page — e.g. the cutlist review gate
+// rejects with key `payroll_cutlist_id`, and a queue button that silently does nothing is how payroll
+// desks lose a day. Keys already rendered inline are excluded so they never show twice.
+const BOUND_KEYS = ['pay_year', 'pay_month', 'include_punishments', 'excluded_employee_ids', 'exclusion_reason'];
+const looseErrors = computed(() => Object.entries(form.errors).filter(([key]) => !BOUND_KEYS.some((k) => key === k || key.startsWith(`${k}.`))));
 
 function submit() {
   form.post(route('payroll.sheets.store'));
@@ -24,8 +34,12 @@ function submit() {
   <AdminLayout :breadcrumbs="[{ title: 'Payroll' }, { title: 'Salary Sheets', href: route('payroll.sheets.index') }, { title: 'New run' }]">
     <Head title="New Payroll Run" />
     <div class="max-w-3xl rounded-xl border bg-card p-6">
-      <h1 class="text-xl font-bold">Create monthly payroll</h1>
+      <PageHeader title="Create monthly payroll" />
       <p class="mt-1 text-sm text-muted-foreground">This queues attendance cutlist generation and calculates eligible HRM employees in database transactions, 50 per chunk.</p>
+      <p v-if="payrollWarnings.length" class="mt-2 rounded-lg border border-amber-300/60 bg-amber-500/5 p-3 text-xs text-amber-800">
+        <strong>{{ payrollWarnings.length }} active employee(s) will be left out</strong> because no HRM salary record covers this month — payroll skips them rather than failing the whole sheet.
+        <span class="block mt-1 font-mono">{{ payrollWarnings.slice(0, 8).map(w => w.employee_id).join(', ') }}{{ payrollWarnings.length > 8 ? ' …' : '' }}</span>
+      </p>
       <form @submit.prevent="submit" class="mt-6 space-y-4">
         <div class="grid grid-cols-2 gap-4">
           <div class="space-y-2">
@@ -64,6 +78,9 @@ function submit() {
           </div>
         </details>
 
+        <ul v-if="looseErrors.length" class="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+          <li v-for="[key, message] in looseErrors" :key="key">{{ message }}</li>
+        </ul>
         <div class="rounded-lg bg-muted/50 p-3 text-sm">Existing paid slips are never rewritten. Exclusions can be added only before an employee snapshot or slips exist; retrying a failed sheet otherwise reuses its original snapshot.</div>
         <Button :disabled="form.processing">Queue payroll</Button>
       </form>

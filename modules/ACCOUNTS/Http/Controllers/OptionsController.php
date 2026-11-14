@@ -25,6 +25,9 @@ class OptionsController extends Controller
     /** @var array<string, list<string>> type => permissions, any of which is sufficient */
     private const PERMISSIONS = [
         'accounts' => [
+            // F18: the expense head a requisition will land against, which is what makes the
+            // budget check at submit possible at all.
+            'purchase.requisitions.view',
             'accounts.coa.view', 'accounts.coa.manage',
             'accounts.journals.view', 'accounts.journals.create', 'accounts.journals.post', 'accounts.journals.void',
             'accounts.vouchers.view', 'accounts.vouchers.manage',

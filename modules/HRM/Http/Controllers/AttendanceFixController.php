@@ -4,21 +4,23 @@ namespace Modules\HRM\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
+use Modules\HRM\Jobs\FixAttendancePairingJob;
 use Modules\HRM\Models\Attendance\AttendanceDaily;
 use Modules\HRM\Models\Attendance\AttendanceLog;
 use Modules\HRM\Models\Attendance\AttendancePair;
 use Modules\HRM\Models\Department;
 use Modules\HRM\Models\DeviceUser;
 use Modules\HRM\Models\Employee\Employee;
-use Modules\HRM\Services\Attendance\AttendanceProcessingService;
+use Modules\HRM\Services\Attendance\AttendanceRepairService;
 
 class AttendanceFixController extends Controller
 {
-    public function __construct(private readonly AttendanceProcessingService $processor) {}
+    public function __construct(private readonly AttendanceRepairService $repair) {}
 
     public function index(Request $r): Response
     {
@@ -39,7 +41,18 @@ class AttendanceFixController extends Controller
                 'total_logs' => AttendanceLog::count(),
                 'pending_logs' => AttendanceLog::where('is_processed', false)->count(),
             ],
+            'lastRepairableDate' => $this->repair->lastRepairableDate()->toDateString(),
+            'fixStatus' => Cache::get(AttendanceRepairService::STATUS_KEY) ?? ['state' => 'idle'],
         ]);
+    }
+
+    /**
+     * What the queue is doing right now, for the page's poll. Kept tiny and unauthenticated-by-permission
+     * beyond `hrm.attendance.view` (the route middleware) because it only exposes counters.
+     */
+    public function status(): JsonResponse
+    {
+        return response()->json(Cache::get(AttendanceRepairService::STATUS_KEY) ?? ['state' => 'idle']);
     }
 
     public function fix(Request $r)
@@ -101,7 +114,12 @@ class AttendanceFixController extends Controller
         $dailyCount = (clone $dailyQ)->count();
         $logCount = (clone $logQ)->count();
         $logProcessed = (clone $logQ)->where('is_processed', true)->count();
+        // Rows with no punches at all (Off Day / Holiday / On Leave) plus regularized days are the ones a
+        // rebuild cannot resurrect from logs. Count them so the dry run can promise — and the repair report —
+        // that they are reclassified through Stage 3, and restored if the calendar cannot reproduce them.
+        $rosterDerived = (clone $dailyQ)->whereIn('status', ['Off Day', 'Holiday', 'On Leave'])->count();
         $preview = [
+            'roster_derived_rows' => $rosterDerived,
             'wrong_pairs' => $wrong->map(fn ($pair) => [
                 'id' => $pair->id, 'employee_id' => $pair->employee_id,
                 'duty_date' => $pair->duty_date?->toDateString(),
@@ -112,10 +130,14 @@ class AttendanceFixController extends Controller
             'wrong_count' => $wrong->count(), 'daily_count' => $dailyCount,
             'log_count' => $logCount, 'log_processed' => $logProcessed,
             'scope' => $scope, 'employee_ids' => $employeeIds, 'from' => $from, 'to' => $to,
+            // What the queued repair will actually be able to finalise: the service clamps the range to
+            // yesterday, so say so here rather than promising days it will refuse to touch.
+            'last_repairable_date' => $this->repair->lastRepairableDate()->toDateString(),
+            'clipped' => Carbon::parse($to)->gt($this->repair->lastRepairableDate()),
         ];
 
         if ($dry) {
-            return back()->with('success', "DRY RUN: {$wrong->count()} suspect pairs, {$dailyCount} daily rows, and {$logCount} logs (of which {$logProcessed} are processed). No data changed.")->with('preview', $preview);
+            return back()->with('success', "DRY RUN: {$wrong->count()} suspect pairs, {$dailyCount} daily rows ({$rosterDerived} of them Off Day/Holiday/On Leave rows that the rebuild reclassifies from the roster, not from punches), and {$logCount} logs (of which {$logProcessed} are processed). No data changed.".($preview['clipped'] ? " The repair only finalises days up to {$preview['last_repairable_date']}; anything later stays with the nightly pipeline." : ''))->with('preview', $preview);
         }
         $globalPending = AttendanceLog::query()->where('is_processed', false)->where('punch_time', '>=', $from.' 00:00:00')->where('punch_time', '<=', $to.' 23:59:59')->count();
         $reprocessLimitCount = $globalPending + $logProcessed;
@@ -123,22 +145,19 @@ class AttendanceFixController extends Controller
             return back()->with('error', 'This repair would process more than 50,000 raw logs (including other pending logs in the date range). Narrow the date range before applying.');
         }
 
-        // A repair is a clean scoped rebuild, not just deleting suspect pairs while leaving
-        // previously processed logs and dailies out of sync.
-        DB::transaction(function () use ($q, $dailyQ, $logQ): void {
-            (clone $q)->delete();
-            (clone $dailyQ)->delete();
-            (clone $logQ)->update(['is_processed' => false]);
-        });
+        // One repair at a time: it clears a range and rebuilds it, so a second concurrent run would fight
+        // the first for the same rows (the job is also ShouldBeUnique, but that fails silently).
+        $running = Cache::get(AttendanceRepairService::STATUS_KEY);
 
-        $res = $this->processor->processPending(50000, $from.' 00:00:00', $to.' 23:59:59');
-        $newPairs = AttendancePair::query()
-            ->when($employeeIds !== null, fn ($query) => $query->whereIn('employee_id', $employeeIds))
-            ->whereDate('duty_date', '>=', $from)->whereDate('duty_date', '<=', $to)
-            ->orderBy('duty_date')->limit(50)->get()
-            ->map(fn ($pair) => ['duty_date' => $pair->duty_date?->toDateString(), 'punch_in' => $pair->punch_in?->format('d M H:i'), 'punch_out' => $pair->punch_out?->format('d M H:i'), 'hours' => $pair->worked_hours, 'type' => $pair->duty_type]);
+        if (($running['state'] ?? null) === 'running') {
+            return back()->with('error', 'A repair is already running ('.($running['scope'] ?? 'unknown scope').', '.($running['from'] ?? '?').' → '.($running['to'] ?? '?').', step: '.($running['step'] ?? '?').'). Wait for it to finish before queueing another.');
+        }
 
-        return back()->with('success', "Rebuilt the selected scope from {$from} through {$to}: cleared {$preview['daily_count']} daily rows and reset {$logCount} logs. Reprocessed {$res['processed']} logs.")
-            ->with('result', ['preview' => $preview, 'reprocess' => $res, 'new_pairs' => $newPairs]);
+        FixAttendancePairingJob::dispatch((string) $from, (string) $to, $employeeIds, $scope === 'employee' ? 'employee '.$data['employee_id'] : ($scope === 'department' ? 'department '.$data['department_id'] : 'all employees'), $r->user()?->id);
+
+        $scopeLabel = $scope === 'employee' ? "employee {$data['employee_id']}" : ($scope === 'department' ? 'the selected department' : 'all employees');
+
+        return back()->with('success', "Repair queued for {$scopeLabel}, {$from} through {$to}. It runs on the queue worker — this page shows its progress and the full report when it lands; you can navigate away. ".($preview['clipped'] ? "Note: the repair only finalises days up to {$preview['last_repairable_date']}; today and later days belong to the nightly pipeline." : ''))
+            ->with('preview', $preview);
     }
 }

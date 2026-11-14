@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { Order } from '@sales/types';
 import { reactive } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-defineProps<{ order:any }>();
-const form = reactive({ customer_id: null as any, warehouse_id: null as any, order_id: null as any, delivery_date: new Date().toISOString().slice(0,10), challan_no:'', vehicle_no:'', notes:'', items: [{ product_id:null, qty:1, lot_no:'' }] as any[] });
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+defineProps<{ order:Order }>();
+const form = reactive({ customer_id: null as number | string | null, warehouse_id: null as number | string | null, order_id: null as number | string | null, delivery_date: new Date().toISOString().slice(0,10), challan_no:'', vehicle_no:'', notes:'', items: [{ product_id:null, qty:1, lot_no:'' }] as any[] });
 function addLine(){ form.items.push({ product_id:null, qty:1, lot_no:'' }); }
 function removeLine(i:number){ form.items.splice(i,1); }
 function submit(){ router.post(route('sales.deliveries.store'), form as any); }
@@ -16,7 +18,7 @@ function submit(){ router.post(route('sales.deliveries.store'), form as any); }
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Deliveries (Challan)', href: route('sales.deliveries.index') }, { title: 'Create' }]">
     <Head title="New Delivery" />
     <div class="space-y-4">
-      <h1 class="text-xl font-bold">New Delivery Challan</h1>
+      <PageHeader title="New Delivery Challan" />
       <div v-if="order" class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm">Creating from Order <b>{{ order.order_no }}</b> — {{ order.customer?.name }}. Items below auto-filled from order remaining qty.</div>
       <div class="bg-card border rounded-xl p-4 space-y-3">
         <div class="grid md:grid-cols-3 gap-3">

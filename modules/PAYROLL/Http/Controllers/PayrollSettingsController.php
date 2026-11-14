@@ -27,6 +27,7 @@ final class PayrollSettingsController extends Controller
             'missing_punch_penalty_amount' => ['required', 'numeric', 'min:0'],
             'unpaid_leave_day_divisor' => ['required', 'numeric', 'gt:0', 'lte:31'],
             'loan_approval_steps_text' => ['nullable', 'string', 'max:300'],
+            'cutlist_review_required' => ['sometimes', 'boolean'],
         ]);
         $settings->update($data);
 

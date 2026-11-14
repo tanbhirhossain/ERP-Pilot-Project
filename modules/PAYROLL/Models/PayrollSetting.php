@@ -10,5 +10,5 @@ class PayrollSetting extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['loan_approval_steps' => 'array', 'missing_punch_penalty_amount' => 'decimal:2', 'unpaid_leave_day_divisor' => 'decimal:2'];
+    protected $casts = ['loan_approval_steps' => 'array', 'missing_punch_penalty_amount' => 'decimal:2', 'unpaid_leave_day_divisor' => 'decimal:2', 'cutlist_review_required' => 'boolean'];
 }

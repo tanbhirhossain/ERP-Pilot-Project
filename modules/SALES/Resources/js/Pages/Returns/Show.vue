@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { SalesReturn } from '@sales/types';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{ ret:any }>();
-function approve(id:number){ if(confirm('Approve return? Stock will be restocked for resalable items & credit note posted.')) router.post(route('sales.returns.approve', id)); }
-function cancel(id:number){ if(confirm('Cancel return?')) router.post(route('sales.returns.cancel', id)); }
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
+defineProps<{ ret:SalesReturn }>();
+async function approve(id:number){ if(await confirm({ description: 'Approve return? Stock will be restocked for resalable items & credit note posted.', danger: false })) router.post(route('sales.returns.approve', id)); }
+async function cancel(id:number){ if(await confirm({ description: 'Cancel return?', danger: true })) router.post(route('sales.returns.cancel', id)); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Sales Returns', href: route('sales.returns.index') }, { title: ret.return_no }]">

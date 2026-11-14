@@ -21,6 +21,7 @@ final readonly class EmployeePayrollData
         public int $daysInPeriod = 0,
         public array $salarySegments = [],
         public array $periodAmounts = [],
+        public array $notes = [],
     ) {}
 
     /** @return array<string, mixed> */
@@ -48,6 +49,7 @@ final readonly class EmployeePayrollData
             daysInPeriod: (int) ($data['daysInPeriod'] ?? 0),
             salarySegments: (array) ($data['salarySegments'] ?? []),
             periodAmounts: (array) ($data['periodAmounts'] ?? []),
+            notes: (array) ($data['notes'] ?? []),
         );
     }
 }

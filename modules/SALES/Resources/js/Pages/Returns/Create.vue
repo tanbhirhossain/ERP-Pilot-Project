@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { Invoice } from '@sales/types';
 import { reactive, computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { onMounted } from 'vue';
-const props = defineProps<{ invoice:any }>();
-const form = reactive({ invoice_id: null as any, return_date: new Date().toISOString().slice(0,10), reason:'', notes:'', items: [] as any[] });
+const props = defineProps<{ invoice:Invoice }>();
+const form = reactive({ invoice_id: null as number | string | null, return_date: new Date().toISOString().slice(0,10), reason:'', notes:'', items: [] as any[] });
 function loadInvoice(inv:any){ if(!inv) return; form.invoice_id = inv.id; form.items = inv.items.map((it:any)=>({ invoice_item_id: it.id, product_id: it.product_id, product_name: it.product_name, qty: it.qty, unit_price: it.unit_price, maxQty: it.qty, condition:'resalable' })); }
 onMounted(()=>{ if(props.invoice) loadInvoice(props.invoice); });
 function removeLine(i:number){ form.items.splice(i,1); }
@@ -19,7 +21,7 @@ const total = computed(()=> form.items.reduce((s:any,it:any)=> s + (Number(it.qt
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Sales Returns', href: route('sales.returns.index') }, { title: 'Create' }]">
     <Head title="New Sales Return" />
     <div class="space-y-4">
-      <h1 class="text-xl font-bold">New Sales Return (Credit Note)</h1>
+      <PageHeader title="New Sales Return (Credit Note)" />
       <div class="bg-card border rounded-xl p-4 space-y-3">
         <div class="grid md:grid-cols-3 gap-3">
           <div class="space-y-1"><Label>Invoice *</Label><SearchableSelect v-model="form.invoice_id" endpoint="/sales/api/options/invoices" placeholder="Select posted invoice" @update:modelValue="val=>{ /* fetch via props not api, user picks then manually adds items */ }" /></div>

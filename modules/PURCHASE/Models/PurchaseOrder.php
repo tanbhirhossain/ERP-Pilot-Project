@@ -46,6 +46,12 @@ class PurchaseOrder extends Model
         return $this->hasMany(GoodsReceipt::class, 'order_id');
     }
 
+    /** F18 — the requisition this order came out of, when an RFQ award made it. */
+    public function requisition(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseRequisition::class, 'requisition_id');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

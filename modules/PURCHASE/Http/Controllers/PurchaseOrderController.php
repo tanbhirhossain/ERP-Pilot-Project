@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Modules\CORE\Services\ActivityTimelineService;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\CORE\Support\PaginatedResource;
 use Modules\PURCHASE\Models\PurchaseOrder;
@@ -42,11 +43,14 @@ class PurchaseOrderController extends Controller
         return redirect()->route('purchase.orders.show', $o->id)->with('success', "PO {$o->order_no} created.");
     }
 
-    public function show(PurchaseOrder $order): Response
+    public function show(PurchaseOrder $order, ActivityTimelineService $timeline): Response
     {
         $order->load(['vendor', 'warehouse', 'items.product', 'receipts']);
 
-        return Inertia::render('PURCHASE::Orders/Show', ['order' => $order]);
+        return Inertia::render('PURCHASE::Orders/Show', [
+            'order' => $order,
+            'activities' => $timeline->for($order),
+        ]);
     }
 
     public function edit(PurchaseOrder $order): Response

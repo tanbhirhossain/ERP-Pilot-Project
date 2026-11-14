@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
+import type { Account } from '@accounts/types';
+import type { SelectOption } from '@core/types';
 import { BookMarked, ArrowUpRight, ArrowDownRight, Scale, Search, Calendar, Printer } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { printDocument } from '../../../../../CORE/Resources/js/Composables/usePrint';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import { printDocument } from '@core/Composables/usePrint';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { formatCurrency } from '@core/Utils/format';
 import AcctKpi from '../../Components/AcctKpi.vue';
 import AcctSection from '../../Components/AcctSection.vue';
 import AcctEmpty from '../../Components/AcctEmpty.vue';
 import { ref, computed } from 'vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-const props=defineProps<{ account:any; from:string|null; to:string|null; entries:any[]; accountOptions:any[] }>();
+import StaticTable from '@core/Components/StaticTable.vue';
+const props=defineProps<{ account:Account; from:string|null; to:string|null; entries:any[]; accountOptions:SelectOption[] }>();
 const accId=ref(props.account?.id ?? null);
 const from=ref(props.from ?? '');
 const to=ref(props.to ?? '');

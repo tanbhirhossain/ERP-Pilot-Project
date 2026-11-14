@@ -1,0 +1,1406 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "ERP Pilot — v1 API",
+        "version": "1.0.0",
+        "summary": "Reads across the modules, drafts into the ledger, nothing that posts",
+        "description": "Authentication is a Sanctum bearer token (`Authorization: Bearer erp_…`), obtained from\n`POST /api/v1/auth/token` with credentials or from **Settings → API Tokens** in the app.\n\nThree rules explain almost every design decision below.\n\n**Abilities narrow, roles authorise.** A token can only ever reach what its owning user\ncould reach, and only the subset its abilities name. A stolen accountant's token mints no\ninvoices; a Super Admin's token with `sales:read` posts no journals.\n\n**Money is a string.** Amounts arrive as two-decimal strings — `decimal:2` is the cast on\nevery model column in this application. Parse them with a decimal type, not a float.\n\n**Reads are free, writes are drafts.** The only mutating endpoint in v1 creates an\nunposted draft journal, validated by the same form request the screen uses. Posting a\njournal, voiding one, and touching the ledger require a person.\n\nPagination, search and filtering use the same query vocabulary as the tables in the\napplication itself — `search`, `sort`, `dir`, `page`, `per_page`, `filters[...]` — so one\nbehaviour cannot drift between what an integrator sees and what an accountant sees."
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8000",
+            "description": "This deployment"
+        }
+    ],
+    "tags": [
+        {
+            "name": "Authentication",
+            "description": "Tokens and identity"
+        },
+        {
+            "name": "Sales",
+            "description": "Invoices"
+        },
+        {
+            "name": "Accounts",
+            "description": "Ledger, budgets, journals"
+        }
+    ],
+    "paths": {
+        "/api/v1/accounts/budgets": {
+            "get": {
+                "operationId": "api.v1.accounts.budgets.index",
+                "summary": "List budgets",
+                "tags": [
+                    "Accounts"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": "accounts.budgets.view",
+                "x-required-ability": "accounts:read",
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum",
+                    "PermissionMiddleware:accounts.budgets.view",
+                    "ability:accounts:read"
+                ],
+                "parameters": [
+                    {
+                        "name": "fiscal_year_id",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": false
+                    },
+                    {
+                        "name": "approved_only",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        },
+                        "description": "Approved and locked budgets only — excludes drafts.",
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BudgetPage"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/UnprocessableEntity"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "Plan headers with line counts. The amounts live on the variance report, not here."
+            }
+        },
+        "/api/v1/accounts/budgets/{budget}/variance": {
+            "get": {
+                "operationId": "api.v1.accounts.budgets.variance",
+                "summary": "Budget versus actual for one budget",
+                "tags": [
+                    "Accounts"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": "accounts.budgets.view",
+                "x-required-ability": "accounts:read",
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum",
+                    "PermissionMiddleware:accounts.budgets.view",
+                    "ability:accounts:read"
+                ],
+                "parameters": [
+                    {
+                        "name": "budget",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Budget id."
+                    },
+                    {
+                        "name": "period",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9]{4}-[0-9]{2}$"
+                        },
+                        "description": "YYYY-MM. Omit to aggregate every month the budget carries lines for.",
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BudgetVarianceReport"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/UnprocessableEntity"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "Actuals are read from the posted ledger at request time and never cached, so this cannot drift from the trial balance. `favourable` is nature-dependent — do not derive it from the sign of `variance`."
+            }
+        },
+        "/api/v1/accounts/journals": {
+            "post": {
+                "operationId": "api.v1.accounts.journals.store",
+                "summary": "Create a draft journal",
+                "tags": [
+                    "Accounts"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": "accounts.journals.create",
+                "x-required-ability": "accounts:write",
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum",
+                    "PermissionMiddleware:accounts.journals.create",
+                    "ability:accounts:write"
+                ],
+                "parameters": [],
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/JournalCreated"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/UnprocessableEntity"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "Validated by the same form request the screen uses — same rules, same balance tolerance, same 422 messages — and always created as a draft. Posting is not available over v1 by design: an integration bug then leaves an unposted draft instead of a ledger that needs correcting. Domain refusals (an open fiscal year covering the date, a posting account) also answer 422 with the screen's sentence, never a 500.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/JournalDraft"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/journals/{journal}": {
+            "get": {
+                "operationId": "api.v1.accounts.journals.show",
+                "summary": "Read one journal and its lines",
+                "tags": [
+                    "Accounts"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": "accounts.journals.view",
+                "x-required-ability": "accounts:read",
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum",
+                    "PermissionMiddleware:accounts.journals.view",
+                    "ability:accounts:read"
+                ],
+                "parameters": [
+                    {
+                        "name": "journal",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Journal id."
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/JournalDetail"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "Debits and credits per line, as decimal strings, with the posting account resolved to code and name."
+            }
+        },
+        "/api/v1/accounts/trial-balance": {
+            "get": {
+                "operationId": "api.v1.accounts.trial-balance",
+                "summary": "Trial balance as at a date",
+                "tags": [
+                    "Accounts"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": "accounts.reports.view",
+                "x-required-ability": "accounts:read",
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum",
+                    "PermissionMiddleware:accounts.reports.view",
+                    "ability:accounts:read"
+                ],
+                "parameters": [
+                    {
+                        "name": "as_of",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "Defaults to today.",
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TrialBalance"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/UnprocessableEntity"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "The identical rows and sign convention as the on-screen report: a `debit`-nature account reports debit − credit, everything else reports credit − debit. Read `balance` with `balance_side`; a client that assumes credit-positive will read every asset account backwards and still get plausible numbers."
+            }
+        },
+        "/api/v1/auth/me": {
+            "get": {
+                "operationId": "api.v1.auth.me",
+                "summary": "Who am I, and what may this token do",
+                "tags": [
+                    "Authentication"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": null,
+                "x-required-ability": null,
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum"
+                ],
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CallerIdentity"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "The owning user's effective permissions alongside this token's abilities. This is the answer to \"my token works but returns 403\": the token is almost always narrower than the user."
+            }
+        },
+        "/api/v1/auth/token": {
+            "post": {
+                "operationId": "api.v1.auth.token",
+                "summary": "Exchange credentials for a token",
+                "tags": [
+                    "Authentication"
+                ],
+                "security": [],
+                "x-required-permission": null,
+                "x-required-ability": null,
+                "x-middleware": [
+                    "api",
+                    "throttle:token-issue"
+                ],
+                "parameters": [],
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TokenIssued"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/UnprocessableEntity"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "The secret is returned once — only its sha256 hash is stored, so it can never be read back. `abilities` narrows what this token may reach and can never widen what the owning user's roles allow. Bad credentials answer 401 with the same message whether the address is unknown or the password is wrong.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TokenIssued"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "api.v1.auth.token.revoke",
+                "summary": "Revoke the token making the call",
+                "tags": [
+                    "Authentication"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": null,
+                "x-required-ability": null,
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum"
+                ],
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "A browser session has no token to revoke and gets 400 rather than a silent success. Revoking the token you are authenticated with ends the request's own authority — that is intended, not a bug."
+            }
+        },
+        "/api/v1/openapi.json": {
+            "get": {
+                "operationId": "api.v1.spec",
+                "summary": "This document, as machine-readable OpenAPI 3.1",
+                "tags": [
+                    "Authentication"
+                ],
+                "security": [],
+                "x-required-permission": null,
+                "x-required-ability": null,
+                "x-middleware": [
+                    "api",
+                    "throttle:token-issue"
+                ],
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "Generated from the live route table on every request, so it can only describe what this deployment actually serves. `docs/openapi.json` is the same bytes, committed for review; `php artisan api:spec --check` fails when they part company."
+            }
+        },
+        "/api/v1/sales/invoices": {
+            "get": {
+                "operationId": "api.v1.sales.invoices.index",
+                "summary": "List invoices",
+                "tags": [
+                    "Sales"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": "sales.invoices.view",
+                "x-required-ability": "sales:read",
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum",
+                    "PermissionMiddleware:sales.invoices.view",
+                    "ability:sales:read"
+                ],
+                "parameters": [
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Invoice number, invoice date or created_at — the columns the on-screen table searches.",
+                        "required": false
+                    },
+                    {
+                        "name": "sort",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "invoice_no",
+                                "invoice_date",
+                                "created_at"
+                            ]
+                        },
+                        "required": false
+                    },
+                    {
+                        "name": "dir",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "asc",
+                                "desc"
+                            ]
+                        },
+                        "description": "Default desc.",
+                        "required": false
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "required": false
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        },
+                        "description": "Default 25, capped at 100. Want more? Paginate.",
+                        "required": false
+                    },
+                    {
+                        "name": "filters[status]",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "draft, issued, partial, paid, void.",
+                        "required": false
+                    },
+                    {
+                        "name": "filters[payment_status]",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "unpaid, partial, paid.",
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InvoicePage"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/UnprocessableEntity"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "One page of invoices. Money is exact two-decimal strings, so `total_amount` can be added up without floating-point drift."
+            }
+        },
+        "/api/v1/sales/invoices/{key}": {
+            "get": {
+                "operationId": "api.v1.sales.invoices.show",
+                "summary": "Read one invoice, by id or invoice number",
+                "tags": [
+                    "Sales"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": "sales.invoices.view",
+                "x-required-ability": "sales:read",
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum",
+                    "PermissionMiddleware:sales.invoices.view",
+                    "ability:sales:read"
+                ],
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Numeric invoice id or the human invoice number, which is what a customer quotes back at you."
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InvoiceDetail"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "Includes the VAT-bearing lines. A row you may not see answers 404 rather than 403 — that the document exists is not information for outside the ACL."
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "opaque",
+                "description": "A Sanctum personal access token. Opaque by design: it is a random secret and a lookup, not a self-describing credential, so revoking it is immediate."
+            }
+        },
+        "schemas": {
+            "MoneyString": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "An exact amount as a two-decimal string, never a float. Every model here casts decimals `decimal:2`, and JSON floats are how an integration ends up one paisa short and blaming the ledger."
+            },
+            "PageMeta": {
+                "type": "object",
+                "description": "The same pagination envelope the on-screen tables consume.",
+                "properties": {
+                    "current_page": {
+                        "type": "integer"
+                    },
+                    "last_page": {
+                        "type": "integer"
+                    },
+                    "per_page": {
+                        "type": "integer"
+                    },
+                    "total": {
+                        "type": "integer"
+                    },
+                    "from": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "to": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "current_page",
+                    "last_page",
+                    "per_page",
+                    "total"
+                ]
+            },
+            "Error": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "required": [
+                    "message"
+                ]
+            },
+            "InvoiceSummary": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "invoice_no": {
+                        "type": "string"
+                    },
+                    "customer": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "invoice_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "due_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date"
+                    },
+                    "currency": {
+                        "type": "string"
+                    },
+                    "subtotal": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "discount_amount": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "vat_amount": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "total_amount": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "paid_amount": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "balance": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "payment_status": {
+                        "type": "string"
+                    },
+                    "journal_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "The posted journal, when there is one — the join back to the ledger."
+                    },
+                    "items_count": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "InvoiceLine": {
+                "type": "object",
+                "properties": {
+                    "product_name": {
+                        "type": "string"
+                    },
+                    "sku": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "qty": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "unit_price": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "discount_amount": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "vat_rate": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "vat_amount": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "line_total": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    }
+                }
+            },
+            "InvoicePage": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/InvoiceSummary"
+                        }
+                    },
+                    "meta": {
+                        "$ref": "#/components/schemas/PageMeta"
+                    }
+                }
+            },
+            "InvoiceDetail": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/InvoiceSummary"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "notes": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "posted_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "date-time"
+                            },
+                            "warehouse": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "customer": {
+                                "type": {
+                                    "0": "object",
+                                    "nullable": true
+                                }
+                            },
+                            "lines": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/components/schemas/InvoiceLine"
+                                }
+                            }
+                        }
+                    }
+                ]
+            },
+            "TrialBalanceRow": {
+                "type": "object",
+                "properties": {
+                    "account_id": {
+                        "type": "integer"
+                    },
+                    "code": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "account_type": {
+                        "type": "string"
+                    },
+                    "nature": {
+                        "type": "string",
+                        "enum": [
+                            "debit",
+                            "credit"
+                        ],
+                        "description": "Which side the account normally carries."
+                    },
+                    "total_debit": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "total_credit": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "balance": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "balance_side": {
+                        "type": "string",
+                        "description": "Read `balance` together with this: the sign is per-account, not globally credit-positive."
+                    }
+                }
+            },
+            "TrialBalance": {
+                "type": "object",
+                "properties": {
+                    "as_of": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TrialBalanceRow"
+                        }
+                    },
+                    "totals": {
+                        "type": "object",
+                        "properties": {
+                            "debit": {
+                                "$ref": "#/components/schemas/MoneyString"
+                            },
+                            "credit": {
+                                "$ref": "#/components/schemas/MoneyString"
+                            }
+                        }
+                    }
+                }
+            },
+            "BudgetSummary": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "code": {
+                        "type": "string"
+                    },
+                    "department": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "draft",
+                            "approved",
+                            "locked"
+                        ]
+                    },
+                    "line_count": {
+                        "type": "integer"
+                    },
+                    "fiscal_year": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "BudgetPage": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/BudgetSummary"
+                        }
+                    }
+                }
+            },
+            "BudgetVarianceRow": {
+                "type": "object",
+                "properties": {
+                    "account_id": {
+                        "type": "integer"
+                    },
+                    "code": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "nature": {
+                        "type": "string",
+                        "enum": [
+                            "debit",
+                            "credit"
+                        ]
+                    },
+                    "budget": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "actual": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "variance": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "pct": {
+                        "type": "number",
+                        "description": "Utilisation, whole percent."
+                    },
+                    "favourable": {
+                        "type": "boolean",
+                        "description": "Nature-dependent: a debit account is on-plan when actual ≤ budget, a credit account when actual ≥ budget. Do not infer this from the sign of `variance`."
+                    }
+                }
+            },
+            "BudgetVarianceReport": {
+                "type": "object",
+                "properties": {
+                    "budget": {
+                        "type": "object"
+                    },
+                    "periods": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/BudgetVarianceRow"
+                        }
+                    },
+                    "unfavorable": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/BudgetVarianceRow"
+                        },
+                        "description": "Worst first."
+                    },
+                    "totals": {
+                        "type": "object",
+                        "properties": {
+                            "budget": {
+                                "$ref": "#/components/schemas/MoneyString"
+                            },
+                            "actual": {
+                                "$ref": "#/components/schemas/MoneyString"
+                            },
+                            "variance": {
+                                "$ref": "#/components/schemas/MoneyString"
+                            },
+                            "pct": {
+                                "type": "number"
+                            },
+                            "overrun_count": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            },
+            "JournalDraft": {
+                "type": "object",
+                "required": [
+                    "journal_date",
+                    "type",
+                    "lines"
+                ],
+                "properties": {
+                    "journal_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "JV",
+                            "PV",
+                            "RV",
+                            "CV",
+                            "BV",
+                            "SV"
+                        ]
+                    },
+                    "reference_no": {
+                        "type": "string",
+                        "maxLength": 100
+                    },
+                    "narration": {
+                        "type": "string",
+                        "maxLength": 2000
+                    },
+                    "lines": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 50,
+                        "description": "Must balance to the paisa — the check runs through `JournalBalance`, the same object the screen and `post()` use, so a journal accepted here is never rejected later for a reason the API did not state.",
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "account_id"
+                            ],
+                            "properties": {
+                                "account_id": {
+                                    "type": "integer",
+                                    "description": "Must be a posting account: a group header is refused."
+                                },
+                                "debit": {
+                                    "$ref": "#/components/schemas/MoneyString"
+                                },
+                                "credit": {
+                                    "$ref": "#/components/schemas/MoneyString"
+                                },
+                                "description": {
+                                    "type": "string",
+                                    "maxLength": 500
+                                },
+                                "cost_center": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "JournalCreated": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "reference_no": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "journal_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "draft"
+                        ]
+                    },
+                    "line_count": {
+                        "type": "integer"
+                    },
+                    "total": {
+                        "$ref": "#/components/schemas/MoneyString"
+                    },
+                    "next_step": {
+                        "type": "string"
+                    }
+                }
+            },
+            "JournalDetail": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "reference_no": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "journal_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "narration": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "account_id": {
+                                    "type": "integer"
+                                },
+                                "account": {
+                                    "type": "string"
+                                },
+                                "debit": {
+                                    "$ref": "#/components/schemas/MoneyString"
+                                },
+                                "credit": {
+                                    "$ref": "#/components/schemas/MoneyString"
+                                },
+                                "description": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "TokenIssued": {
+                "type": "object",
+                "properties": {
+                    "token": {
+                        "type": "string",
+                        "description": "Format `id|secret`, prefixed `erp_` so a leak is recognisable. Returned once."
+                    },
+                    "token_id": {
+                        "type": "integer"
+                    },
+                    "abilities": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "warning": {
+                        "type": "string"
+                    }
+                }
+            },
+            "CallerIdentity": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "email": {
+                        "type": "string"
+                    },
+                    "roles": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "permissions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "What the owning user may do. A token may do less than this, never more."
+                    },
+                    "token": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "abilities": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "last_used_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "responses": {
+            "401": {
+                "description": "No token, a revoked one, or an expired one. A request without `Accept: application/json` still gets this JSON body, never a redirect to the login form.",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        }
+                    }
+                }
+            },
+            "403": {
+                "description": "The owning user lacks the permission, or this token lacks the ability. `X-request-id` is not returned; the message names which of the two it was.",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        }
+                    }
+                }
+            },
+            "404": {
+                "description": "No row matches, including for a row you may not see — reading 404 for someone else's document is itself a leak.",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        }
+                    }
+                }
+            },
+            "422": {
+                "description": "Validation failed. Field keys match the request body exactly, so a client can map them back.",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        }
+                    }
+                }
+            },
+            "429": {
+                "description": "Rate limit exceeded: 60 requests/minute per user across all their tokens, 5/minute for the token exchange.",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

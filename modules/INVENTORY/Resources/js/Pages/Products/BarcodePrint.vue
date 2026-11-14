@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { printDocument } from '../../../../../CORE/Resources/js/Composables/usePrint';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import { printDocument } from '@core/Composables/usePrint';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,7 +39,7 @@ function downloadZpl(){
   const form = document.createElement('form');
   form.method='POST'; form.action=route('inventory.products.barcode-zpl');
   form.style.display='none';
-  const csrf = (document.querySelector('meta[name="csrf-token"]') as any)?.content || '';
+  const csrf = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content || '';
   const tok=document.createElement('input'); tok.name='_token'; tok.value=csrf; form.appendChild(tok);
   cart.value.forEach((c, idx)=>{
     const i1=document.createElement('input'); i1.name=`items[${idx}][product_id]`; i1.value=c.product.id; form.appendChild(i1);

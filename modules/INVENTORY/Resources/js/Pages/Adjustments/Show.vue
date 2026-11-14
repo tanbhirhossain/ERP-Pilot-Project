@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { Adjustment } from '@inventory/types';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{ adjustment:any }>();
-function approve(id:number){ router.post(route('inventory.adjustments.approve', id)); }
-function postAdj(id:number){ if(confirm('Post this adjustment? Stock will be updated.')) router.post(route('inventory.adjustments.post', id)); }
-function tone(s:string){ if(s==='posted') return 'success'; if(s==='approved') return 'info'; if(s==='draft') return 'warning'; return 'neutral'; }
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatDate } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
+defineProps<{ adjustment:Adjustment }>();
+async function approve(id:number){ router.post(route('inventory.adjustments.approve', id)); }
+async function postAdj(id:number){ if(await confirm({ description: 'Post this adjustment? Stock will be updated.', danger: false })) router.post(route('inventory.adjustments.post', id)); }
+async function tone(s:string){ if(s==='posted') return 'success'; if(s==='approved') return 'info'; if(s==='draft') return 'warning'; return 'neutral'; }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Adjustments', href: route('inventory.adjustments.index') }, { title: adjustment.adjustment_no }]">

@@ -3,6 +3,7 @@
 namespace Modules\HRM\Services\Attendance;
 
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Jmrashed\Zkteco\Lib\ZKTeco;
 use Modules\HRM\Interfaces\Attendance\AttendanceLogRepositoryInterface;
@@ -14,6 +15,12 @@ use Modules\HRM\Models\Employee\Employee;
 
 class AttendanceSyncService
 {
+    /** Punches per statement when checking what the device already has, and when inserting what it has not. */
+    private const INGEST_CHUNK = 500;
+
+    /** Device user ids per statement when resolving the employee mappings. */
+    private const MAPPING_CHUNK = 1000;
+
     public function __construct(
         private readonly AttendanceLogRepositoryInterface $logs,
         private readonly AttendanceSyncRepositoryInterface $syncRepo,
@@ -44,12 +51,18 @@ class AttendanceSyncService
      * Sync single device via ZKTeCo - handles real package + simulation mode
      * Supports date-range filtering to reduce DB work (note: package still downloads full log, see docs)
      */
-    public function syncDevice(BiometricDevice $device, ?string $fromDate = null, ?string $toDate = null): array
+    public function syncDevice(BiometricDevice $device, ?string $fromDate = null, ?string $toDate = null, ?int $budgetSeconds = null): array
     {
         $start = microtime(true);
-        // Allow longer for large F18 logs (50k+ records can take 60s+ via UDP)
-        @set_time_limit(300);
-        @ini_set('max_execution_time', '300');
+        $deadline = $start + max(1, $budgetSeconds ?? (int) config('hrm.sync.budget_seconds', 240));
+        // PHP's own time limit is the *caller's* business, not this method's. A queue job runs
+        // `set_time_limit(0)` because the worker owns the process lifetime; an HTTP request keeps the php.ini
+        // cap and should keep it. This method used to re-arm `set_time_limit(300)` here, which un-did the
+        // job's `0` — and on Windows, where the limit counts wall-clock time, that killed the worker mid-sync
+        // with "Maximum execution time of 300 seconds exceeded". The method then *also* budgeted itself 250s
+        // of processing plus however long the device took to answer, i.e. it was written to overrun its own
+        // limit. `$deadline` replaces both numbers, and unlike a fatal it stops between records so the caller
+        // can decide what to do with the remainder.
         $prevSocketTimeout = @ini_get('default_socket_timeout');
         @ini_set('default_socket_timeout', '3');
 
@@ -89,80 +102,13 @@ class AttendanceSyncService
                 Log::info('ZK incremental sync window', ['device' => $device->id, 'from' => $fromDate, 'to' => $toDate, 'fetched_filtered' => $filteredCount]);
             }
 
-            if (! empty($fetched)) {
-                $rows = [];
-                foreach ($fetched as $r) {
-                    // Package can return multiple formats: associative with uid/id/timestamp or numeric indexed
-                    $deviceUserId = $r['id'] ?? $r['userid'] ?? $r['user_id'] ?? $r[1] ?? null; // FIX: use ZK UserID (id) only, NOT uid (internal index)
-                    $rawTimestamp = $r['timestamp'] ?? $r['time'] ?? $r[3] ?? $r['datetime'] ?? null;
-                    if (! $deviceUserId || ! $rawTimestamp) {
-                        Log::warning('ZK raw record missing uid/timestamp', ['device' => $device->id, 'raw' => $r]);
+            $ingest = $this->ingestDeviceLogs($device, $fetched, $deadline);
+            $inserted += $ingest['inserted'];
+            $skippedDuplicate = $ingest['skipped_duplicate'];
+            $unmappedCount = $ingest['unmapped'];
+            $partial = $ingest['partial'];
 
-                        continue;
-                    }
-                    // Normalize timestamp to Y-m-d H:i:s
-                    try {
-                        $punchTime = Carbon::parse($rawTimestamp)->format('Y-m-d H:i:s');
-                    } catch (\Throwable $e) {
-                        Log::warning('Invalid timestamp from device', ['device' => $device->id, 'raw' => $rawTimestamp]);
-
-                        continue;
-                    }
-
-                    // Resolve employee via GLOBAL device_user_id -> employee_id (no device binding)
-                    // One ZK id (UserID) works on any device — punch-in on A, punch-out on B resolves to same employee.
-                    // FIX: Even if not mapped, STILL insert log (user request) - employee_id will be null, visible in Logs
-                    $employeeId = null;
-                    // Professional: primary via employees.biometric_id (direct, editable in Employee form)
-                    $empByBio = Employee::where('biometric_id', (string) $deviceUserId)->first();
-                    if ($empByBio) {
-                        $employeeId = $empByBio->employee_id;
-                    } else {
-                        $du = DeviceUser::where('device_user_id', $deviceUserId)->first(); // FIX: only id, never uid
-                        if ($du) {
-                            $employeeId = $du->employee_id;
-                        } else {
-                            // Count unmapped for debug - but still insert
-                            $unmappedCount = ($unmappedCount ?? 0) + 1;
-                            if (($unmappedCount ?? 0) <= 3) {
-                                Log::info('Unmapped device_user_id - still inserting log', ['device' => $device->id, 'device_user_id' => $deviceUserId, 'punch_time' => $punchTime, 'note' => 'Map in Device Users to create pairs']);
-                            }
-                        }
-                    }
-
-                    // Deduplicate: composite check (device_user_id + punch_time + device_id)
-                    $exists = AttendanceLog::where('device_user_id', (string) $deviceUserId)
-                        ->where('punch_time', $punchTime)
-                        ->where('device_id', $device->id)
-                        ->exists();
-                    if ($exists) {
-                        $skippedDuplicate++;
-
-                        continue;
-                    }
-
-                    $rows[] = [
-                        'device_user_id' => (string) $deviceUserId,
-                        'employee_id' => $employeeId,
-                        'punch_time' => $punchTime,
-                        'device_id' => $device->id,
-                        'punch_type' => 'AUTO',
-                        'is_processed' => false,
-                    ];
-
-                    // Batch insert every 500 to avoid memory blowup on large fetches (e.g., 10k logs)
-                    if (count($rows) >= 500) {
-                        $this->logs->createMany($rows);
-                        $inserted += count($rows);
-                        $rows = [];
-                    }
-                }
-                if (! empty($rows)) {
-                    $inserted += $this->logs->createMany($rows);
-                }
-            }
-
-            // Process pending logs in batches until backlog clear or timeout near ( handles 10k+ logs )
+            // Process pending logs in batches until backlog clear or out of budget ( handles 10k+ logs )
             // CRITICAL: Do NOT filter by date here — must clear backlog (474 mapped outside 7d would be missed if filtered)
             $processResult = ['processed' => 0, 'new_pairs' => 0, 'closed_pairs' => 0, 'errors' => 0, 'skipped_orphan' => 0];
             $loops = 0;
@@ -175,12 +121,14 @@ class AttendanceSyncService
                 $processResult['errors'] += $batch['errors'] ?? 0;
                 $processResult['skipped_orphan'] = ($processResult['skipped_orphan'] ?? 0) + ($batch['skipped_orphan'] ?? 0);
                 $loops++;
-                // Stop if less than full batch (no more) or near timeout (250s)
+                // Stop if less than full batch (no more) or out of budget
                 if (($batch['processed'] ?? 0) < 800) {
                     break;
                 }
-                if (microtime(true) - $start > 250) {
-                    Log::warning('Sync processing loop timeout guard', ['loops' => $loops]);
+                if (microtime(true) > $deadline) {
+                    $partial = true;
+                    Log::warning('Sync processing loop stopped at its time budget', ['device' => $device->id, 'loops' => $loops]);
+
                     break;
                 }
             } while ($loops < $maxLoops);
@@ -196,9 +144,16 @@ class AttendanceSyncService
             }
 
             $duration = round(microtime(true) - $start, 2);
-            $device->update(['last_sync_at' => now()]);
+
+            // A partial sync must not move the incremental window past the punches it never read.
+            if (! $partial) {
+                $device->update(['last_sync_at' => now()]);
+            }
             $setting = $this->syncRepo->getSettingForDevice($device->id);
-            if ($setting) {
+            if ($partial && $setting) {
+                // Come back for the rest shortly instead of after a full interval.
+                $setting->update(['next_sync_at' => now()->addMinute()]);
+            } elseif ($setting) {
                 $setting->update(['last_sync_at' => now(), 'next_sync_at' => now()->addMinutes($setting->sync_interval_minutes ?? $device->sync_interval_minutes ?? 15)]);
             } else {
                 // Auto-create setting on first sync
@@ -226,10 +181,10 @@ class AttendanceSyncService
 
             $rangeInfo = ($fromDate || $toDate) ? " [{$fromDate} → {$toDate}]" : ' [ALL]';
             $unmappedInfo = ($unmappedCount ?? 0) > 0 ? ", {$unmappedCount} unmapped (no DeviceUser)" : '';
-            $msg = 'Fetched '.count($fetched)." raw{$rangeInfo}, inserted {$inserted} new ({$skippedDuplicate} dups skipped{$unmappedInfo}), processed {$processed} logs ({$newPairs} new pairs, {$closedPairs} closed), daily recalc {$recalculated} in {$duration}s";
-            $this->syncRepo->logSync($device->id, 'Success', count($fetched), $inserted + $processed, $msg, null);
+            $msg = 'Fetched '.count($fetched)." raw{$rangeInfo}, inserted {$inserted} new ({$skippedDuplicate} dups skipped{$unmappedInfo}), processed {$processed} logs ({$newPairs} new pairs, {$closedPairs} closed), daily recalc {$recalculated} in {$duration}s".($partial ? ' - PARTIAL: time budget reached, the remainder is left for the next run (last_sync_at not advanced)' : '');
+            $this->syncRepo->logSync($device->id, $partial ? 'Partial' : 'Success', count($fetched), $inserted + $processed, $msg, null);
 
-            return ['ok' => true, 'fetched' => count($fetched), 'inserted' => $inserted, 'processed' => $processed, 'skipped_duplicate' => $skippedDuplicate, 'recalculated' => $recalculated, 'message' => $msg, 'duration' => $duration, 'from' => $fromDate, 'to' => $toDate];
+            return ['ok' => true, 'fetched' => count($fetched), 'inserted' => $inserted, 'processed' => $processed, 'skipped_duplicate' => $skippedDuplicate, 'recalculated' => $recalculated, 'partial' => $partial, 'message' => $msg, 'duration' => $duration, 'from' => $fromDate, 'to' => $toDate];
         } catch (\Throwable $e) {
             $duration = round(microtime(true) - $start, 2);
             Log::error('ZK Sync failed', ['device' => $device->id, 'ip' => $device->ip_address, 'error' => $e->getMessage(), 'trace' => substr($e->getTraceAsString(), 0, 3000)]);
@@ -240,7 +195,6 @@ class AttendanceSyncService
             if ($prevSocketTimeout !== false) {
                 @ini_set('default_socket_timeout', $prevSocketTimeout);
             }
-            @set_time_limit(0); // Keep 0 for queue worker to avoid Worker.php:928 fatal
         }
     }
 
@@ -248,11 +202,11 @@ class AttendanceSyncService
      * Stage 1 only: Sync Raw Logs without pairing (for pipeline)
      * Returns inserted count, logs are left is_processed=false for Stage 2
      */
-    public function syncDeviceRawOnly(BiometricDevice $device, ?string $fromDate = null, ?string $toDate = null): array
+    public function syncDeviceRawOnly(BiometricDevice $device, ?string $fromDate = null, ?string $toDate = null, ?int $budgetSeconds = null): array
     {
         $start = microtime(true);
-        @set_time_limit(300);
-        @ini_set('max_execution_time', '300');
+        // See syncDevice(): the caller owns PHP's time limit, this method owns a deadline.
+        $deadline = $start + max(0, $budgetSeconds ?? (int) config('hrm.sync.budget_seconds', 240));
         $prevSocketTimeout = @ini_get('default_socket_timeout');
         @ini_set('default_socket_timeout', '3');
         try {
@@ -271,61 +225,31 @@ class AttendanceSyncService
             $inserted = 0;
             $skippedDuplicate = 0;
             $unmappedCount = 0;
-            if (! empty($fetched)) {
-                $rows = [];
-                foreach ($fetched as $r) {
-                    $deviceUserId = $r['id'] ?? $r['userid'] ?? $r['user_id'] ?? $r[1] ?? null; // FIX: use ZK UserID (id) only, NOT uid (internal index)
-                    $rawTimestamp = $r['timestamp'] ?? $r['time'] ?? $r[3] ?? $r['datetime'] ?? null;
-                    if (! $deviceUserId || ! $rawTimestamp) {
-                        continue;
-                    }
-                    try {
-                        $punchTime = Carbon::parse($rawTimestamp)->format('Y-m-d H:i:s');
-                    } catch (\Throwable $e) {
-                        continue;
-                    }
-                    $employeeId = null;
-                    $empByBio2 = Employee::where('biometric_id', (string) $deviceUserId)->first();
-                    if ($empByBio2) {
-                        $employeeId = $empByBio2->employee_id;
-                    } else {
-                        $du = DeviceUser::where('device_user_id', $deviceUserId)->first(); // FIX: only id
-                        if ($du) {
-                            $employeeId = $du->employee_id;
-                        } else {
-                            $unmappedCount++;
-                        }
-                    }
-                    $exists = AttendanceLog::where('device_user_id', (string) $deviceUserId)->where('punch_time', $punchTime)->where('device_id', $device->id)->exists();
-                    if ($exists) {
-                        $skippedDuplicate++;
+            $ingest = $this->ingestDeviceLogs($device, $fetched, $deadline);
+            $inserted += $ingest['inserted'];
+            $skippedDuplicate = $ingest['skipped_duplicate'];
+            $unmappedCount = $ingest['unmapped'];
+            $partial = $ingest['partial'];
 
-                        continue;
-                    }
-                    $rows[] = ['device_user_id' => (string) $deviceUserId, 'employee_id' => $employeeId, 'punch_time' => $punchTime, 'device_id' => $device->id, 'punch_type' => 'AUTO', 'is_processed' => false];
-                    if (count($rows) >= 500) {
-                        $this->logs->createMany($rows);
-                        $inserted += count($rows);
-                        $rows = [];
-                    }
-                }
-                if (! empty($rows)) {
-                    $inserted += $this->logs->createMany($rows);
-                }
-            }
             $duration = round(microtime(true) - $start, 2);
-            $device->update(['last_sync_at' => now()]);
+
+            if (! $partial) {
+                $device->update(['last_sync_at' => now()]);
+            }
+
             $setting = $this->syncRepo->getSettingForDevice($device->id);
-            if ($setting) {
+            if ($partial && $setting) {
+                $setting->update(['next_sync_at' => now()->addMinute()]);
+            } elseif ($setting) {
                 $setting->update(['last_sync_at' => now(), 'next_sync_at' => now()->addMinutes($setting->sync_interval_minutes ?? $device->sync_interval_minutes ?? 15)]);
             } else {
                 $this->syncRepo->upsertSetting($device->id, ['auto_sync_enabled' => $device->auto_sync_enabled ?? true, 'sync_interval_minutes' => $device->sync_interval_minutes ?? 15, 'sync_window_hours' => 24, 'last_sync_at' => now(), 'next_sync_at' => now()->addMinutes(15), 'is_active' => true]);
             }
             $rangeInfo = ($fromDate || $toDate) ? " [{$fromDate} → {$toDate}]" : ' [ALL]';
-            $msg = 'Stage1 Raw: Fetched '.count($fetched)."{$rangeInfo}, inserted {$inserted} ({$skippedDuplicate} dups, {$unmappedCount} unmapped) in {$duration}s";
+            $msg = 'Stage1 Raw: Fetched '.count($fetched)."{$rangeInfo}, inserted {$inserted} ({$skippedDuplicate} dups, {$unmappedCount} unmapped) in {$duration}s".($partial ? ' - PARTIAL: time budget reached, rest left for the next run' : '');
             $this->syncRepo->logSync($device->id, 'Success', count($fetched), $inserted, $msg, null);
 
-            return ['ok' => true, 'fetched' => count($fetched), 'inserted' => $inserted, 'skipped_duplicate' => $skippedDuplicate, 'unmapped' => $unmappedCount, 'message' => $msg, 'duration' => $duration, 'from' => $fromDate, 'to' => $toDate];
+            return ['ok' => true, 'fetched' => count($fetched), 'inserted' => $inserted, 'skipped_duplicate' => $skippedDuplicate, 'unmapped' => $unmappedCount, 'partial' => $partial, 'message' => $msg, 'duration' => $duration, 'from' => $fromDate, 'to' => $toDate];
         } catch (\Throwable $e) {
             $duration = round(microtime(true) - $start, 2);
             Log::error('ZK Sync Raw failed', ['device' => $device->id, 'error' => $e->getMessage()]);
@@ -336,7 +260,6 @@ class AttendanceSyncService
             if ($prevSocketTimeout !== false) {
                 @ini_set('default_socket_timeout', $prevSocketTimeout);
             }
-            @set_time_limit(0);
         }
     }
 
@@ -394,9 +317,10 @@ class AttendanceSyncService
         $port = $device->port ?? 4370;
 
         // Set socket timeouts before ZK library creates its socket
-        // Vendor ZKTeco.php sets 60.5s socket timeout internally; we need longer PHP timeout
+        // The vendor library blocks up to 60.5s per socket read, so the *socket* gets the longer timeout.
+        // PHP's execution limit is deliberately not raised here: the caller (job, console command or HTTP
+        // request) owns it, and the calling sync methods bound themselves with `hrm.sync.budget_seconds`.
         @ini_set('default_socket_timeout', '60');
-        @set_time_limit(300);
 
         $zk = null;
         if ($zkClass && class_exists($zkClass)) {
@@ -594,6 +518,164 @@ class AttendanceSyncService
         return $isLocal && $isNetworkError;
     }
 
+    /**
+     * Turn raw device records into `attendance_logs` rows. Used by the full sync and by Stage 1 alike, so
+     * the two paths cannot drift apart.
+     *
+     * Bounded on three axes at once, because a device with a big backlog defeated each of them in turn:
+     *
+     *  - **time**: `$deadline` (from `hrm.sync.budget_seconds`) is checked per record while normalizing and
+     *    per chunk while persisting, so an unfinished batch stops between rows and reports `partial`
+     *    instead of being killed;
+     *  - **statements**: the old loop ran three queries per punch — `Employee` by `biometric_id`,
+     *    `DeviceUser` by `device_user_id`, and an `exists()` duplicate check — so a 50 000-log device cost
+     *    ~150 000 statements. This runs 2 per 1 000 distinct ids and 1 per 500 candidate rows;
+     *  - **memory**: never more than one chunk of database rows in hand. A first cut at this read *all*
+     *    of a device's existing punches at once, which on a busy device is a 100 000-row Eloquent
+     *    collection (every row cast to Carbon) — the same outage with a different error message.
+     *
+     * The duplicate check deliberately uses the base builder rather than `AttendanceLog`: the model casts
+     * `punch_time`, and comparing "already stored" only needs the string as the database holds it.
+     *
+     * @param  array<int, mixed>  $fetched
+     * @return array{inserted: int, skipped_duplicate: int, unmapped: int, partial: bool}
+     */
+    private function ingestDeviceLogs(BiometricDevice $device, array $fetched, float $deadline): array
+    {
+        $inserted = 0;
+        $skippedDuplicate = 0;
+        $unmapped = 0;
+        $partial = false;
+
+        // Pass 1 — normalize. No I/O: a device record is meaningless until it has a device user and a time
+        // the rest of the system can compare, and both are the device's choice, not ours.
+        $candidates = [];
+        $accepted = [];
+
+        foreach ($fetched as $r) {
+            if (microtime(true) > $deadline) {
+                $partial = true;
+                Log::warning('Sync ingest stopped at its time budget', ['device' => $device->id, 'fetched' => count($fetched), 'normalized' => count($candidates)]);
+
+                break;
+            }
+
+            // Package can return multiple formats: associative with uid/id/timestamp or numeric indexed
+            $deviceUserId = $r['id'] ?? $r['userid'] ?? $r['user_id'] ?? $r[1] ?? null; // FIX: use ZK UserID (id) only, NOT uid (internal index)
+            $rawTimestamp = $r['timestamp'] ?? $r['time'] ?? $r[3] ?? $r['datetime'] ?? null;
+
+            if (! $deviceUserId || ! $rawTimestamp) {
+                Log::warning('ZK raw record missing uid/timestamp', ['device' => $device->id, 'raw' => $r]);
+
+                continue;
+            }
+
+            try {
+                $punchTime = Carbon::parse($rawTimestamp)->format('Y-m-d H:i:s');
+            } catch (\Throwable $e) {
+                Log::warning('Invalid timestamp from device', ['device' => $device->id, 'raw' => $rawTimestamp]);
+
+                continue;
+            }
+
+            $key = (string) $deviceUserId.'|'.$punchTime;
+
+            if (isset($accepted[$key])) {
+                // Two records for the same second from the device itself: the old per-row `exists()` saw the
+                // earlier one because it had already been inserted, so it skipped. Same here, no round trip.
+                $skippedDuplicate++;
+
+                continue;
+            }
+
+            $accepted[$key] = true;
+            $candidates[] = ['device_user_id' => (string) $deviceUserId, 'punch_time' => $punchTime];
+        }
+
+        if ($candidates === []) {
+            return ['inserted' => 0, 'skipped_duplicate' => $skippedDuplicate, 'unmapped' => 0, 'partial' => $partial];
+        }
+
+        // Device id -> employee, resolved once for the batch. `employees.biometric_id` first (it is the
+        // editable, authoritative mapping in the Employee form), `device_users` as the fallback: one ZK id
+        // works on any device, so a punch-in on A and a punch-out on B resolve to the same employee.
+        $byBiometric = [];
+        $byDeviceUser = [];
+        $ids = array_values(array_unique(array_column($candidates, 'device_user_id')));
+
+        foreach (array_chunk($ids, self::MAPPING_CHUNK) as $chunk) {
+            $byBiometric += Employee::query()->whereIn('biometric_id', $chunk)->pluck('employee_id', 'biometric_id')->all();
+            $byDeviceUser += DeviceUser::query()->whereIn('device_user_id', $chunk)->pluck('employee_id', 'device_user_id')->all();
+        }
+
+        // Pass 2 — persist in chunks: one read of what already exists, one insert of what does not.
+        foreach (array_chunk($candidates, self::INGEST_CHUNK) as $chunk) {
+            if (microtime(true) > $deadline) {
+                $partial = true;
+                Log::warning('Sync persistence stopped at its time budget', ['device' => $device->id, 'inserted_so_far' => $inserted]);
+
+                break;
+            }
+
+            $wanted = [];
+            foreach ($chunk as $c) {
+                $wanted[$c['device_user_id'].'|'.$c['punch_time']] = true;
+            }
+
+            $already = DB::table('attendance_logs')
+                ->where('device_id', $device->id)
+                ->whereIn('device_user_id', array_values(array_unique(array_column($chunk, 'device_user_id'))))
+                ->whereIn('punch_time', array_values(array_unique(array_column($chunk, 'punch_time'))))
+                ->get(['device_user_id', 'punch_time']);
+
+            foreach ($already as $row) {
+                $k = (string) $row->device_user_id.'|'.(string) $row->punch_time;
+
+                if (isset($wanted[$k])) {
+                    unset($wanted[$k]);
+                    $skippedDuplicate++;
+                }
+            }
+
+            $rows = [];
+
+            foreach ($chunk as $c) {
+                $k = $c['device_user_id'].'|'.$c['punch_time'];
+
+                if (! isset($wanted[$k])) {
+                    continue;
+                }
+
+                $employeeId = $byBiometric[$c['device_user_id']] ?? $byDeviceUser[$c['device_user_id']] ?? null;
+
+                if ($employeeId === null) {
+                    // Count unmapped for debug - but still insert (a punch from an unknown id is evidence,
+                    // and it becomes pairable the moment somebody maps that id).
+                    $unmapped++;
+
+                    if ($unmapped <= 3) {
+                        Log::info('Unmapped device_user_id - still inserting log', ['device' => $device->id, 'device_user_id' => $c['device_user_id'], 'punch_time' => $c['punch_time'], 'note' => 'Map in Device Users to create pairs']);
+                    }
+                }
+
+                $rows[] = [
+                    'device_user_id' => $c['device_user_id'],
+                    'employee_id' => $employeeId,
+                    'punch_time' => $c['punch_time'],
+                    'device_id' => $device->id,
+                    'punch_type' => 'AUTO',
+                    'is_processed' => false,
+                ];
+            }
+
+            if ($rows !== []) {
+                $inserted += $this->logs->createMany($rows);
+            }
+        }
+
+        return ['inserted' => $inserted, 'skipped_duplicate' => $skippedDuplicate, 'unmapped' => $unmapped, 'partial' => $partial];
+    }
+
     private function generateDemoAttendance(BiometricDevice $device, ?string $fromDate, ?string $toDate): array
     {
         $demoUsers = [
@@ -675,8 +757,7 @@ class AttendanceSyncService
             throw new \Exception("Device {$device->ip_address}:{$device->port} unreachable - cannot fetch users");
         }
 
-        @set_time_limit(60);
-        @ini_set('default_socket_timeout', '3');
+        @ini_set('default_socket_timeout', '3'); // bounded I/O, not a shorter PHP time limit
 
         $zkClass2 = null;
         foreach (['\Jmrashed\Zkteco\Lib\ZKTeco', '\TahaRafi\Zkteco\Lib\ZKTeco'] as $c2) {

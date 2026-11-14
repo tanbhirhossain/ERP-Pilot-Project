@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Modules\CORE\Support\Locale;
 use Modules\CORE\Support\UiTheme;
 
 class HandleInertiaRequests extends Middleware
@@ -54,6 +55,10 @@ class HandleInertiaRequests extends Middleware
             // `data-theme` on <html>, and app.blade.php renders the same value
             // server-side so the first paint is already correct.
             'ui' => UiTheme::share($request->user()),
+            // U19: active UI language + direction + the switcher's option list. Resolved by the
+            // SetLocale middleware that runs before this one, so `dir` here always matches the
+            // `dir` the server rendered into <html>.
+            'locale' => Locale::share(),
             'auth' => [
                 // Whitelisted: the full User model carries every column and any
                 // loaded relation into the browser on every request.
@@ -69,6 +74,8 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
+                'warning' => $request->session()->get('warning'),
+                'info' => $request->session()->get('info'),
                 'preview' => $request->session()->get('preview'),
                 'result' => $request->session()->get('result'),
             ],

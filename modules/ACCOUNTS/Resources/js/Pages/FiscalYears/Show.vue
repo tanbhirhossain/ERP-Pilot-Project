@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { FiscalYear } from '@accounts/types';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
-defineProps<{ fiscalYear:any }>();
-function close(id:number){ if(confirm('Close FY? All draft journals must be posted/voided. Periods will be locked.')) router.post(route('accounts.fiscal-years.close', id)); }
-function reopen(id:number){ if(confirm('Reopen FY?')) router.post(route('accounts.fiscal-years.reopen', id)); }
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatDate } from '@core/Utils/format';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
+defineProps<{ fiscalYear:FiscalYear }>();
+async function close(id:number){ if(await confirm({ description: 'Close FY? All draft journals must be posted/voided. Periods will be locked.', danger: true })) router.post(route('accounts.fiscal-years.close', id)); }
+async function reopen(id:number){ if(await confirm({ description: 'Reopen FY?', danger: false })) router.post(route('accounts.fiscal-years.reopen', id)); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Accounts' }, { title: 'Fiscal Years', href: route('accounts.fiscal-years.index') }, { title: fiscalYear.code }]">

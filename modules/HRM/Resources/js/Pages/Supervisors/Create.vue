@@ -4,8 +4,10 @@ import { computed, ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props=defineProps<{
   employeeOptions:{value:string;label:string}[];
   userOptions:{value:number;label:string;description?:string}[];
@@ -24,6 +26,7 @@ const form=useForm({
   effective_to:'' as string,
   remarks:'' as string,
 });
+useUnsavedGuard(() => form.isDirty);
 const kind=ref<'user'|'employee'>('user');
 watch(kind,(v)=>{ form.supervisor_kind=v; if(v==='user') form.supervisor_employee_id=null; else form.supervisor_id=null; });
 function submit(){ form.post(route('hrm.supervisors.store')); }
@@ -34,7 +37,7 @@ const userOpts=computed(()=> props.userOptions);
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Supervisors',href:route('hrm.supervisors.index')},{title:'Assign'}]">
     <Head title="Assign Supervisor"/>
     <div style="max-width:720px;margin:0 auto;background:white;border:1px solid #e2e8f0;border-radius:12px;padding:20px">
-      <h1 style="font-size:16px;font-weight:700;margin-bottom:4px">Assign Supervisor</h1>
+      <PageHeader title="Assign Supervisor" />
       <p style="font-size:12px;color:#64748b;margin-bottom:16px">Flexibility: choose whether the supervisor is a <b>User</b> account or another <b>Employee</b>.</p>
       <form @submit.prevent="submit" style="display:flex;flex-direction:column;gap:16px">
         <div style="display:flex;flex-direction:column;gap:6px">

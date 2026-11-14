@@ -5,7 +5,9 @@ use Modules\PURCHASE\Http\Controllers\GoodsReceiptController;
 use Modules\PURCHASE\Http\Controllers\LandedCostController;
 use Modules\PURCHASE\Http\Controllers\OptionsController;
 use Modules\PURCHASE\Http\Controllers\PurchaseOrderController;
+use Modules\PURCHASE\Http\Controllers\PurchaseRequisitionController;
 use Modules\PURCHASE\Http\Controllers\PurchaseReturnController;
+use Modules\PURCHASE\Http\Controllers\PurchaseRfqController;
 use Modules\PURCHASE\Http\Controllers\VendorBillController;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 
@@ -70,4 +72,37 @@ Route::middleware(['web', 'auth'])->prefix('purchase')->name('purchase.')->group
     Route::get('landed-costs/{landedCost}', [LandedCostController::class, 'show'])->middleware(PermissionMiddleware::class.':purchase.landed.view')->name('landed-costs.show');
     Route::post('landed-costs/{landedCost}/allocate', [LandedCostController::class, 'post'])->middleware(PermissionMiddleware::class.':purchase.landed.manage')->name('landed-costs.allocate');
     Route::post('landed-costs/{landedCost}/cancel', [LandedCostController::class, 'cancel'])->middleware(PermissionMiddleware::class.':purchase.landed.manage')->name('landed-costs.cancel');
+
+    // ── F18 · Requisitions (ask) ────────────────────────────────────────────────────────────────
+    // A requisition never posts anything, so its routes never touch a posting grant: raise it (manage),
+    // read it (view), decide on it (approve). `request-quotes` sits under the RFQ grant because it opens
+    // a round rather than answering one.
+    Route::get('requisitions', [PurchaseRequisitionController::class, 'index'])->middleware(PermissionMiddleware::class.':purchase.requisitions.view')->name('requisitions.index');
+    Route::get('requisitions/create', [PurchaseRequisitionController::class, 'create'])->middleware(PermissionMiddleware::class.':purchase.requisitions.manage')->name('requisitions.create');
+    Route::post('requisitions', [PurchaseRequisitionController::class, 'store'])->middleware(PermissionMiddleware::class.':purchase.requisitions.manage')->name('requisitions.store');
+    Route::get('requisitions/{requisition}', [PurchaseRequisitionController::class, 'show'])->middleware(PermissionMiddleware::class.':purchase.requisitions.view')->name('requisitions.show');
+    Route::get('requisitions/{requisition}/edit', [PurchaseRequisitionController::class, 'edit'])->middleware(PermissionMiddleware::class.':purchase.requisitions.manage')->name('requisitions.edit');
+    Route::put('requisitions/{requisition}', [PurchaseRequisitionController::class, 'update'])->middleware(PermissionMiddleware::class.':purchase.requisitions.manage')->name('requisitions.update');
+    Route::delete('requisitions/{requisition}', [PurchaseRequisitionController::class, 'destroy'])->middleware(PermissionMiddleware::class.':purchase.requisitions.manage')->name('requisitions.destroy');
+    Route::post('requisitions/{requisition}/submit', [PurchaseRequisitionController::class, 'submit'])->middleware(PermissionMiddleware::class.':purchase.requisitions.manage')->name('requisitions.submit');
+    Route::post('requisitions/{requisition}/approve', [PurchaseRequisitionController::class, 'approve'])->middleware(PermissionMiddleware::class.':purchase.requisitions.approve')->name('requisitions.approve');
+    Route::post('requisitions/{requisition}/reject', [PurchaseRequisitionController::class, 'reject'])->middleware(PermissionMiddleware::class.':purchase.requisitions.approve')->name('requisitions.reject');
+    Route::post('requisitions/{requisition}/cancel', [PurchaseRequisitionController::class, 'cancel'])->middleware(PermissionMiddleware::class.':purchase.requisitions.manage')->name('requisitions.cancel');
+    Route::post('requisitions/{requisition}/request-quotes', [PurchaseRequisitionController::class, 'requestQuotes'])->middleware(PermissionMiddleware::class.':purchase.rfq.manage')->name('requisitions.requestQuotes');
+
+    // ── F18 · RFQ rounds (ask the market, compare, award) ─────────────────────────────────────────
+    // `quote` is `manage` and `award` is `award`: keying in what a vendor said is not the same act as
+    // deciding to buy from them, and the whole point of the round is that those can be different people.
+    Route::get('rfqs', [PurchaseRfqController::class, 'index'])->middleware(PermissionMiddleware::class.':purchase.rfq.view')->name('rfqs.index');
+    Route::get('rfqs/create', [PurchaseRfqController::class, 'create'])->middleware(PermissionMiddleware::class.':purchase.rfq.manage')->name('rfqs.create');
+    Route::post('rfqs', [PurchaseRfqController::class, 'store'])->middleware(PermissionMiddleware::class.':purchase.rfq.manage')->name('rfqs.store');
+    Route::get('rfqs/{rfq}', [PurchaseRfqController::class, 'show'])->middleware(PermissionMiddleware::class.':purchase.rfq.view')->name('rfqs.show');
+    Route::put('rfqs/{rfq}', [PurchaseRfqController::class, 'update'])->middleware(PermissionMiddleware::class.':purchase.rfq.manage')->name('rfqs.update');
+    Route::delete('rfqs/{rfq}', [PurchaseRfqController::class, 'destroy'])->middleware(PermissionMiddleware::class.':purchase.rfq.manage')->name('rfqs.destroy');
+    Route::post('rfqs/{rfq}/send', [PurchaseRfqController::class, 'send'])->middleware(PermissionMiddleware::class.':purchase.rfq.manage')->name('rfqs.send');
+    Route::post('rfqs/{rfq}/close', [PurchaseRfqController::class, 'close'])->middleware(PermissionMiddleware::class.':purchase.rfq.manage')->name('rfqs.close');
+    Route::post('rfqs/{rfq}/cancel', [PurchaseRfqController::class, 'cancel'])->middleware(PermissionMiddleware::class.':purchase.rfq.manage')->name('rfqs.cancel');
+    Route::post('rfqs/{rfq}/quotes', [PurchaseRfqController::class, 'quote'])->middleware(PermissionMiddleware::class.':purchase.rfq.manage')->name('rfqs.quotes.store');
+    Route::post('rfqs/quotes/{quote}/withdraw', [PurchaseRfqController::class, 'withdrawQuote'])->middleware(PermissionMiddleware::class.':purchase.rfq.manage')->name('rfqs.quotes.withdraw');
+    Route::post('rfqs/{rfq}/award', [PurchaseRfqController::class, 'award'])->middleware(PermissionMiddleware::class.':purchase.rfq.award')->name('rfqs.award');
 });

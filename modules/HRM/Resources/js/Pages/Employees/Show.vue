@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import type { Employee } from '@hrm/types';
 import { computed } from 'vue';
 import {
     Archive,
@@ -22,13 +23,13 @@ import {
     UsersRound,
     Wrench,
 } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import FormSection from '../../../../../CORE/Resources/js/Components/FormSection.vue';
-import DetailItem from '../../../../../CORE/Resources/js/Components/DetailItem.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import FormSection from '@core/Components/FormSection.vue';
+import DetailItem from '@core/Components/DetailItem.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
 
-const props = defineProps<{ employee: any; subordinates?: any[] }>();
+const props = defineProps<{ employee: Employee; subordinates?: any[] }>();
 
 const emp = computed(() => props.employee ?? {});
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import ProductForm from '../../Components/ProductForm.vue';
 
 defineProps<{ categoryOptions: any[]; brandOptions: any[]; uomOptions: any[]; warehouseOptions: any[] }>();

@@ -3,12 +3,12 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, Tag, Eye } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
 interface Row { id:number; name:string; code:string; currency:string; is_default:boolean; is_active:boolean; effective_from?:string; effective_to?:string; items_count:number; partners_count:number; created_at:string }
 defineProps<{ priceLists: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -29,7 +29,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
   <AdminLayout :breadcrumbs="[{ title: 'Ven & Cust' }, { title: 'Price Lists' }]">
     <Head title="Price Lists" />
     <PageHeader title="Price Lists" description="Customer-specific pricing — linked to partners for sales pricing." :icon="Tag" :actions="[{ label:'Add Price List', route:'partner.pricelists.create', icon: Plus }]">
-    <DataTable route-name="partner.pricelists.index" title="Price Lists" :columns="columns" :rows="(priceLists.data as unknown as Record<string,unknown>[])" :meta="priceLists.meta" search-placeholder="Search price lists…">
+    <DataTable route-name="partner.pricelists.index" title="Price Lists" :columns="columns" :rows="priceLists.data" :meta="priceLists.meta" search-placeholder="Search price lists…">
       <template #cell-code="{row}"><span class="font-mono text-sm font-semibold bg-violet-500/10 text-violet-600 px-1.5 py-0.5 rounded">{{ row.code }}</span></template>
       <template #cell-name="{row}"><div><p class="font-semibold">{{ row.name }}</p><p class="text-xs text-muted-foreground">{{ row.currency }} · {{ row.effective_from || '—' }} → {{ row.effective_to || '—' }}</p></div></template>
       <template #cell-is_default="{row}"><StatusBadge v-if="row.is_default" label="Default" tone="success" /><span v-else class="text-sm text-muted-foreground">—</span></template>

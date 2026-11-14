@@ -8,10 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const form = useForm({
     name: '',
 });
+useUnsavedGuard(() => form.isDirty);
 
 const previewGroup = computed(() => {
     const segments = form.name.split('.');
@@ -40,7 +43,7 @@ function submit() {
                 <ArrowLeft class="size-4" />
             </Link>
             <div>
-                <h1 class="text-xl font-bold tracking-tight">Create permission</h1>
+                <PageHeader title="Create permission" />
                 <p class="mt-0.5 text-sm text-muted-foreground">
                     Define one atomic capability the system can check.
                 </p>

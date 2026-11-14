@@ -3,9 +3,11 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const form=useForm({shift_name:'',start_time:'',end_time:'',punch_in_window_start:'',punch_in_window_end:'',crosses_midnight:false,max_duration_hours:24});
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.post(route('hrm.shifts.store')); }
 </script>
 <template>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Head, Link} from '@inertiajs/vue3';
 import { CreditCard, Download, Building2 } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
-import Pagination from '../../../../../CORE/Resources/js/Components/Pagination.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import Pagination from '@core/Components/Pagination.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ advices:any }>();
 function money(v:any){ return Number(v||0).toLocaleString('en-BD',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function statusCls(s:string){ return s==='paid'?'bg-emerald-600 text-white': s==='confirmed'?'bg-amber-500 text-white': s==='draft'?'bg-slate-200 text-slate-700':'bg-red-100 text-red-700'; }

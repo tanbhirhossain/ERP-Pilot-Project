@@ -3,6 +3,9 @@
 namespace Modules\INVENTORY\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Modules\CORE\Services\ImportService;
+use Modules\INVENTORY\Imports\OpeningStockImport;
+use Modules\INVENTORY\Imports\ProductImport;
 use Modules\INVENTORY\Interfaces\AdjustmentRepositoryInterface;
 use Modules\INVENTORY\Interfaces\BrandRepositoryInterface;
 use Modules\INVENTORY\Interfaces\CategoryRepositoryInterface;
@@ -52,5 +55,10 @@ class INVENTORYServiceProvider extends ServiceProvider
             $this->loadRoutesFrom(__DIR__.'/../Routes/api.php');
         }
         $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
+
+        // Register this module's importers into the shared orchestrator (Phase 1).
+        $imports = $this->app->make(ImportService::class);
+        $imports->register('products', ProductImport::class);
+        $imports->register('opening_stock', OpeningStockImport::class);
     }
 }

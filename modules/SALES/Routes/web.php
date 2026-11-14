@@ -6,6 +6,7 @@ use Modules\SALES\Http\Controllers\InvoiceController;
 use Modules\SALES\Http\Controllers\OptionsController;
 use Modules\SALES\Http\Controllers\OrderController;
 use Modules\SALES\Http\Controllers\PosController;
+use Modules\SALES\Http\Controllers\PosOfflineController;
 use Modules\SALES\Http\Controllers\QuotationController;
 use Modules\SALES\Http\Controllers\SalesReturnController;
 use Spatie\Permission\Middleware\PermissionMiddleware;
@@ -78,6 +79,12 @@ Route::middleware(['web', 'auth'])->prefix('sales')->name('sales.')->group(funct
     Route::get('pos/sessions', [PosController::class, 'sessions'])->middleware(PermissionMiddleware::class.':pos.sessions.manage')->name('pos.sessions');
     Route::post('pos/sessions/open', [PosController::class, 'openSession'])->middleware(PermissionMiddleware::class.':pos.sessions.manage')->name('pos.sessions.open');
     Route::post('pos/sessions/{session}/close', [PosController::class, 'closeSession'])->middleware(PermissionMiddleware::class.':pos.sessions.manage')->name('pos.sessions.close');
+    // F22 offline till. Both paths are ahead of the `pos/{sale}` wildcard at the bottom, or `offline`
+    // would be read as a sale id and 404 as a model not found.
+    // No new permission on purpose: replaying a queued ticket is selling, and a `pos.offline.sync`
+    // grant would split one act in two and silently break every role that can already work a till.
+    Route::get('pos/offline', [PosOfflineController::class, 'queue'])->middleware(PermissionMiddleware::class.':pos.terminal.sell')->name('pos.offline');
+    Route::post('pos/offline/sync', [PosOfflineController::class, 'sync'])->middleware(PermissionMiddleware::class.':pos.terminal.sell')->name('pos.offline.sync');
     // Declared before the `pos/{sale}` wildcard below, so a report path is never routed to a sale.
     Route::get('pos/reports/day-end', [PosController::class, 'dayEndReport'])->middleware(PermissionMiddleware::class.':pos.reports.view')->name('pos.reports.dayEnd');
     Route::get('pos/sessions/{session}/day-end', [PosController::class, 'sessionDayEnd'])->middleware(PermissionMiddleware::class.':pos.reports.view')->name('pos.sessions.dayEnd');

@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { PriceList } from '@partner/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {Plus, Trash2, Package} from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-const props = defineProps<{ priceList:any }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props = defineProps<{ priceList:PriceList }>();
 const form = useForm({
   name: props.priceList.name, code: props.priceList.code, currency: props.priceList.currency, is_default: props.priceList.is_default, is_active: props.priceList.is_active,
   effective_from: props.priceList.effective_from ?? '', effective_to: props.priceList.effective_to ?? '', notes: props.priceList.notes ?? '',
   items: props.priceList.items?.length ? props.priceList.items : [{ sku:'', product_name:'', unit_price:null, min_qty:1, discount_pct:0 }],
 });
+useUnsavedGuard(() => form.isDirty);
 function addItem(){ form.items.push({ sku:'', product_name:'', unit_price:null, min_qty:1, discount_pct:0 }); }
 function removeItem(i:number){ form.items.splice(i,1); }
 function submit(){ form.put(route('partner.pricelists.update', props.priceList.id)); }

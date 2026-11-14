@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { Journal } from '@accounts/types';
+import type { SelectOption } from '@core/types';
 import { computed, nextTick } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertCircle, ArrowLeft, BookOpen, Eye, Lock, FileText, Plus, Scale, Trash2, Wand2 } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import FormField from '../../../../../CORE/Resources/js/Components/FormField.vue';
-import FormSection from '../../../../../CORE/Resources/js/Components/FormSection.vue';
-import FormActions from '../../../../../CORE/Resources/js/Components/FormActions.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import FormField from '@core/Components/FormField.vue';
+import FormSection from '@core/Components/FormSection.vue';
+import FormActions from '@core/Components/FormActions.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
 
-const props = defineProps<{ journal: any; accountOptions: any[] }>();
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props = defineProps<{ journal: Journal; accountOptions: SelectOption[] }>();
 
 const status = String(props.journal.status ?? 'draft');
 const isDraft = status === 'draft';
@@ -71,6 +74,7 @@ const form = useForm({
         return rows;
     })(),
 });
+useUnsavedGuard(() => form.isDirty);
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -335,14 +339,28 @@ function submit() {
                         </Button>
                     </template>
 
-                    <div class="space-y-3">
+                    <!-- `@container` is what makes the row's inline layout answer to the width it is
+                         actually given, not to the width of the window. See the note under the headings. -->
+                    <div class="@container space-y-3">
                         <p v-if="form.errors.lines" role="alert" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive">
                             {{ form.errors.lines }}
                         </p>
 
-                        <!-- Column headings line up with the row grid below at xl and up. -->
-                        <div class="hidden gap-x-5 xl:grid xl:grid-cols-4 xl:px-1">
-                            <p class="xl:col-span-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account</p>
+                        <!--
+                            One journal line, one row: Account · Memo · Debit · Credit, with the line number
+                            and its DR/CR side in a gutter and the remove button pinned to the card's edge.
+
+                            The switch is a *container* query (`@3xl`), not a viewport one, and that is the
+                            point. The form sits inside a shell whose sidebar collapses to an icon rail, which
+                            widens the content area by 200px without the window changing size — a viewport
+                            breakpoint would keep the lines stacked on exactly the screens that just got room
+                            for them. The heading row above repeats this same column template, so labels stay
+                            over their fields at every width.
+                        -->
+                        <div class="hidden @3xl:grid @3xl:gap-x-3 @3xl:px-3 @3xl:pr-11 @3xl:grid-cols-[1.9rem_minmax(0,1.15fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,0.7fr)]">
+                            <span aria-hidden="true" />
+                            <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account</p>
+                            <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Memo</p>
                             <p class="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Debit</p>
                             <p class="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Credit</p>
                         </div>
@@ -350,47 +368,51 @@ function submit() {
                         <div
                             v-for="(line, i) in form.lines"
                             :key="i"
-                            class="group relative rounded-lg border bg-card p-4 transition hover:border-primary/30 hover:shadow-sm"
+                            class="group relative rounded-lg border bg-card p-3 transition hover:border-primary/30 hover:shadow-sm @3xl:py-2 @3xl:pr-11"
                             :class="onLineError(i, 'account_id') ? 'border-destructive/50' : 'border-border'"
                         >
-                            <div class="mb-3 flex items-center gap-2">
-                                <span class="font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                                    Line {{ i + 1 }}
-                                </span>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                class="absolute right-1.5 top-1.5 z-10 size-7 text-muted-foreground hover:text-destructive"
+                                :disabled="!canRemoveLine"
+                                :aria-label="`Remove line ${i + 1}`"
+                                :title="canRemoveLine ? 'Remove this line' : `A journal needs at least ${MIN_LINES} lines`"
+                                @click="removeLine(i)"
+                            >
+                                <Trash2 class="size-3.5" />
+                            </Button>
 
-                                <span
-                                    v-if="line.debit || line.credit"
-                                    class="rounded-md px-1.5 py-0.5 font-mono text-[11px] font-bold"
-                                    :class="
-                                        Number(line.debit) > 0
-                                            ? 'bg-sky-500/15 text-sky-700 dark:text-sky-400'
-                                            : 'bg-violet-500/15 text-violet-700 dark:text-violet-400'
-                                    "
-                                >
-                                    {{ Number(line.debit) > 0 ? 'DR' : 'CR' }}
-                                    {{ (Number(line.debit) || Number(line.credit) || 0).toFixed(2) }}
-                                </span>
+                            <div class="grid grid-cols-1 gap-x-3 gap-y-2 @3xl:grid-cols-[1.9rem_minmax(0,1.15fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,0.7fr)] @3xl:items-start">
+                                <!-- Gutter: the line number, and which side it posts to. The amount is left
+                                     out once the row is inline — it is in the Debit or Credit field right
+                                     beside it, and a second copy would only compete for width. -->
+                                <div class="flex items-center gap-2 pr-9 @3xl:flex-col @3xl:items-center @3xl:gap-1 @3xl:pr-0 @3xl:pt-1.5">
+                                    <span class="font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                                        <span class="@3xl:hidden">Line </span>{{ i + 1 }}
+                                    </span>
 
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    class="ml-auto size-7 text-muted-foreground hover:text-destructive"
-                                    :disabled="!canRemoveLine"
-                                    :aria-label="`Remove line ${i + 1}`"
-                                    :title="canRemoveLine ? 'Remove this line' : `A journal needs at least ${MIN_LINES} lines`"
-                                    @click="removeLine(i)"
-                                >
-                                    <Trash2 class="size-3.5" />
-                                </Button>
-                            </div>
+                                    <span
+                                        v-if="line.debit || line.credit"
+                                        class="rounded-md px-1.5 py-0.5 font-mono text-[11px] font-bold"
+                                        :class="
+                                            Number(line.debit) > 0
+                                                ? 'bg-sky-500/15 text-sky-700 dark:text-sky-400'
+                                                : 'bg-violet-500/15 text-violet-700 dark:text-violet-400'
+                                        "
+                                    >
+                                        {{ Number(line.debit) > 0 ? 'DR' : 'CR' }}<span class="@3xl:hidden">
+                                            {{ (Number(line.debit) || Number(line.credit) || 0).toFixed(2) }}
+                                        </span>
+                                    </span>
+                                </div>
 
-                            <div class="grid gap-x-5 gap-y-3 sm:grid-cols-2 xl:grid-cols-4">
+
                                 <FormField
                                     label="Account"
                                     required
-                                    span="full"
-                                    class="xl:col-span-2"
+                                    label-class="@3xl:sr-only"
                                     :error="onLineError(i, 'account_id')"
                                 >
                                     <SearchableSelect
@@ -401,8 +423,19 @@ function submit() {
                                         placeholder="Search the chart of accounts…"
                                     />
                                 </FormField>
+                                <FormField label="Memo" label-class="@3xl:sr-only" :error="onLineError(i, 'description')">
+                                    <template #default="{ id, invalid }">
+                                        <Input
+                                            v-model="line.description"
+                                            :id="id"
+                                            :aria-invalid="invalid"
+                                            maxlength="500"
+                                            placeholder="Line note — printed per line on the voucher"
+                                        />
+                                    </template>
+                                </FormField>
 
-                                <FormField label="Debit" :error="onLineError(i, 'debit')" label-class="xl:sr-only">
+                                <FormField label="Debit" :error="onLineError(i, 'debit')" label-class="@3xl:sr-only">
                                     <template #default="{ id, invalid }">
                                         <Input
                                             v-model.number="line.debit"
@@ -418,7 +451,7 @@ function submit() {
                                     </template>
                                 </FormField>
 
-                                <FormField label="Credit" :error="onLineError(i, 'credit')" label-class="xl:sr-only">
+                                <FormField label="Credit" :error="onLineError(i, 'credit')" label-class="@3xl:sr-only">
                                     <template #default="{ id, invalid }">
                                         <Input
                                             v-model.number="line.credit"
@@ -434,17 +467,6 @@ function submit() {
                                     </template>
                                 </FormField>
 
-                                <FormField label="Memo" span="full" :error="onLineError(i, 'description')">
-                                    <template #default="{ id, invalid }">
-                                        <Input
-                                            v-model="line.description"
-                                            :id="id"
-                                            :aria-invalid="invalid"
-                                            maxlength="500"
-                                            placeholder="Line note — printed per line on the voucher"
-                                        />
-                                    </template>
-                                </FormField>
                             </div>
                         </div>
 

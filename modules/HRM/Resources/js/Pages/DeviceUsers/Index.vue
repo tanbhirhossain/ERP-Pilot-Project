@@ -5,13 +5,17 @@ import { ref, computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import type { Paginator, SelectOption } from '@core/types';
+import { formatDate } from '@core/Utils/format';
 
+import { useConfirm } from '@core/Composables/useConfirm';
+import { useToast } from '@core/Composables/useToast';
+const { confirm } = useConfirm();
+const toast = useToast();
 interface Row {
   id: number;
   uid?: string;
@@ -22,7 +26,7 @@ interface Row {
   created_at: string;
 }
 
-const props = defineProps<{ deviceUsers: Paginator<Row>; deviceOptions: any[]; employeeOptions: any[] }>();
+const props = defineProps<{ deviceUsers: Paginator<Row>; deviceOptions: SelectOption[]; employeeOptions: SelectOption[] }>();
 
 const columns: DataTableColumn[] = [
   { key: 'device_user_id', label: 'Device User ID', sortable: true, width: '10rem' },
@@ -43,18 +47,18 @@ const selectedDeviceLabel = computed(() => {
   return opt?.label ?? 'unknown';
 });
 
-function submit() {
+async function submit() {
   form.post(route('hrm.device-users.store'), { preserveScroll: true, onSuccess() { form.reset(); } });
 }
 
-function del(id: number) {
-  if (!confirm('Remove this mapping? Punch IDs will become orphan until remapped.')) return;
+async function del(id: number) {
+  if (!await confirm({ description: 'Remove this mapping? Punch IDs will become orphan until remapped.', danger: true })) return;
   router.delete(route('hrm.device-users.destroy', id), { preserveScroll: true });
 }
 
-function syncFromSelectedDevice() {
+async function syncFromSelectedDevice() {
   if (!syncDeviceId.value) {
-    alert('Select a device first.');
+    toast.warning('Select a device first.');
     return;
   }
   syncing.value = true;
@@ -147,7 +151,7 @@ function syncFromSelectedDevice() {
       route-name="hrm.device-users.index"
       title="Global Mappings"
       :columns="columns"
-      :rows="(deviceUsers.data as unknown as Record<string, unknown>[])"
+      :rows="deviceUsers.data"
       :meta="deviceUsers.meta"
     >
       <template #cell-device_user_id="{ row }">

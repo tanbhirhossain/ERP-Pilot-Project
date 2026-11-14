@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { CreditCard, Printer } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { printDocument } from '../../../../../CORE/Resources/js/Composables/usePrint';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import { printDocument } from '@core/Composables/usePrint';
+import PageHeader from '@core/Components/PageHeader.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
 import AcctSection from '../../Components/AcctSection.vue';
 import AcctEmpty from '../../Components/AcctEmpty.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ payables:any; filters:any }>();
 </script>
 <template>

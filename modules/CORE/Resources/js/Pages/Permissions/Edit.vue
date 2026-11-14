@@ -9,6 +9,7 @@ import InputError from '@/components/InputError.vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import { formatDate } from '../../Utils/format';
 
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 interface Props {
     permission: {
         id: number;
@@ -25,6 +26,7 @@ const props = defineProps<Props>();
 const form = useForm({
     name: props.permission.name,
 });
+useUnsavedGuard(() => form.isDirty);
 
 function submit() {
     form.put(route('core.permissions.update', props.permission.id), {

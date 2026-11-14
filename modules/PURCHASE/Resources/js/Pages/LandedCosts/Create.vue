@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
+import type { GoodsReceipt } from '@purchase/types';
 import { reactive } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-defineProps<{receipt:any, accounts:any[]}>();
-const form=reactive({receipt_id: null as any, allocation_basis:'value', notes:'', lines:[{name:'Freight',amount:0,account_id:null},{name:'Customs Duty',amount:0,account_id:null}] as any[]});
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+defineProps<{receipt:GoodsReceipt, accounts:any[]}>();
+const form=reactive({receipt_id: null as number | string | null, allocation_basis:'value', notes:'', lines:[{name:'Freight',amount:0,account_id:null},{name:'Customs Duty',amount:0,account_id:null}] as any[]});
 function add(){form.lines.push({name:'',amount:0,account_id:null});}
 function submit(){router.post(route('purchase.landed-costs.store'), form as any);}
 </script>
@@ -15,7 +17,7 @@ function submit(){router.post(route('purchase.landed-costs.store'), form as any)
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: 'Landed Costs', href: route('purchase.landed-costs.index') }, { title: 'Create' }]">
     <Head title="New Landed Cost"/>
     <div class="space-y-4">
-      <h1 class="text-xl font-bold">New Landed Cost Allocation</h1>
+      <PageHeader title="New Landed Cost Allocation" />
       <div class="bg-card border rounded-xl p-4 space-y-3">
         <div class="grid md:grid-cols-3 gap-3">
           <div class="space-y-1"><Label>GRN Receipt *</Label><SearchableSelect v-model="form.receipt_id" endpoint="/purchase/api/options/receipts" placeholder="Select GRN (posted)" /></div>

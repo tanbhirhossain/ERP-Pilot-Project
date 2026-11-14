@@ -3,11 +3,13 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props=defineProps<{ department:{id:number;name:string;code?:string;description?:string;parent_id:number|null;is_active:boolean}, parentOptions:{value:number;label:string}[] }>();
 const form=useForm({name:props.department.name,code:props.department.code||'',description:props.department.description||'',parent_id:props.department.parent_id,is_active:props.department.is_active});
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('hrm.departments.update',props.department.id)); }
 </script>
 <template>

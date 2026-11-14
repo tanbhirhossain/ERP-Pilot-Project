@@ -83,6 +83,9 @@ const MDS_DOWN_ALLOWLIST = [
     // deleted before the narrow index is rebuilt; the sheet-level accrual row survives. Kept visible
     // because a down() that deletes rows is exactly the kind that should never be accidental.
     '2026_11_07_000002_payroll_payment_posting_scope.php' => 'deletes the per-slip payment posts that the restored narrower unique index cannot hold',
+    // Rolling back restores the enum without 'approved'. Approved rows must be demoted to
+    // 'generated' first, or the enum change itself would fail on rows it can no longer represent.
+    '2026_11_10_000001_payroll_cutlist_review_stage.php' => 'demotes approved cutlists back to generated before narrowing the status enum',
 ];
 
 /** Every migration file in the project, from both locations. */

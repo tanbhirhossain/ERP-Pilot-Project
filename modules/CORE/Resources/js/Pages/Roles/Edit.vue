@@ -11,6 +11,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import type { SelectOption } from '../../types';
 import { formatNumber } from '../../Utils/format';
 
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 interface Props {
     role: {
         id: number;
@@ -28,6 +29,7 @@ const form = useForm({
     name: props.role.name,
     permissions: [...props.role.permissions] as number[],
 });
+useUnsavedGuard(() => form.isDirty);
 
 function submit() {
     form.put(route('core.roles.update', props.role.id), {

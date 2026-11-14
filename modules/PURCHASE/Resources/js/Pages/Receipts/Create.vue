@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2 } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { computed } from 'vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props = defineProps<{ order?: any }>();
 const initItems = props.order?.items?.map((it:any)=>({ product_id: it.product_id, order_item_id: it.id, qty: Number(it.qty) - Number(it.qty_received||0), unit_price: Number(it.unit_price), discount_pct: Number(it.discount_pct||0), vat_rate: Number(it.vat_rate||0) })).filter((it:any)=>it.qty>0) ?? [{ product_id: null as number|null, order_item_id: null as number|null, qty: 1, unit_price: null as number|null, discount_pct: 0, vat_rate: 0 }];
 const form = useForm({
@@ -18,6 +19,7 @@ const form = useForm({
   notes: props.order ? `GRN for ${props.order.order_no}` : '',
   items: initItems,
 });
+useUnsavedGuard(() => form.isDirty);
 const total = computed(()=> form.items.reduce((s,i)=>{ const g=(Number(i.qty)||0)*(Number(i.unit_price)||0); return s+g*(1-(Number(i.discount_pct)||0)/100)*(1+(Number(i.vat_rate)||0)/100); },0));
 function addItem(){ form.items.push({ product_id: null, order_item_id: null, qty: 1, unit_price: null, discount_pct: 0, vat_rate: 0 }); }
 function removeItem(i:number){ form.items.splice(i,1); if(!form.items.length) addItem(); }
