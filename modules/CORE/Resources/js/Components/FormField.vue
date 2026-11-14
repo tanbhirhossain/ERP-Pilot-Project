@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { AlertCircle } from 'lucide-vue-next';
-import { computed, useId, useSlots } from 'vue';
+import { computed, onMounted, ref, useId, useSlots } from 'vue';
 
 /**
  * One labelled form control: label, required marker, hint, inline error.
@@ -18,8 +18,18 @@ import { computed, useId, useSlots } from 'vue';
  *     <template #default="{ id }"><Input :id="id" v-model="form.name" /></template>
  *   </FormField>
  *
- * A plain (non-scoped) slot still works — the label just uses aria-labelledby
- * fallback ordering, so nothing breaks when migrating a page incrementally.
+ * A plain (non-scoped) slot still works — a slot that never receives the id
+ * cannot be attached to a `<label for>`, so the label falls back to
+ * `aria-labelledby` ordering and the field keeps its own control untouched.
+ *
+ * NOTE (bug fix): the previous version decided `isScoped` from
+ * `slots.default.length > 0`. Every default slot — `#default="{ id }"` and a
+ * plain `<SearchableSelect />` child alike — compiles to a non-empty function,
+ * so that check was always true. The result was `<label for>` pointing at an id
+ * that no element ever rendered, across all ~309 `<FormField>` call sites:
+ * clicking a label did nothing, `getByLabel()` found nothing, and screen
+ * readers announced an unlabelled input. We now resolve the label target from
+ * the control that actually rendered inside the field.
  */
 interface Props {
     label?: string;
@@ -52,6 +62,48 @@ const fieldId = computed(() => `${generatedId}-field`);
 const errorId = computed(() => `${generatedId}-error`);
 const helpId = computed(() => `${generatedId}-help`);
 
+/**
+ * The id of the control that actually rendered in the default slot.
+ *
+ * Read from the DOM once the field is mounted: a scoped slot forwards `fieldId`
+ * to `<Input :id>`, `<FormSelect :id>` and friends, while a raw child such as
+ * `<SearchableSelect>` renders its own `<button role="combobox">`. Whatever the
+ * case, if an element carries an id we point the label at it; if nothing does,
+ * `controlId` stays undefined and the label is only referenced by
+ * `aria-labelledby`, which is always valid.
+ */
+const root = ref<HTMLElement | null>(null);
+
+const controlId = ref<string | undefined>(undefined);
+const labelId = computed(() => `${fieldId.value}-label`);
+
+onMounted(() => {
+    const el = root.value;
+    if (!el) return;
+
+    // First focusable control in the field, in document order. SearchableSelect
+    // renders a bare `<button type="button">` trigger, so a button that is not a
+    // plain action button is a legitimate label target too.
+    const control = el.querySelector<HTMLElement>(
+        'input, select, textarea, [role="combobox"], button:not([data-action])',
+    );
+
+    if (!control) return;
+
+    if (control.id) {
+        controlId.value = control.id;
+
+        return;
+    }
+
+    // The child component owns its markup and was given no `id` (for example
+    // `<SearchableSelect>` inside a plain FormField). We cannot invent an `id`
+    // it would keep across re-renders, so associate the label through ARIA
+    // instead: `aria-labelledby` is valid on any control and is not rebound by
+    // those components, which keeps `getByLabel()` and screen readers working.
+    control.setAttribute('aria-labelledby', labelId.value);
+});
+
 const spanClass = computed(() => {
     // `col-span-full` works at any grid density, so a section can change its
     // `cols` without its full-width fields breaking.
@@ -65,16 +117,17 @@ const spanClass = computed(() => {
     }[props.span as 1 | 2 | 3 | 4];
 });
 
-/** A scoped slot means the caller can wire the id through to the control. */
-const isScoped = computed(() => (slots.default?.length ?? 0) > 0);
+/** Keep the legacy `isScoped` name for readers of the template. */
+const isScoped = computed(() => controlId.value !== undefined);
 </script>
 
 <template>
-    <div :class="cn('min-w-0 space-y-1.5', spanClass, props.class)">
+    <div ref="root" :class="cn('min-w-0 space-y-1.5', spanClass, props.class)">
         <div v-if="label || help || $slots.labelAction" class="flex items-baseline justify-between gap-2">
             <label
-                :for="isScoped ? fieldId : undefined"
-                :id="isScoped ? undefined : `${fieldId}-label`"
+
+                :for="controlId"
+                :id="isScoped ? undefined : labelId"
                 :class="
                     cn(
                         'text-[13px] font-medium leading-none text-foreground',
