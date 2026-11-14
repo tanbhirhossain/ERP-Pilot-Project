@@ -50,9 +50,21 @@ Route::middleware(['web', 'auth'])->prefix('payroll')->name('payroll.')->group(f
     Route::post('loans/{loan}/approve', [PayrollLoanController::class, 'approve'])->middleware(PermissionMiddleware::class.':payroll.loans.approve')->name('loans.approve');
     Route::post('loans/{loan}/reject', [PayrollLoanController::class, 'reject'])->middleware(PermissionMiddleware::class.':payroll.loans.approve')->name('loans.reject');
 
+    // Provident fund. The fund is a liability with its own lifecycle (allocate -> accrue -> settle ->
+    // withdraw), so it gets its own routes rather than three buttons on one page. Every POST that
+    // moves money or writes many rows is throttled like the rest of the module's bulk writes.
     Route::get('provident-fund', [ProvidentFundController::class, 'index'])->middleware(PermissionMiddleware::class.':payroll.pf.view')->name('pf.index');
-    Route::post('provident-fund/allocate', [ProvidentFundController::class, 'allocate'])->middleware(PermissionMiddleware::class.':payroll.pf.manage')->name('pf.allocate');
+    Route::post('provident-fund/allocate', [ProvidentFundController::class, 'allocate'])->middleware(PermissionMiddleware::class.':payroll.pf.manage')->middleware('throttle:payroll-bulk-write')->name('pf.allocate');
     Route::post('provident-fund/policies', [ProvidentFundController::class, 'storePolicy'])->middleware(PermissionMiddleware::class.':payroll.pf.manage')->name('pf.policies.store');
+    Route::post('provident-fund/accrue', [ProvidentFundController::class, 'accrue'])->middleware(PermissionMiddleware::class.':payroll.pf.manage')->middleware('throttle:payroll-bulk-write')->name('pf.accrue');
+    Route::post('provident-fund/backfill', [ProvidentFundController::class, 'backfill'])->middleware(PermissionMiddleware::class.':payroll.pf.manage')->middleware('throttle:payroll-bulk-write')->name('pf.backfill');
+    Route::post('provident-fund/settle', [ProvidentFundController::class, 'settle'])->middleware(PermissionMiddleware::class.':payroll.pf.manage')->name('pf.settle');
+    Route::post('provident-fund/withdrawals', [ProvidentFundController::class, 'requestWithdrawal'])->middleware(PermissionMiddleware::class.':payroll.pf.manage')->name('pf.withdrawals.store');
+    Route::post('provident-fund/withdrawals/decide', [ProvidentFundController::class, 'decideWithdrawal'])->middleware(PermissionMiddleware::class.':payroll.pf.manage')->name('pf.withdrawals.decide');
+    Route::get('provident-fund/withdrawals', [ProvidentFundController::class, 'withdrawals'])->middleware(PermissionMiddleware::class.':payroll.pf.view')->name('pf.withdrawals.index');
+    // The account statement must be declared after the literal routes above, or `{account}` swallows
+    // 'withdrawals'.
+    Route::get('provident-fund/{account}', [ProvidentFundController::class, 'show'])->whereNumber('account')->middleware(PermissionMiddleware::class.':payroll.pf.view')->name('pf.show');
 
     Route::get('tax', [TaxConfigurationController::class, 'index'])->middleware(PermissionMiddleware::class.':payroll.tax.manage')->name('tax.index');
     Route::put('tax', [TaxConfigurationController::class, 'update'])->middleware(PermissionMiddleware::class.':payroll.tax.manage')->name('tax.update');

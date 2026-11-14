@@ -230,11 +230,14 @@ test('the model scan recurses into subdirectories and finds the models it should
     // columns below; the two that do not (`PurchaseRfq`, `PurchaseRfqLine`) store no money at all — a
     // round has one total per vendor, not one total, and its lines only ask for a quantity. Every decimal
     // on those seven tables is `decimal:2` cast regardless, quantities included.
+    // 180 since P12: `PfWithdrawal` joins the scan. It owns four money columns — requested and
+    // approved amount, plus the two account balances it reports on — so unlike the SSO identity it
+    // *must* be poisha-canonical, which is why the census moves with it.
     // 179 since SSO: `SsoIdentity` joins it. It owns no money column and must not acquire one — the table
     // records which external subject may sign in as whom, and a "quota" or "credit limit" column added to
     // it later would be the kind of thing that silently stops being poisha-canonical because nobody wrote a
     // cast for a model nobody thought about.
-    expect($models)->toHaveCount(179)
+    expect($models)->toHaveCount(180)
         ->and($models)->toHaveKey('sales_invoices')
         ->and($models)->toHaveKey('acc_journals')
         ->and($models['sales_invoices']['class'])->toBe('Invoice');
@@ -264,7 +267,10 @@ test('the classifier actually finds money columns to judge', function () {
     // fall outside MCC_MONEY_PATTERN, and are cast all the same. `purchase_rfqs` gains no money column on
     // purpose: a round has one total per vendor, and a stored "round total" is how a header ends up
     // disagreeing with the lines under it.
-    expect($columns)->toHaveCount(262, 'the classifier found a different number of money columns than the last audit pass');
+    // 264 since P12: `pf_withdrawals.requested_amount` and `pf_withdrawals.approved_amount`. The
+    // accrued ledger rows reuse `pf_ledgers.amount`, which the census already counts, so a fund
+    // month adds liability rows without inventing new money columns.
+    expect($columns)->toHaveCount(264, 'the classifier found a different number of money columns than the last audit pass');
 
     // And it is looking at numeric columns, not at varchar columns that happen to be named "rate".
     foreach ($columns as $c) {

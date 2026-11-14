@@ -209,7 +209,10 @@ test('the scanner is looking at the application it claims to describe', function
     // the shared `RequisitionForm`, and the round's index/create/show.
     // 431 since SSO: the linked-accounts page (`CORE::Sso/Accounts`). It prints nothing — an SSO page has no
     // document to hand someone — so the print-caller census stays where it is.
-    expect($files)->toHaveCount(432, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
+    // 434 since P12: the provident-fund rebuild adds a member statement and a withdrawal desk. The
+    // fund register is the existing page, rewritten; the two new pages are the statement (a member's
+    // own ledger, which a member is entitled to on paper) and the withdrawal desk.
+    expect($files)->toHaveCount(434, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
         ->and($files)->toContain(PC_LAYOUT);
 
     $withStyle = array_filter($files, static fn (string $path): bool => pcStyleBlocks(pcRead($path)) !== []);
@@ -340,7 +343,10 @@ test('every page prints through the engine, and nothing calls window.print() dir
     // refusal at day-end has a paper trail; it prints through the engine like every other receipt.
     // 22 since P11: the Overtime and Extra Duty approval desks print a signed report of their queue —
     // a document the payroll clerk signs, not a screenshot of a table with buttons down its side.
-    expect($callers)->toHaveCount(22, 'the set of pages that print through the engine changed; re-measure and say why');
+    // 24 since P12: the fund register prints its member list through the shared table, and the member
+    // statement prints through the engine directly - a member's balance is a document they are handed,
+    // not a screen they are shown.
+    expect($callers)->toHaveCount(24, 'the set of pages that print through the engine changed; re-measure and say why');
 
     // With DataTable migrated, nothing in the component tree calls the browser directly any more.
     foreach (pcVueFiles() as $path) {
@@ -441,5 +447,9 @@ test('one page marks at most one print region', function () {
     // Those pages also render a DataTable, so they are the one place the census below matters: the
     // report is the region that must win, and its `printSheet()` strips the table's marker for the
     // duration of the print rather than relying on document order to decide.
-    expect($marked)->toHaveCount(11, 'the set of pages that mark a print region changed; re-measure and say why');
+    // 13 since P12: the fund register marks its contribution and member tables as the region, so the
+    // reconciliation strip and the enrolment rail stay off the sheet - a register that goes to an
+    // auditor should be the register, not a screenshot of the desk that produced it - and the member
+    // statement marks its ledger, because a member is handed a statement, not shown a page.
+    expect($marked)->toHaveCount(13, 'the set of pages that mark a print region changed; re-measure and say why');
 });

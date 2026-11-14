@@ -2,6 +2,9 @@
 
 namespace Modules\PAYROLL\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Modules\PAYROLL\Console\Commands\PayrollAttendanceBenchmarkCommand;
 use Modules\PAYROLL\Console\Commands\PayrollPreflightCommand;
@@ -26,10 +29,27 @@ final class PAYROLLServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->registerRateLimiters();
+
         $this->loadRoutesFrom(__DIR__.'/../Routes/web.php');
         $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
         if ($this->app->runningInConsole()) {
             $this->commands([PayrollPreflightCommand::class, PayrollAttendanceBenchmarkCommand::class]);
         }
+    }
+
+    /**
+     * Named limiter for the module's bulk writes.
+     *
+     * Allocating provident-fund accounts, accruing a month and backfilling history each expand into
+     * one or two ledger rows per employee — 875 accounts is 1,750 statements — so a loop of them
+     * starves every other request. Keyed on the person, not the address: an office behind one NAT
+     * would otherwise share a bucket and the twelfth clerk would be told to wait for the first.
+     */
+    private function registerRateLimiters(): void
+    {
+        RateLimiter::for('payroll-bulk-write', function (Request $request): Limit {
+            return Limit::perMinute(6)->by('payroll-bulk|'.($request->user()?->id ?? $request->ip()));
+        });
     }
 }
