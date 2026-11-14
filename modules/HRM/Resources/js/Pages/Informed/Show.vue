@@ -3,12 +3,14 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {ArrowLeft, Bell, Check, X, Clock, User, FileText} from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
 const props=defineProps<{ informed:any }>();
 const processing=ref(false);
-function ack(){ processing.value=true; router.post(route('hrm.informed.acknowledge', props.informed.id),{},{onFinish(){processing.value=false;}}); }
-function rej(){ if(!confirm('Reject?')) return; processing.value=true; router.post(route('hrm.informed.reject', props.informed.id),{},{onFinish(){processing.value=false;}}); }
+async function ack(){ processing.value=true; router.post(route('hrm.informed.acknowledge', props.informed.id),{},{onFinish(){processing.value=false;}}); }
+async function rej(){ if(!await confirm({ description: 'Reject?', danger: true })) return; processing.value=true; router.post(route('hrm.informed.reject', props.informed.id),{},{onFinish(){processing.value=false;}}); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'HRM' }, { title: 'Informed Panel', href: route('hrm.informed.index') }, { title: `#${informed.id}` }]">

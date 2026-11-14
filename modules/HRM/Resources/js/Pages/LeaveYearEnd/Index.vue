@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Head, router} from '@inertiajs/vue3';
 import { CalendarRange, Save, ShieldCheck, AlertTriangle, Building2 } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { Button } from '@/components/ui/button';
 import { reactive } from 'vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
 const props = defineProps<{ year:number; types:any[]; summary:any[]; balances:any }>();
 const form = reactive({ settings: props.types.map(t=>({
   leave_type_id: t.id,
@@ -15,8 +17,8 @@ const form = reactive({ settings: props.types.map(t=>({
   encash_max_days: t.setting?.encash_max_days ?? null,
   encash_salary_component: t.setting?.encash_salary_component ?? 'basic',
 }))});
-function saveSettings(){ router.post(route('hrm.leave-year-end.settings'), {settings: form.settings}, {preserveScroll:true}); }
-function closeYear(){ if(confirm(`Close ${props.year}? This will: carry unused → next year opening, lapse remainder, encashable computed. Cannot undo without admin.`)) router.post(route('hrm.leave-year-end.close'), {year: props.year}, {preserveScroll:true}); }
+async function saveSettings(){ router.post(route('hrm.leave-year-end.settings'), {settings: form.settings}, {preserveScroll:true}); }
+async function closeYear(){ if(await confirm({ description: `Close ${props.year}? This will: carry unused → next year opening, lapse remainder, encashable computed. Cannot undo without admin.`, danger: true })) router.post(route('hrm.leave-year-end.close'), {year: props.year}, {preserveScroll:true}); }
 </script>
 <template>
  <AdminLayout :breadcrumbs="[{ title: 'Leave' }, { title: 'Year-End (Carry/Encash)' }]">

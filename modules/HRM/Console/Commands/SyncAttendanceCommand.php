@@ -7,6 +7,7 @@ use Modules\HRM\Jobs\SyncDeviceJob;
 use Modules\HRM\Models\BiometricDevice;
 use Modules\HRM\Services\Attendance\AttendanceProcessingService;
 use Modules\HRM\Services\Attendance\AttendanceSyncService;
+use Modules\HRM\Support\Attendance\DailyDateArgument;
 
 class SyncAttendanceCommand extends Command
 {
@@ -16,17 +17,25 @@ class SyncAttendanceCommand extends Command
 
     public function handle(AttendanceSyncService $sync, AttendanceProcessingService $proc): int
     {
-        @set_time_limit(120);
+        // This command owns the whole process (cron), so it is unlimited by choice; the per-device work is
+        // bounded by hrm.sync.budget_seconds. It used to be set_time_limit(120), which simply killed a
+        // large first sync in the middle of the device transfer.
+        @set_time_limit(0);
         $deviceId = $this->option('device');
-        $from = $this->option('from') ?? $this->option('since');
-        $to = $this->option('to');
-        // Support --since=today / yesterday
-        if ($from === 'today') {
-            $from = now()->toDateString();
+        $fromArgument = DailyDateArgument::resolve('from', $this->option('from') ?? $this->option('since'));
+        $toArgument = DailyDateArgument::resolve('to', $this->option('to'));
+
+        foreach (['from' => $fromArgument, 'to' => $toArgument] as $argument) {
+            if (! $argument['ok']) {
+                $this->error($argument['error']);
+
+                return Command::FAILURE;
+            }
         }
-        if ($from === 'yesterday') {
-            $from = now()->subDay()->toDateString();
-        }
+
+        $from = $fromArgument['value'];
+        $to = $toArgument['value'];
+        // `--since=today|yesterday` is handled inside DailyDateArgument::resolve().
         $useQueue = $this->option('queue');
 
         if ($deviceId) {

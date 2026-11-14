@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { ArrowLeftRight } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
-import Pagination from '../../../../../CORE/Resources/js/Components/Pagination.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import Pagination from '@core/Components/Pagination.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ movements:any }>();
 const tone=(s:string)=>({Draft:'bg-slate-400 text-white',Pending:'bg-amber-500 text-white',Approved:'bg-emerald-500 text-white',Rejected:'bg-red-500 text-white',Cancelled:'bg-zinc-500 text-white'}[s]||'bg-muted');
 </script>

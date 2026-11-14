@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 defineProps<{ supervisor:{id:number;employee_id:string;employee:{employee_id:string;full_name:string}|null;supervisor_kind:string;supervisor_id:number|null;supervisor_employee_id:string|null;supervisor:{kind:string;id:string;name:string;email?:string};supervisor_type:string;is_active:boolean;is_primary:boolean;effective_from:string|null;effective_to:string|null;remarks:string|null;created_at:string} }>();
 </script>
 <template>
@@ -10,7 +11,7 @@ defineProps<{ supervisor:{id:number;employee_id:string;employee:{employee_id:str
     <div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
       <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:18px">
         <div style="display:flex;align-items:center;justify-content:space-between">
-          <h1 style="font-size:18px;font-weight:700">Assignment #{{ supervisor.id }}</h1>
+          <PageHeader :title="`Assignment #${supervisor.id}`" />
           <Link :href="route('hrm.supervisors.edit',supervisor.id)"><Button size="sm">Edit</Button></Link>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;font-size:13px">

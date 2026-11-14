@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Head, router} from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { ShieldCheck } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
-import Pagination from '../../../../../CORE/Resources/js/Components/Pagination.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import Pagination from '@core/Components/Pagination.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ tasks:any }>();
 function clear(id:number, status:string){ const remarks=prompt(`Remarks for ${status} (optional):`)||''; router.post(route('hrm.clearance.clear', id), {status, remarks}); }
 const tone=(s:string)=>({Pending:'bg-amber-500 text-white',Cleared:'bg-emerald-500 text-white',Rejected:'bg-red-500 text-white',Waived:'bg-slate-500 text-white'}[s]||'bg-muted');

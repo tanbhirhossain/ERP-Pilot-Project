@@ -9,8 +9,10 @@ use Modules\PAYROLL\Actions\MarkPayrollSlipPaymentAction;
 use Modules\PAYROLL\Interfaces\Repositories\PayrollSalarySheetRepositoryInterface;
 use Modules\PAYROLL\Jobs\ProcessSalarySheetJob;
 use Modules\PAYROLL\Models\PayrollCalculationSnapshot;
+use Modules\PAYROLL\Models\PayrollCutlist;
 use Modules\PAYROLL\Models\PayrollLoanMonthlyBatch;
 use Modules\PAYROLL\Models\PayrollSalarySheet;
+use Modules\PAYROLL\Models\PayrollSetting;
 use Modules\PAYROLL\Models\PayrollSlip;
 use Modules\PAYROLL\Models\PayrollWorkflowAudit;
 
@@ -73,7 +75,25 @@ final class PayrollSalarySheetService
                 }
             }
 
+            // Cutlist review gate: when payroll settings demand it, the month's cutlist must have been
+            // generated, reviewed and approved before a NEW salary sheet can be queued. Retrying an existing
+            // sheet is never blocked here — its figures are already frozen in its own snapshot/cutlist.
+            $cutlistId = null;
+            if ($existingSheet === null && (bool) (PayrollSetting::query()->first()?->cutlist_review_required ?? false)) {
+                $review = PayrollCutlist::query()->where('pay_year', $year)->where('pay_month', $month)->lockForUpdate()->first();
+                if ($review === null) {
+                    throw ValidationException::withMessages(['payroll_cutlist_id' => 'Payroll settings require an approved cutlist before a salary sheet can be created for this month. Generate and approve one under Payroll → Salary Cutlists.']);
+                }
+                if ($review->status !== 'approved') {
+                    throw ValidationException::withMessages(['payroll_cutlist_id' => "The cutlist for this month is still in review (status: {$review->status}). Adjust it if needed, then approve it under Payroll → Salary Cutlists before creating the salary sheet."]);
+                }
+                $cutlistId = $review->id;
+            }
+
             $sheet = $this->sheets->createForPeriod($year, $month, $actorId, $includePunishments);
+            if ($cutlistId !== null && $sheet->payroll_cutlist_id === null) {
+                $sheet->update(['payroll_cutlist_id' => $cutlistId]);
+            }
             if ($excludedEmployeeIds !== []) {
                 foreach (array_chunk($excludedEmployeeIds, 250) as $chunk) {
                     $timestamp = now()->toDateTimeString();

@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{kits:any}>();
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Kits' }]">
     <Head title="Kits / BOM Production"/>
     <div class="max-w-6xl mx-auto space-y-4">
-      <div class="flex justify-between items-center"><h1 class="text-xl font-bold">🧩 Kits / BOM — Production</h1><Link :href="route('inventory.kits.create')"><span class="px-3 py-2 rounded bg-primary text-primary-foreground text-sm">New Kit Order</span></Link></div>
+      <PageHeader title="Kits / BOM" description="Production">
+      <template #actions><Link :href="route('inventory.kits.create')"><span class="px-3 py-2 rounded bg-primary text-primary-foreground text-sm">New Kit Order</span></Link></template>
+    </PageHeader>
       <p class="text-sm text-muted-foreground">Consume components (FIFO cost) → produce finished kit. Uses BOM if defined on product, or ad-hoc components.</p>
       <div class="bg-card border rounded-xl p-4">
         <StaticTable

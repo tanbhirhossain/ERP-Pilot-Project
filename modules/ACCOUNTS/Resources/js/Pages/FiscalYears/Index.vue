@@ -2,12 +2,12 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { CalendarRange, Plus, Eye, Lock, CheckCircle2, Archive } from 'lucide-vue-next';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatDate } from '@core/Utils/format';
 interface Row { id:number; name:string; code:string; start_date:string; end_date:string; status:string; periods_count:number; created_at:string }
 defineProps<{ fiscalYears: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -35,7 +35,7 @@ function tone(s:string){ if(s==='open') return 'success'; if(s==='closed') retur
         <span class="inline-flex items-center gap-1.5"><span class="size-2 rounded-full bg-slate-400"></span> Locked — archived</span>
         <span class="ml-auto hidden sm:inline text-muted-foreground">Periods auto-created per FY (12 months)</span>
       </div>
-      <DataTable route-name="accounts.fiscal-years.index" title="Fiscal Years" :columns="columns" :rows="(fiscalYears.data as unknown as Record<string,unknown>[])" :meta="fiscalYears.meta" search-placeholder="Search FY…">
+      <DataTable route-name="accounts.fiscal-years.index" title="Fiscal Years" :columns="columns" :rows="fiscalYears.data" :meta="fiscalYears.meta" search-placeholder="Search FY…">
         <template #cell-name="{row}"><div><p class="font-bold flex items-center gap-1.5">{{ row.name }} <CheckCircle2 v-if="row.status==='open'" class="size-3.5 text-emerald-600" /> <Lock v-if="row.status==='closed'" class="size-3.5 text-rose-500" /> <Archive v-if="row.status==='locked'" class="size-3.5 text-slate-400" /></p><p class="text-xs text-muted-foreground">{{ row.periods_count }} periods · FY range</p></div></template>
         <template #cell-code="{row}"><span class="font-mono text-xs font-bold bg-amber-500/10 text-amber-700 border border-amber-500/20 px-1.5 py-1 rounded">{{ row.code }}</span></template>
         <template #cell-start_date="{row}"><span class="text-sm font-medium">{{ formatDate(row.start_date) }}</span></template>

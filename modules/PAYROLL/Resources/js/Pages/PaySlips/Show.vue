@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { printDocument } from '../../../../../CORE/Resources/js/Composables/usePrint';
+import type { PayrollSlip } from '../../types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import { printDocument } from '@core/Composables/usePrint';
 import { Button } from '@/components/ui/button';
 
-const p = defineProps<{ slip: any; canPay: boolean }>();
+const p = defineProps<{ slip: PayrollSlip; canPay: boolean }>();
 function setStatus(status: string) {
   router.post(route('payroll.slips.payment-status', p.slip.id), { payment_status: status }, { preserveScroll: true });
 }

@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { Invoice } from '@sales/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 import { ref } from 'vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{ invoice:any }>();
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+import ActivityTimeline from '@core/Components/ActivityTimeline.vue';
+import AttachmentPanel from '@core/Components/AttachmentPanel.vue';
+const { confirm } = useConfirm();
+defineProps<{ invoice:Invoice; activities?: any[]; attachments?: any[]; canManageAttachments?: boolean }>();
 const payAmount=ref(0), payMethod=ref('cash'), payDate=ref(new Date().toISOString().slice(0,10));
-function post(id:number){ if(confirm('Post invoice? Stock will be deducted & journal created.')) router.post(route('sales.invoices.post', id)); }
-function pay(id:number){ router.post(route('sales.invoices.pay', id), {amount: payAmount.value, payment_date: payDate.value, method: payMethod.value}); }
+async function post(id:number){ if(await confirm({ description: 'Post invoice? Stock will be deducted & journal created.', danger: false })) router.post(route('sales.invoices.post', id)); }
+async function pay(id:number){ router.post(route('sales.invoices.pay', id), {amount: payAmount.value, payment_date: payDate.value, method: payMethod.value}); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Invoices', href: route('sales.invoices.index') }, { title: invoice.invoice_no }]">
@@ -23,6 +28,7 @@ function pay(id:number){ router.post(route('sales.invoices.pay', id), {amount: p
           <div class="flex flex-col gap-2">
             <Button v-if="invoice.status==='draft'" @click="post(invoice.id)" size="sm" class="bg-emerald-600 hover:bg-emerald-700">Post (Deduct Stock + Ledger)</Button>
             <a v-if="invoice.status!=='draft'" :href="route('sales.invoices.mushak', invoice.id)" target="_blank"><Button variant="outline" size="sm" class="w-full">📄 Mushak 6.3 PDF</Button></a>
+            <a :href="route('core.documents.pdf', { type: 'invoice', id: invoice.id })" target="_blank"><Button variant="outline" size="sm" class="w-full">⬇ Branded PDF</Button></a>
             <Link v-if="invoice.status!=='draft'" :href="route('sales.returns.create', { invoice_id: invoice.id })"><Button variant="outline" size="sm" class="w-full">↩️ Return / Credit Note</Button></Link>
             <Link :href="route('sales.invoices.edit', invoice.id)"><Button variant="outline" size="sm" class="w-full">Edit</Button></Link>
           </div>
@@ -46,6 +52,10 @@ function pay(id:number){ router.post(route('sales.invoices.pay', id), {amount: p
         <h3 class="font-semibold mb-2">Payments — {{ invoice.payments.length }}</h3>
         <div v-if="!invoice.payments.length" class="text-sm text-muted-foreground py-4 text-center">No payments yet.</div>
         <div v-for="p in invoice.payments" :key="p.id" class="flex justify-between text-sm border-b py-1"><span>{{ p.payment_no }} · {{ p.method }} · {{ formatDate(p.payment_date) }}</span><span class="font-mono font-bold">{{ formatCurrency(Number(p.amount)) }}</span></div>
+      </div>
+      <div class="mt-4 grid gap-4 lg:grid-cols-2">
+        <AttachmentPanel type="invoice" :record-id="invoice.id" :attachments="attachments" :can-manage="canManageAttachments" />
+        <ActivityTimeline :activities="activities" />
       </div>
     </div>
   </AdminLayout>

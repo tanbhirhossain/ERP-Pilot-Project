@@ -7,9 +7,14 @@ import {
   ShoppingCart, Scan, Trash2, CreditCard, Banknote, Wallet, Smartphone, Percent, AlertCircle,
   CheckCircle, Package, Search, Plus, Minus, X, Coins, Split, ArrowLeftRight,
 } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import { unwrapOptions } from '../../../../../CORE/Resources/js/Utils/optionsPayload';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { CloudOff, RefreshCw } from 'lucide-vue-next';
+// F22 — one payload builder for the live POST and the offline queue, so the two can never drift.
+import { buildSalePayload, cartLabel } from '@sales/offline/payload';
+import { offlineStockWarning } from '@sales/offline/catalog';
+import { useOfflineTill } from '@sales/offline/useOfflineTill';
+import { unwrapOptions } from '@core/Utils/optionsPayload';
 // The house unwrapper: INVENTORY answers `{data:[…]}`, CORE and HRM answer `{items:[…]}`, and a
 // paginated resource nests twice. Hand-rolling one shape here is how a picker comes to look empty.
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
@@ -69,6 +74,45 @@ const catalogError = ref('');
 let catalogTimer: number | undefined;
 
 const page = usePage() as any;
+
+/*
+ * F22 — the offline till.
+ *
+ * Two things arrive here, and only one of them is about a dead network:
+ *
+ *  1. `useOfflineTill` keeps the product catalogue on the device and holds the queue. A cashier can
+ *     scan and ring up with no server at all; the tickets go to the ledger by themselves when the
+ *     link returns.
+ *  2. `submissionRef` is the device reference minted *when Sell is pressed*. It makes a repeat of the
+ *     same submission one sale instead of two — which is worth having even on a perfect network,
+ *     because a slow response and an impatient cashier is the oldest till bug there is. It is cleared
+ *     whenever the cart changes, so a *corrected* sale always gets a fresh key rather than being
+ *     silently swallowed by the first attempt.
+ */
+const offline = useOfflineTill({
+  syncUrl: route('sales.pos.offline.sync'),
+  catalogUrl: route('inventory.api.pos-catalog'),
+  productUrlFor: (key) => `/inventory/api/pos-product/${encodeURIComponent(String(key))}`,
+  warehouseId: () => warehouseId.value,
+});
+const submissionRef = ref<string | null>(null);
+const queuedNote = ref('');
+
+function nextSubmissionRef(): string {
+  if (!submissionRef.value) {
+    submissionRef.value = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `t-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  return submissionRef.value;
+}
+
+/** Any change to the cart is a different sale, so it needs a different key. */
+watch(cart, () => { submissionRef.value = null; queuedNote.value = ''; }, { deep: true });
+
+const waitingCount = computed(() => offline.summary.value.queued + offline.summary.value.attention);
+const offlineMode = computed(() => !offline.online.value);
 
 /*
  * A cashier works the scanner, not the mouse: both banners clear themselves so
@@ -198,9 +242,31 @@ function payNothing() { paidNow.value = 0; }
 function payAll() { paymentMethod.value = 'cash'; tendered.value = Math.round(grandTotal.value * 100) / 100; }
 
 /* ── catalogue ─────────────────────────────────────────────────────────── */
+/** Serve the grid from the device's snapshot. Returns whether anything was there. */
+function useCachedCatalog(term = '') {
+  const cached = offline.searchCached(term.trim(), 60);
+
+  if (!cached.length) return false;
+
+  catalog.value = cached as any[];
+  catalogError.value = '';
+
+  return true;
+}
+
 async function loadCatalog(term = '') {
   catalogLoading.value = true;
   catalogError.value = '';
+
+  if (!offline.online.value) {
+    if (!useCachedCatalog(term)) {
+      catalogError.value = 'No network, and this device has no saved catalogue. Open the offline desk and refresh it while the link is up.';
+    }
+    catalogLoading.value = false;
+
+    return;
+  }
+
   try {
     const url = `/inventory/api/options/products?limit=60${term ? `&search=${encodeURIComponent(term)}` : ''}`;
     const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
@@ -210,7 +276,12 @@ async function loadCatalog(term = '') {
     // kept loose; unwrapOptions has already established that they are option objects.
     catalog.value = unwrapOptions(j) as any[];
   } catch {
-    catalogError.value = 'Could not load the product grid. Search or scan instead.';
+    // No server is not no catalogue: the snapshot from the last successful refresh answers name, sku,
+    // barcode, price, VAT and the stock figure the grid warns with. Only if even that is missing is
+    // the till really blind.
+    if (!useCachedCatalog(term)) {
+      catalogError.value = 'Could not load the product grid, and this device has no saved catalogue. Sync it from the offline desk when the network is back.';
+    }
   } finally {
     catalogLoading.value = false;
   }
@@ -251,12 +322,13 @@ async function addFromCatalog(p: any) {
 
 async function fetchProduct(key: string | number) {
   if (!key) return null;
-  try {
-    const url = `/inventory/api/pos-product/${encodeURIComponent(String(key))}${warehouseId.value ? `?warehouse_id=${warehouseId.value}` : ''}`;
-    const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
-    const j = await res.json();
-    return j.found ? j.data : null;
-  } catch { return null; }
+
+  // `lookupProduct` tries the live endpoint when the browser believes it has a network and falls back
+  // to the cached snapshot otherwise — and, importantly, also when the live call *fails*, which is
+  // the case a captive-portal router produces: "online" according to the OS, useless in practice.
+  const row = await offline.lookupProduct(key);
+
+  return row ? { id: row.id, name: row.name, sku: row.sku, barcode: row.barcode, selling_price: row.selling_price, vat_rate: row.vat_rate, available: row.available } : null;
 }
 
 async function addItem() {
@@ -347,26 +419,65 @@ watch(grandTotal, (t) => {
 });
 
 function sell() {
-  const payload: any = {
-    warehouse_id: warehouseId.value,
-    customer_id: customerId.value,
-    customer_name: selectedCustomer.value?.name ?? 'Walk-in Customer',
-    payment_method: paymentMethod.value,
-    bank_id: bankId.value,
-    session_id: sessionId.value ?? props.openSession?.id ?? null,
-    items: cart.value.map(it => ({
-      product_id: it.product_id, variant_id: it.variant_id ?? null,
-      qty: Number(it.qty), unit_price: Number(it.unit_price),
-      discount_pct: Number(it.discount_pct) || 0, vat_rate: Number(it.vat_rate) || 0,
-    })),
-  };
-  if (paymentMethod.value === 'split') {
-    payload.cash_amount = Number(cashAmt.value) || 0;
-    payload.bank_amount = Number(bankAmt.value) || 0;
+  // One builder for both worlds. The live POST and the queued ticket carry the same fields, because
+  // the server validates them with the same rules (`PosSaleRequest::rowRules`) either way.
+  const payload: any = buildSalePayload({
+    warehouseId: warehouseId.value,
+    customerId: customerId.value,
+    customerName: selectedCustomer.value?.name,
+    paymentMethod: paymentMethod.value,
+    bankId: bankId.value,
+    sessionId: sessionId.value ?? props.openSession?.id ?? null,
+    lines: cart.value,
+    cashAmount: cashAmt.value,
+    bankAmount: bankAmt.value,
+    paidNowCents: paidNowCents.value,
+    tenderedCents: tenderedCents.value,
+  });
+  payload.client_ref = nextSubmissionRef();
+
+  if (!offline.online.value) {
+    void queueOfflineSale(payload);
+
+    return;
   }
-  if (paymentMethod.value === 'due') payload.paid_amount = paidNowCents.value / 100;
-  if (paymentMethod.value !== 'due' && paymentMethod.value !== 'split') payload.tendered_amount = tenderedCents.value / 100;
-  router.post(route('sales.pos.sell'), payload);
+
+  router.post(route('sales.pos.sell'), payload, {
+    // The key survives a failed submission on purpose: the till re-sends the *same* sale, and the
+    // server answers with the one it already has. `onSuccess` never fires on a redirect away from this
+    // page, so nothing else has to reset it — the cart watcher above covers a corrected sale.
+    preserveScroll: true,
+  });
+}
+
+/**
+ * Ring the sale up on the device and let the queue carry it.
+ *
+ * The confirmation says what is true rather than what the live path says: the money has been taken,
+ * the goods have been handed over, and the ledger has *not* seen either yet. Saying "completed" here
+ * is how a shop ends a day with a drawer full of cash and a report that disagrees.
+ */
+async function queueOfflineSale(payload: any) {
+  const ticket = await offline.queueSale(payload, Math.round(grandTotal.value * 100) / 100, cartLabel(cart.value, payload.customer_name));
+
+  if (!ticket) {
+    scanError.value = 'This device cannot keep an offline queue right now, and the sale was not sent. Ask an administrator to check its storage, or wait for the network.';
+    announceError();
+    submissionRef.value = null;
+
+    return;
+  }
+
+  const warning = offlineStockWarning(payload, offline.catalog.value.snapshot);
+  const note = `Queued on this device: ${money(ticket.expected_total)} BDT · ${ticket.label}. ${
+    warning ? `${warning} ` : ''
+  }It posts as soon as the connection returns — nothing else to do.`;
+
+  // After the cart is emptied, not before: emptying it trips the watcher that clears this very note,
+  // and a sale the cashier cannot see confirmation of is a sale they will ring up twice.
+  clearCart();
+  announceSuccess('');
+  queuedNote.value = note;
 }
 
 /*
@@ -414,12 +525,39 @@ function closeSessionFn() {
 onMounted(() => {
   // The drawer is resolved by `activeDrawer`'s watcher, which also runs immediately.
   loadCatalog();
+  // Refresh the device's catalogue snapshot every time a till loads while the network is up: the
+  // cache is only worth having if it is the newest thing on the tablet.
+  void offline.refreshCatalog();
   setTimeout(() => barcodeRef.value?.focus(), 400);
 });
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'POS Terminal' }]">
     <Head title="POS Terminal" />
+
+    <!--
+      Connectivity, stated before anything else on the screen, because it changes what "Sell" means:
+      online it posts a sale, offline it queues one. A cashier who has not noticed the difference is
+      reconciling a drawer against a ledger that has not been told about the last hour.
+    -->
+    <div
+      v-if="offlineMode || waitingCount > 0"
+      class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border px-3 py-2 text-xs"
+      :class="offlineMode ? 'border-warning/30 bg-warning/[0.07] text-warning' : 'border-border bg-card text-muted-foreground'"
+      role="status"
+    >
+      <span class="flex items-center gap-1.5 font-semibold">
+        <CloudOff v-if="offlineMode" class="size-3.5" aria-hidden="true" />
+        {{ offlineMode ? 'Offline — the till keeps working' : 'Back online' }}
+      </span>
+      <span v-if="offlineMode">Sales are saved on this device and post by themselves when the link returns. Stock figures are as of the last catalogue refresh.</span>
+      <span v-else-if="waitingCount > 0" class="flex items-center gap-1.5">
+        <RefreshCw v-if="offline.syncing.value" class="size-3.5 animate-spin" aria-hidden="true" />
+        {{ waitingCount }} ticket{{ waitingCount === 1 ? '' : 's' }} waiting · ৳{{ money(offline.summary.value.pending_value) }}
+        <span v-if="offline.summary.value.has_stale"> · one or more were rung up on an earlier date and will need a decision</span>
+      </span>
+      <a :href="route('sales.pos.offline')" class="ml-auto font-semibold underline decoration-dotted hover:opacity-80">Queue desk</a>
+    </div>
 
     <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_26rem] 2xl:grid-cols-[minmax(0,1fr)_29rem]">
       <!-- ══ Left: scan, then pick from the grid ══════════════════════════ -->
@@ -466,6 +604,9 @@ onMounted(() => {
             </div>
             <div v-if="scanError" role="alert" class="flex items-start gap-1.5 rounded-lg border border-destructive/25 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
               <AlertCircle class="mt-px size-3.5 shrink-0" aria-hidden="true" />{{ scanError }}
+            </div>
+            <div v-if="queuedNote" class="flex items-start gap-1.5 rounded-lg border border-info/25 bg-info/[0.07] px-2.5 py-1.5 text-xs text-info">
+              <CloudOff class="mt-px size-3.5 shrink-0" aria-hidden="true" />{{ queuedNote }}
             </div>
           </div>
         </div>

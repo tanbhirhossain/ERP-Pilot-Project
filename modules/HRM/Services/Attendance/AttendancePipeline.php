@@ -221,9 +221,11 @@ class AttendancePipeline
         if (($stages['stage2_pairs']['skipped_orphan'] ?? 0) > 0) {
             $orphanNote = sprintf(' [ORPHAN %d needs DeviceUser mapping!]', $stages['stage2_pairs']['skipped_orphan']);
         }
+        // Same rule as the console: `PARTIAL` is reserved for a run that stopped at its time budget, so a hard
+        // failure (device unreachable, bad argument) is not reported to the UI with the word that means "retry".
         $msg = sprintf(
             'Pipeline %s for %s (%s): Stage1 Raw %s, Stage2 Pairs %d new/%d closed%s, Stage3 Daily %d recalc',
-            $ok ? 'OK' : 'PARTIAL',
+            $ok ? 'OK' : ((bool) ($stages['stage1_raw']['partial'] ?? false) ? 'PARTIAL' : 'FAILED'),
             $device->name,
             $device->ip_address,
             $stages['stage1_raw']['ok'] ? 'OK ('.($stages['stage1_raw']['inserted'] ?? 0).' new)' : 'FAIL',

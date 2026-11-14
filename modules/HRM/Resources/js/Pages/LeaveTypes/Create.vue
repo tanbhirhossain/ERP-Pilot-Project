@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props=defineProps<{ leaveType?: any; policy?: any }>();
 const isEdit=computed(()=> !!props.leaveType);
 const form=useForm({ name: props.leaveType?.name ?? '', code: props.leaveType?.code ?? '', days_per_year: props.leaveType?.days_per_year ?? 12, is_paid: props.leaveType?.is_paid ?? true, color: props.leaveType?.color ?? '#6366f1', description: props.leaveType?.description ?? '', is_active: props.leaveType?.is_active ?? true, day_count_mode:props.policy?.day_count_mode??'calendar_days', accrual_mode:props.policy?.accrual_mode??'annual', proration_mode:props.policy?.proration_mode??'none', working_days_csv:props.policy?.working_days_csv??'0,1,2,3,4', approval_steps_text:props.policy?.approval_steps_text??'HR' });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ if(isEdit.value) form.put(route('hrm.leave-types.update', props.leaveType.id)); else form.post(route('hrm.leave-types.store')); }
 </script>
 <template>

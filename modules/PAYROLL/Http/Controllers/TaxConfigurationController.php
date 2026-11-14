@@ -73,7 +73,11 @@ final class TaxConfigurationController extends Controller
         $effectiveFrom = $data['effective_from'] ?? now()->toDateString();
         $employee = $employees->employeeForPayroll($data['employee_id'], $effectiveFrom, $effectiveFrom);
         if ($employee === null) {
-            return back()->withErrors(['employee_id' => 'No effective HRM salary record was found for this employee.']);
+            // The picker offers the whole roster, so this is the answer an operator needs when they pick
+            // someone this screen genuinely cannot price: no salary effective on that date means an
+            // override has nothing to apply to. Naming the employee and the date is what makes it
+            // actionable instead of a dead end that looks like the form refusing to accept the person.
+            return back()->withErrors(['employee_id' => "No salary record was found for {$data['employee_id']} effective on {$effectiveFrom}, so there is nothing for a tax override to apply to. Add or correct that employee's salary for the date first, or choose an effective date their salary covers."]);
         }
 
         $result = DB::transaction(function () use ($data, $effectiveFrom, $employee, $request): array {

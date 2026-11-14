@@ -1,23 +1,25 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Trash2, Wrench, GitBranch } from 'lucide-vue-next';
-import AdminLayout from '../../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import DataTable, { type DataTableColumn } from '../../../../../../CORE/Resources/js/Components/DataTable.vue';
-import type { FilterDef, Paginator } from '../../../../../../CORE/Resources/js/types';
-import { formatDateTime } from '../../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import type { FilterDef, Paginator } from '@core/types';
+import { formatDateTime } from '@core/Utils/format';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
 interface Row { id:number; employee_id:string; employee?:string; department?:string; designation?:string; shift?:string; shift_time?:string; duty_date:string; punch_in:string; punch_out?:string; duty_type:string; shift_type_applied:string; worked_hours:number }
 defineProps<{ pairs: Paginator<Row>; filterDefs: FilterDef[] }>();
 const columns: DataTableColumn[] = [
   {key:'employee_id',label:'Employee',sortable:true},{key:'duty_date',label:'Duty Date',sortable:true},{key:'punch_in',label:'In → Out',sortable:true},{key:'shift',label:'Shift',align:'left'},{key:'duty_type',label:'Type',align:'center'},{key:'shift_type_applied',label:'Policy',align:'center'},{key:'worked_hours',label:'Hours',sortable:true,align:'center'},{key:'actions',label:'',align:'right',exportable:false,width:'1rem'}
 ];
-function del(id:number){ if(confirm('Delete this pair only? Use Repair this date to rebuild its attendance pair and daily record from logs.')) router.delete(route('hrm.attendance.pairs.destroy',id),{preserveScroll:true}); }
+async function del(id:number){ if(await confirm({ description: 'Delete this pair only? Use Repair this date to rebuild its attendance pair and daily record from logs.', danger: true })) router.delete(route('hrm.attendance.pairs.destroy',id),{preserveScroll:true}); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Attendance' }, { title: 'Attendance Pairs' }]">
     <Head title="Attendance Pairs"/>
     <PageHeader title="Attendance Pairs" description="Paired IN→OUT — shift auto-detected by nearest 8h window (grace + fallback). Filters: Dept / Designation / Employee / Type / Date range. Search by name." :icon="GitBranch" :actions="[{ label: 'Repair pairs', route: 'hrm.attendance.fix.index', icon: Wrench }]">
-      <DataTable route-name="hrm.attendance.pairs.index" title="Attendance Pairs" :columns="columns" :rows="(pairs.data as unknown as Record<string,unknown>[])" :meta="pairs.meta" :filter-defs="filterDefs" search-placeholder="Search employee name or ID…">
+      <DataTable route-name="hrm.attendance.pairs.index" title="Attendance Pairs" :columns="columns" :rows="pairs.data" :meta="pairs.meta" :filter-defs="filterDefs" search-placeholder="Search employee name or ID…">
         <template #cell-employee_id="{row}"><div class="leading-tight"><div class="font-mono text-sm font-semibold">{{ row.employee_id }}</div><div v-if="row.employee" class="text-xs">{{ row.employee }}</div><div v-if="row.department" class="text-[11px] text-muted-foreground">{{ row.department }}<span v-if="row.designation"> · {{ row.designation }}</span></div></div></template>
         <template #cell-duty_date="{row}"><span class="text-sm font-mono">{{ row.duty_date }}</span></template>
         <template #cell-punch_in="{row}"><span class="text-sm font-mono">{{ formatDateTime(row.punch_in) }} <span class="text-muted-foreground">→</span> {{ row.punch_out?formatDateTime(row.punch_out):'OPEN' }}</span></template>

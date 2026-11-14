@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { formatCurrency } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ asOf: string; buckets: any; byCustomer: any[]; total: number }>();
 function fmt(n:number){ return formatCurrency(n); }
 const bucketsOrder = ['current','1_30','31_60','61_90','90_plus'];
@@ -12,7 +13,7 @@ const labels:Record<string,string> = { current:'Current', '1_30':'1-30 days', '3
   <AdminLayout :breadcrumbs="[{ title: 'Accounts' }, { title: 'Receivables Aging' }]">
     <Head title="Receivables Aging (AR)" />
     <div class="flex items-center justify-between">
-      <div><h1 class="text-xl font-bold">Receivables Aging (AR) — Sales Invoices</h1><p class="text-sm text-muted-foreground">As of {{ asOf }} · by customer, days overdue.</p></div>
+      <div><PageHeader title="Receivables Aging (AR)" description="Sales Invoices" /><p class="text-sm text-muted-foreground">As of {{ asOf }} · by customer, days overdue.</p></div>
       <input type="date" :value="asOf" @change="(e:any)=>router.get(route('accounts.reports.receivables-aging'), {as_of: e.target.value})" class="h-9 rounded-md border bg-background px-3 text-sm" />
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-6 gap-3 mt-4">

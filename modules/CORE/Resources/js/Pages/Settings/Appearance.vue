@@ -8,13 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import EnterpriseCard from '../../../../../CORE/Resources/js/Components/EnterpriseCard.vue';
-import EnterpriseStat from '../../../../../CORE/Resources/js/Components/EnterpriseStat.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SchemePicker from '../../../../../CORE/Resources/js/Components/SchemePicker.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { useUiTheme, type UiMode, type UiProps } from '../../../../../CORE/Resources/js/Composables/useUiTheme';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import EnterpriseCard from '@core/Components/EnterpriseCard.vue';
+import EnterpriseStat from '@core/Components/EnterpriseStat.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SchemePicker from '@core/Components/SchemePicker.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { useUiTheme, type UiMode, type UiProps } from '@core/Composables/useUiTheme';
 import StaticTable from '../../Components/StaticTable.vue';
 
 /**

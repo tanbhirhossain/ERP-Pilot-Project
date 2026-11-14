@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PartnerForm from '../../Components/PartnerForm.vue';
 
 defineProps<{ groupOptions: any[]; priceListOptions: any[]; userOptions: any[]; defaultType: string }>();

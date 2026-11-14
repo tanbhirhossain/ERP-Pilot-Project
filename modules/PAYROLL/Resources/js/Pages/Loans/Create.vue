@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import EmployeeSearchSelect from '../../Components/EmployeeSearchSelect.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props = defineProps<{ employeeOptions: { value: string; label: string; description?: string }[] }>();
 const form = useForm({
   employee_id: '',
@@ -14,6 +16,7 @@ const form = useForm({
   first_due_date: new Date().toISOString().slice(0, 10),
   purpose: '',
 });
+useUnsavedGuard(() => form.isDirty);
 function submit() { form.post(route('payroll.loans.store')); }
 </script>
 
@@ -21,7 +24,7 @@ function submit() { form.post(route('payroll.loans.store')); }
   <AdminLayout :breadcrumbs="[{ title: 'Payroll' }, { title: 'Employee Loans', href: route('payroll.loans.index') }, { title: 'New request' }]">
     <Head title="New loan request" />
     <div class="max-w-4xl rounded-xl border bg-card p-6">
-      <h1 class="text-xl font-bold">Request interest-free loan</h1>
+      <PageHeader title="Request interest-free loan" />
       <p class="mt-1 text-sm text-muted-foreground">Interest is fixed at 0%. The requested principal is split into equal monthly installments; any rounding remainder is included in the final installment.</p>
       <form @submit.prevent="submit" class="mt-5 space-y-4">
         <div class="space-y-2">

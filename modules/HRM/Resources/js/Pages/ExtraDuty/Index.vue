@@ -2,11 +2,11 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import { reactive } from 'vue';
 import { Check, X, UserCheck, Clock3 } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { confirmDialog, promptDialog } from '../../../../../CORE/Resources/js/Composables/useConfirm';
-import { useToast } from '../../../../../CORE/Resources/js/Composables/useToast';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import type { Paginator } from '@core/types';
+import { confirmDialog, promptDialog } from '@core/Composables/useConfirm';
+import { useToast } from '@core/Composables/useToast';
 import { Button } from '@/components/ui/button';
 
 interface Row {
@@ -77,7 +77,7 @@ async function syncAttendance() {
         <Link :href="route('hrm.attendance.dailies.index')"><Button variant="outline">Daily attendance</Button></Link>
       </div>
     </div>
-    <DataTable :route-name="queueRoute" title="Pending attendance approvals" :columns="columns" :rows="requests.data as unknown as Record<string, unknown>[]" :meta="requests.meta" :filter-defs="filterDefs">
+    <DataTable :route-name="queueRoute" title="Pending attendance approvals" :columns="columns" :rows="requests.data" :meta="requests.meta" :filter-defs="filterDefs">
       <template #cell-employee_id="{ row }"><div><p class="font-mono font-semibold">{{ row.employee_id }}</p><p class="text-xs text-muted-foreground">{{ row.employee }}</p></div></template>
       <template #cell-overtime_date="{ row }"><span class="inline-flex items-center gap-1"><Clock3 class="size-3" />{{ row.overtime_date }}</span></template>
       <template #cell-hours="{ row }">

@@ -3,11 +3,13 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props=defineProps<{ designation:{id:number;name:string;code?:string;description?:string;department_id:number|null;grade?:string;level:number;is_active:boolean}, departmentOptions:{value:number;label:string}[] }>();
 const form=useForm({name:props.designation.name,code:props.designation.code||'',description:props.designation.description||'',department_id:props.designation.department_id,grade:props.designation.grade||'',level:props.designation.level,is_active:props.designation.is_active});
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('hrm.designations.update',props.designation.id)); }
 </script>
 <template>

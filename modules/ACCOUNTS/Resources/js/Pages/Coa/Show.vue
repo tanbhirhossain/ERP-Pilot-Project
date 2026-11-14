@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
+import type { Account } from '@accounts/types';
 import { ListTree, Wallet, History, Pencil, Layers } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
 import AcctSection from '../../Components/AcctSection.vue';
 import AcctEmpty from '../../Components/AcctEmpty.vue';
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
-defineProps<{ account:any; balance:number; ancestors:any[] }>();
+import { formatCurrency } from '@core/Utils/format';
+defineProps<{ account:Account; balance:number; ancestors:any[] }>();
 function tone(t:string){ if(t==='asset') return 'info'; if(t==='liability') return 'warning'; if(t==='equity') return 'primary'; if(t==='income') return 'success'; return 'danger'; }
 </script>
 <template>

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends { id: string | number }">
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -16,6 +16,7 @@ import {
     ArrowDown,
     ArrowUp,
     ArrowUpDown,
+    Bookmark,
     ChevronLeft,
     ChevronRight,
     ChevronsLeft,
@@ -25,13 +26,16 @@ import {
     FileText,
     Inbox,
     Loader2,
+    Plus,
     Printer,
+    Rows3,
     Search,
     Settings2,
     SlidersHorizontal,
     X,
 } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue';
+import { useConfirm } from '../Composables/useConfirm';
 import { printDocument } from '../Composables/usePrint';
 import { useToast } from '../Composables/useToast';
 import type { FilterDef, PaginatorMeta } from '../types';
@@ -58,9 +62,26 @@ export interface DataTableColumn {
     cellClass?: string;
 }
 
+/** A bulk action offered when rows are selected (Phase 2 — U7). The parent
+ *  handles the `bulk` event with the chosen key + the selected row ids. */
+export interface BulkAction {
+    key: string;
+    label: string;
+    icon?: Component;
+    danger?: boolean;
+}
+
+/** A persisted table view (Phase 2 — U8). */
+interface SavedView {
+    id: number;
+    name: string;
+    state: { query?: Record<string, string>; hidden?: string[] };
+}
+
 interface Props {
     columns: DataTableColumn[];
-    rows: Record<string, unknown>[];
+    /** Row type is inferred from the caller, so cell slots receive a typed `row` (U18). */
+    rows: T[];
     meta: PaginatorMeta;
     /** Ziggy name of the index route, e.g. 'core.users.index'. */
     routeName: string;
@@ -74,6 +95,10 @@ interface Props {
     defaultSort?: { key: string; direction: 'asc' | 'desc' };
     emptyTitle?: string;
     emptyDescription?: string;
+    /** Show a selection checkbox column + bulk-action bar (Phase 2 — U7). */
+    selectable?: boolean;
+    /** Bulk actions offered when rows are selected; parent handles `bulk`. */
+    bulkActions?: BulkAction[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -85,10 +110,17 @@ const props = withDefaults(defineProps<Props>(), {
     defaultSort: () => ({ key: 'created_at', direction: 'desc' }),
     emptyTitle: 'No records found',
     emptyDescription: 'Try adjusting your search or filters to widen the results.',
+    selectable: false,
+    bulkActions: () => [],
 });
+
+const emit = defineEmits<{
+    (e: 'bulk', action: string, ids: Array<string | number>): void;
+}>();
 
 const page = usePage();
 const toast = useToast();
+const { prompt } = useConfirm();
 const appName = computed(() => (page.props.name as string | undefined) ?? 'Admin Console');
 const loading = ref(false);
 const exporting = ref(false);
@@ -398,8 +430,13 @@ function rowStyle(index: number): Record<string, string> {
     return { '--dt-row-delay': `${Math.min(index * 16, 240)}ms` };
 }
 
-function cellValue(row: Record<string, unknown>, key: string): unknown {
-    const value = row[key];
+/** Raw field access for the cell slot's `value` binding (rows are generic). */
+function rawValue(row: T, key: string): unknown {
+    return (row as Record<string, unknown>)[key];
+}
+
+function cellValue(row: T, key: string): unknown {
+    const value = rawValue(row, key);
 
     if (value === null || value === undefined || value === '') return '—';
     if (typeof value === 'boolean') return value ? 'Yes' : 'No';
@@ -409,6 +446,144 @@ function cellValue(row: Record<string, unknown>, key: string): unknown {
 
     return value;
 }
+
+/* --------------------- selection & bulk actions (U7) --------------------- */
+
+const selected = ref<Set<string | number>>(new Set());
+
+const rowId = (row: T): string | number => row.id;
+
+const allSelected = computed(() => props.rows.length > 0 && props.rows.every((r) => selected.value.has(rowId(r))));
+const someSelected = computed(() => props.rows.some((r) => selected.value.has(rowId(r))) && !allSelected.value);
+
+function toggleRow(id: string | number): void {
+    const next = new Set(selected.value);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selected.value = next;
+}
+
+function toggleAll(): void {
+    selected.value = allSelected.value ? new Set() : new Set(props.rows.map(rowId));
+}
+
+function clearSelection(): void {
+    selected.value = new Set();
+}
+
+function runBulk(action: BulkAction): void {
+    if (selected.value.size === 0) return;
+    emit('bulk', action.key, [...selected.value]);
+}
+
+// Selection is per-page: navigating or filtering clears it so a bulk action can
+// never silently include rows the operator can no longer see.
+watch(
+    () => props.rows,
+    () => clearSelection(),
+);
+
+/* --------------------------- density (U8) -------------------------------- */
+
+const densityKey = `dt-density-${props.routeName}`;
+const density = ref<'comfortable' | 'compact'>('comfortable');
+
+function setDensity(value: 'comfortable' | 'compact'): void {
+    density.value = value;
+    try {
+        localStorage.setItem(densityKey, value);
+    } catch {
+        /* private mode — density just won't persist */
+    }
+}
+
+const cellPad = computed(() => (density.value === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'));
+
+/* ------------------------- saved views (U8) ------------------------------ */
+
+const views = ref<SavedView[]>([]);
+const savingView = ref(false);
+
+async function loadViews(): Promise<void> {
+    try {
+        const res = await fetch(route('core.saved-views.index', { tableKey: props.routeName }), { headers: { Accept: 'application/json' } });
+        if (res.ok) views.value = (await res.json()).views ?? [];
+    } catch {
+        /* views are a convenience — never block the table */
+    }
+}
+
+async function saveCurrentView(): Promise<void> {
+    const name = await prompt({ title: 'Save this view', inputLabel: 'View name', inputPlaceholder: 'e.g. Overdue, compact', required: true });
+    if (!name) return;
+
+    const query: Record<string, string> = {};
+    urlParams.value.forEach((value, key) => {
+        if (value !== '' && key !== 'page') query[key] = value;
+    });
+
+    savingView.value = true;
+    try {
+        const res = await fetch(route('core.saved-views.store', { tableKey: props.routeName }), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            body: JSON.stringify({ name, state: { query, hidden: [...hiddenColumns.value] } }),
+        });
+        if (res.ok) {
+            await loadViews();
+            toast.success(`View "${name}" saved.`);
+        } else {
+            toast.error('Could not save the view.');
+        }
+    } catch {
+        toast.error('Could not save the view.');
+    } finally {
+        savingView.value = false;
+    }
+}
+
+function applyView(view: SavedView): void {
+    hiddenColumns.value = new Set(view.state.hidden ?? []);
+    loading.value = true;
+    router.get((route as any)(props.routeName, props.routeParams ?? {}), view.state.query ?? {}, {
+        preserveState: true,
+        preserveScroll: true,
+        onFinish: () => {
+            loading.value = false;
+        },
+    });
+}
+
+async function deleteView(view: SavedView): Promise<void> {
+    try {
+        await fetch(route('core.saved-views.destroy', { tableKey: props.routeName, id: view.id }), {
+            method: 'DELETE',
+            headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        });
+        await loadViews();
+    } catch {
+        /* ignore */
+    }
+}
+
+function csrfToken(): string {
+    return (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content ?? '';
+}
+
+/* --------------------------- skeletons (U13) ----------------------------- */
+
+const skeletonCount = computed(() => Math.min(props.meta.per_page || 10, 10));
+const showSkeleton = computed(() => loading.value && props.rows.length === 0);
+
+onMounted(() => {
+    try {
+        const stored = localStorage.getItem(densityKey);
+        if (stored === 'compact' || stored === 'comfortable') density.value = stored;
+    } catch {
+        /* ignore */
+    }
+    void loadViews();
+});
 </script>
 
 <template>
@@ -495,6 +670,50 @@ function cellValue(row: Record<string, unknown>, key: string): unknown {
             </div>
 
             <div class="flex items-center gap-2">
+                <!-- Saved views (U8) -->
+                <DropdownMenu>
+                    <DropdownMenuTrigger as-child>
+                        <Button variant="outline" size="sm" class="h-9 rounded-lg" title="Saved views">
+                            <Bookmark class="size-4" />
+                            <span class="hidden sm:inline">Views</span>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" class="w-60 p-1.5">
+                        <DropdownMenuLabel class="text-muted-foreground text-xs">Saved views</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <div v-if="views.length === 0" class="text-muted-foreground px-2.5 py-2 text-xs">No saved views yet.</div>
+                        <div v-for="view in views" :key="view.id" class="group flex items-center gap-1">
+                            <DropdownMenuItem class="dt-menu-item min-w-0 flex-1 cursor-pointer rounded-lg px-2.5 py-2" @select="applyView(view)">
+                                <span class="truncate">{{ view.name }}</span>
+                            </DropdownMenuItem>
+                            <button
+                                type="button"
+                                class="text-muted-foreground hover:text-destructive shrink-0 rounded p-1 opacity-0 transition group-hover:opacity-100"
+                                :aria-label="`Delete view ${view.name}`"
+                                @click.stop="deleteView(view)"
+                            >
+                                <X class="size-3.5" />
+                            </button>
+                        </div>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem class="dt-menu-item cursor-pointer gap-2 rounded-lg px-2.5 py-2" :disabled="savingView" @select="saveCurrentView">
+                            <Plus class="size-4" /> Save current view…
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+
+                <!-- Density (U8) -->
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-9 rounded-lg"
+                    :title="density === 'compact' ? 'Switch to comfortable rows' : 'Switch to compact rows'"
+                    @click="setDensity(density === 'compact' ? 'comfortable' : 'compact')"
+                >
+                    <Rows3 class="size-4" />
+                    <span class="hidden sm:inline">{{ density === 'compact' ? 'Compact' : 'Comfortable' }}</span>
+                </Button>
+
                 <!-- Column visibility -->
                 <DropdownMenu>
                     <DropdownMenuTrigger as-child>
@@ -608,6 +827,30 @@ function cellValue(row: Record<string, unknown>, key: string): unknown {
             </button>
         </div>
 
+        <!-- Bulk-action bar (U7) -->
+        <div
+            v-if="selectable && selected.size > 0"
+            class="bg-primary/5 border-primary/30 flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 shadow-sm print:hidden"
+        >
+            <span class="text-sm font-semibold">{{ selected.size }} selected</span>
+            <span class="bg-border mx-1 hidden h-5 w-px sm:block" />
+            <Button
+                v-for="action in bulkActions"
+                :key="action.key"
+                size="sm"
+                :variant="action.danger ? 'outline' : 'default'"
+                class="h-8 rounded-lg"
+                :class="action.danger && 'text-destructive hover:bg-destructive/10'"
+                @click="runBulk(action)"
+            >
+                <component :is="action.icon" v-if="action.icon" class="size-4" />
+                {{ action.label }}
+            </Button>
+            <Button variant="ghost" size="sm" class="text-muted-foreground ml-auto h-8 rounded-lg" @click="clearSelection">
+                <X class="size-4" /> Clear
+            </Button>
+        </div>
+
         <!-- Table card -->
         <div class="bg-card relative overflow-hidden rounded-xl border shadow-sm">
             <!-- indeterminate progress -->
@@ -622,6 +865,16 @@ function cellValue(row: Record<string, unknown>, key: string): unknown {
                 <table class="w-full caption-bottom text-sm">
                     <thead>
                         <tr class="border-b">
+                            <th v-if="selectable" scope="col" class="dt-th bg-card sticky top-0 z-[1] w-10 px-3 py-3 print:hidden">
+                                <input
+                                    type="checkbox"
+                                    class="size-4 cursor-pointer rounded border accent-[hsl(var(--primary))]"
+                                    :checked="allSelected"
+                                    :indeterminate="someSelected"
+                                    aria-label="Select all rows on this page"
+                                    @change="toggleAll"
+                                />
+                            </th>
                             <th
                                 v-for="column in visibleColumns"
                                 :key="column.key"
@@ -661,14 +914,25 @@ function cellValue(row: Record<string, unknown>, key: string): unknown {
                             v-for="(row, rowIndex) in rows"
                             :key="`${meta.current_page}-${row.id}`"
                             class="dt-row group hover:bg-accent/50 transition-colors"
+                            :class="selectable && selected.has(rowId(row)) && 'bg-primary/[0.06]'"
                             :style="rowStyle(rowIndex)"
                         >
+                            <td v-if="selectable" class="px-3 align-middle print:hidden" :class="cellPad">
+                                <input
+                                    type="checkbox"
+                                    class="size-4 cursor-pointer rounded border accent-[hsl(var(--primary))]"
+                                    :checked="selected.has(rowId(row))"
+                                    :aria-label="`Select row ${row.id}`"
+                                    @change="toggleRow(rowId(row))"
+                                />
+                            </td>
                             <td
                                 v-for="column in visibleColumns"
                                 :key="column.key"
                                 :class="
                                     cn(
-                                        'text-foreground/90 px-4 py-3 align-middle text-sm',
+                                        'text-foreground/90 align-middle text-sm',
+                                        cellPad,
                                         column.align === 'right' && 'text-right tabular-nums',
                                         column.align === 'center' && 'text-center',
                                         column.key === 'actions' && 'w-1 print:hidden',
@@ -677,7 +941,7 @@ function cellValue(row: Record<string, unknown>, key: string): unknown {
                                     )
                                 "
                             >
-                                <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]" :index="rowIndex">
+                                <slot :name="`cell-${column.key}`" :row="row" :value="rawValue(row, column.key)" :index="rowIndex">
                                     <span :class="column.key === 'created_at' ? 'text-muted-foreground whitespace-nowrap' : ''">
                                         {{ cellValue(row, column.key) }}
                                     </span>
@@ -685,9 +949,19 @@ function cellValue(row: Record<string, unknown>, key: string): unknown {
                             </td>
                         </tr>
 
+                        <!-- Skeleton rows on first load (U13) -->
+                        <tr v-for="n in showSkeleton ? skeletonCount : 0" :key="`skel-${n}`" class="dt-row">
+                            <td v-if="selectable" class="px-3" :class="cellPad">
+                                <div class="bg-muted size-4 animate-pulse rounded" />
+                            </td>
+                            <td v-for="column in visibleColumns" :key="column.key" :class="cellPad">
+                                <div class="bg-muted h-4 animate-pulse rounded" :style="{ width: `${55 + ((n * 13 + column.key.length * 7) % 35)}%` }" />
+                            </td>
+                        </tr>
+
                         <!-- Empty state -->
-                        <tr v-if="rows.length === 0">
-                            <td :colspan="visibleColumns.length" class="px-4 py-16">
+                        <tr v-if="rows.length === 0 && !showSkeleton">
+                            <td :colspan="visibleColumns.length + (selectable ? 1 : 0)" class="px-4 py-16">
                                 <div class="mx-auto flex max-w-sm flex-col items-center text-center">
                                     <div
                                         class="from-muted/80 grid size-16 place-items-center rounded-2xl border border-dashed bg-gradient-to-b to-transparent"

@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { Head, router} from '@inertiajs/vue3';
 import { ref, reactive } from 'vue';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BadgeCent } from 'lucide-vue-next';
-import Pagination from '../../../../../CORE/Resources/js/Components/Pagination.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import Pagination from '@core/Components/Pagination.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
 defineProps<{ allowances:any; shifts:any }>();
 const showCreate=ref(false);
-const form=reactive({shift_id:null as any, name:'Night Shift Allowance', amount:500 as any, amount_type:'Fixed', applicable_day:'All', effective_from:'', effective_to:''});
-function create(){ router.post(route('hrm.shift-allowances.store'), form as any, {onSuccess:()=> showCreate.value=false}); }
-function del(id:number){ if(confirm('Delete allowance?')) router.delete(route('hrm.shift-allowances.destroy', id)); }
+const form=reactive({shift_id:null as number | string | null, name:'Night Shift Allowance', amount:500 as any, amount_type:'Fixed', applicable_day:'All', effective_from:'', effective_to:''});
+async function create(){ router.post(route('hrm.shift-allowances.store'), form as any, {onSuccess:()=> showCreate.value=false}); }
+async function del(id:number){ if(await confirm({ description: 'Delete allowance?', danger: true })) router.delete(route('hrm.shift-allowances.destroy', id)); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{title:'Attendance'},{title:'Shift Allowances'}]">

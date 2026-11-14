@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Modules\CORE\Support\OptionAccess;
 use Modules\PURCHASE\Models\GoodsReceipt;
 use Modules\PURCHASE\Models\PurchaseOrder;
+use Modules\PURCHASE\Models\PurchaseRequisition;
 use Modules\PURCHASE\Models\VendorBill;
 
 /**
@@ -51,6 +54,12 @@ class OptionsController extends Controller
             'purchase.bills.view', 'purchase.bills.manage', 'purchase.bills.post', 'purchase.bills.void',
             'purchase.payments.manage', 'purchase.landed.view', 'purchase.landed.manage',
         ],
+        // Only `Rfqs/Create.vue` asks for this, and only to attach a round to the demand behind it — so
+        // anyone who may run an RFQ may read the approved requisitions, without being given the register.
+        'requisitions' => [
+            'purchase.rfq.view', 'purchase.rfq.manage',
+            'purchase.requisitions.view', 'purchase.requisitions.manage', 'purchase.requisitions.approve',
+        ],
     ];
 
     public function __invoke(Request $request, string $type): JsonResponse
@@ -66,6 +75,7 @@ class OptionsController extends Controller
             'receipts', 'grn' => $this->receipts($search, $limit),
             'orders' => $this->orders($search, $limit),
             'bills' => $this->bills($search, $limit),
+            'requisitions' => $this->requisitions($search, $limit),
         };
 
         // `items` — the envelope SearchableSelect reads first. The component
@@ -131,6 +141,34 @@ class OptionsController extends Controller
                     ($b->vendor?->name ?? '').' · '.optional($b->bill_date)->format('d M Y')
                 ) ?: null,
                 'meta' => $b->status,
+            ]);
+    }
+
+    /**
+     * Approved requisitions still worth buying against — the ones with a line that has quantity left.
+     *
+     * A requisition that has already been converted in full is deliberately absent: attaching a second
+     * round to it would ask vendors to price nothing, and the award would then fail on a line the buyer
+     * can see is at zero. Filtering it out here is a kinder refusal than an error later.
+     */
+    private function requisitions(?string $search, int $limit)
+    {
+        return PurchaseRequisition::query()
+            ->where('status', 'approved')
+            ->whereExists(fn ($q) => $q->select(DB::raw(1))
+                ->from('purchase_requisition_items as pri')
+                ->whereColumn('pri.requisition_id', 'purchase_requisitions.id')
+                ->whereRaw('pri.qty - pri.qty_ordered > 0'))
+            ->when($search, fn (Builder $q, string $term) => $this->like($q, $term, ['req_no', 'title']))
+            ->orderByDesc('need_by')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get(['id', 'req_no', 'title', 'department', 'need_by', 'estimated_amount'])
+            ->map(fn (PurchaseRequisition $q) => [
+                'value' => $q->id,
+                'label' => $q->req_no.' — '.Str::limit($q->title, 48),
+                'description' => trim(($q->department ?? '').' · '.optional($q->need_by)->format('d M Y'), ' ·') ?: null,
+                'meta' => number_format((float) $q->estimated_amount, 2),
             ]);
     }
 

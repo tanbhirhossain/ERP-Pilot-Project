@@ -18,6 +18,9 @@ class AccountsPermissionSeeder extends Seeder
             'accounts.fiscal.manage',
             'accounts.reports.view',
             'accounts.payables.view', 'accounts.receivables.view',
+            'accounts.withholding.view', 'accounts.withholding.manage',
+            'accounts.assets.view', 'accounts.assets.manage',
+            'accounts.budgets.view', 'accounts.budgets.manage',
             // NOTE: 'accounts.counts.view' was seeded here in error — stock counts
             // belong to INVENTORY and its routes enforce 'inventory.counts.view'.
             // It is no longer created. Existing rows are left untouched; remove
@@ -44,10 +47,15 @@ class AccountsPermissionSeeder extends Seeder
         // View only: posting, voiding and managing the chart of accounts stay with the Super Admin,
         // because those change the books and nothing here should.
         $readers = ['Administrator', 'Manager', 'Auditor'];
+        // The two Phase 3 read surfaces join the audit view too: an auditor who files or reviews a
+        // VAT return must be able to open the withholding desk and the fixed-asset register without
+        // being able to deposit tax, capitalise an asset or run depreciation (all `.manage`).
         $readOnly = [
             'accounts.reports.view', 'accounts.coa.view', 'accounts.journals.view',
             'accounts.vouchers.view', 'accounts.banks.view',
             'accounts.payables.view', 'accounts.receivables.view',
+            'accounts.withholding.view', 'accounts.assets.view',
+            'accounts.budgets.view',
         ];
 
         foreach ($readers as $roleName) {

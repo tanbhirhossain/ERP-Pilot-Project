@@ -3,9 +3,11 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const form=useForm({name:'',device_name:'',ip_address:'',port:4370,serial_number:'',device_model:'',location:'',status:'Active',is_enabled:true,auto_sync_enabled:false,sync_interval_minutes:15});
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.post(route('hrm.devices.store')); }
 </script>
 <template>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import type { Invoice } from '@sales/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import InvoiceForm from '../../Components/InvoiceForm.vue';
 
-const props = defineProps<{ invoice: any }>();
+const props = defineProps<{ invoice: Invoice }>();
 </script>
 
 <template>

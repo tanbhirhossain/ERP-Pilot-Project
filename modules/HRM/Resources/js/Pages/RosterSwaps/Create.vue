@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 defineProps<{ employeeOptions:{value:string,label:string}[]; shiftOptions:{value:number,label:string}[] }>();
 const form = useForm({ roster_duty_id: null as number|null, requester_employee_id: '', target_employee_id: '' as string|null, requested_shift_id: null as number|null, target_shift_id: null as number|null, swap_date: '', reason: '' });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.post(route('hrm.swaps.store')); }
 </script>
 <template>

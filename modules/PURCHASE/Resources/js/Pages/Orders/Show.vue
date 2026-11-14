@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import type { PurchaseOrder } from '@purchase/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import ActivityTimeline from '@core/Components/ActivityTimeline.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{ order: any }>();
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
+defineProps<{ order: PurchaseOrder; activities?: any[] }>();
 function tone(s:string){ if(s==='received') return 'success'; if(s==='confirmed') return 'info'; if(s==='draft') return 'warning'; if(s==='cancelled') return 'danger'; return 'neutral'; }
 </script>
 <template>
@@ -23,6 +25,7 @@ function tone(s:string){ if(s==='received') return 'success'; if(s==='confirmed'
           </div>
           <div class="flex flex-wrap gap-2">
             <Link :href="route('purchase.orders.edit', order.id)"><Button variant="outline" size="sm">Edit</Button></Link>
+            <a :href="route('core.documents.pdf', { type: 'purchase-order', id: order.id })" target="_blank"><Button variant="outline" size="sm">⬇ PDF</Button></a>
             <Button v-if="order.status==='draft'" size="sm" @click="router.post(route('purchase.orders.confirm', order.id))">Confirm</Button>
             <Button v-if="['draft','sent'].includes(order.status)" size="sm" variant="outline" @click="router.post(route('purchase.orders.approve', order.id))">Approve (≥50k)</Button>
             <Button v-if="order.status==='draft'" size="sm" variant="outline" @click="router.post(route('purchase.orders.send', order.id))">Send to Vendor</Button>
@@ -59,6 +62,7 @@ function tone(s:string){ if(s==='received') return 'success'; if(s==='confirmed'
         </div>
       </div>
     </div>
+      <ActivityTimeline :activities="activities" class="mt-4" />
       </PageHeader>
   </AdminLayout>
 </template>

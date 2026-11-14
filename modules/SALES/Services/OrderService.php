@@ -10,6 +10,7 @@ use Modules\INVENTORY\Interfaces\InventoryStockProviderInterface;
 use Modules\INVENTORY\Models\Product;
 use Modules\SALES\Interfaces\OrderRepositoryInterface;
 use Modules\SALES\Models\Order;
+use Modules\SALES\Support\LinePricer;
 
 class OrderService
 {
@@ -49,6 +50,14 @@ class OrderService
     {
         if (! $order->isConfirmable()) {
             throw new \DomainException('Order not confirmable (must be draft).');
+        }
+
+        // Credit control (Phase 1): a confirmed order is a promise to deliver on
+        // credit, so it must respect the same limit the POS counter applies.
+        // Before the transaction: a refusal must not leave reserved stock behind.
+        if (config('sales.credit.enforce_on_order', true)) {
+            app(CreditControlService::class)
+                ->assertWithinLimit($order->customer_id, (float) $order->total_amount, 'sales order');
         }
 
         return DB::transaction(function () use ($order): Order {
@@ -106,6 +115,8 @@ class OrderService
                     $it['uom_id'] = $it['uom_id'] ?? $p->uom_id;
                 }
             }
+            // Contract/tier pricing when no explicit price was typed (Phase 1).
+            LinePricer::apply($it, isset($data['customer_id']) ? (int) $data['customer_id'] : null, $data['order_date'] ?? null);
             $qty = (float) ($it['qty'] ?? 0);
             $price = (float) ($it['unit_price'] ?? 0);
             $discPct = (float) ($it['discount_pct'] ?? 0);

@@ -1,21 +1,23 @@
 <script setup lang="ts">
 import { Head, router, Link } from '@inertiajs/vue3';
 import { ref, reactive } from 'vue';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import { FolderOpen, ShieldCheck, AlertTriangle, Clock, Upload, Download, Trash2, Eye } from 'lucide-vue-next';
-import Pagination from '../../../../../CORE/Resources/js/Components/Pagination.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import Pagination from '@core/Components/Pagination.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
 defineProps<{ documents: any; stats: any }>();
 
 const showUpload = ref(false);
 const form = reactive({
-  employee_id: null as any,
+  employee_id: null as number | string | null,
   document_type: 'NID',
   title: '',
   issued_date: '',
@@ -26,12 +28,12 @@ const form = reactive({
 
 const types = ['NID','Passport','Birth Certificate','Photo','Appointment Letter','Contract','Experience Certificate','Education Certificate','Nominee Document','TIN','Bank Statement','Police Verification','Medical Certificate','Other'];
 
-function onFile(e: Event) {
+async function onFile(e: Event) {
   const t = e.target as HTMLInputElement;
   form.file = t.files?.[0] ?? null;
 }
 
-function submit() {
+async function submit() {
   const fd = new FormData();
   Object.entries(form).forEach(([k, v]) => {
     if (v !== null && v !== '' && k !== 'file') fd.append(k, String(v));
@@ -43,11 +45,11 @@ function submit() {
   });
 }
 
-function verify(id: number, status: string) {
+async function verify(id: number, status: string) {
   const remarks = prompt(`Remarks for ${status} (optional):`) || '';
   router.post(route('hrm.documents.verify', id), { status, remarks });
 }
-function del(id: number) { if (confirm('Delete document? File will be removed from storage.')) router.delete(route('hrm.documents.destroy', id)); }
+async function del(id: number) { if (await confirm({ description: 'Delete document? File will be removed from storage.', danger: true })) router.delete(route('hrm.documents.destroy', id)); }
 
 const badgeTone = (s: string) => ({ Verified: 'bg-emerald-500 text-white', Pending: 'bg-amber-500 text-white', Rejected: 'bg-red-500 text-white', Expired: 'bg-slate-600 text-white' }[s] || 'bg-muted');
 const expiryTone = (doc: any) => {

@@ -3,9 +3,11 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const form=useForm({ name:'', symbol:'', category:'unit', ratio_to_base:'1', is_active:true });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.post(route('inventory.uoms.store')); }
 </script>
 <template>

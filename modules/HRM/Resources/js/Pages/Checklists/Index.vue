@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref, reactive } from 'vue';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,7 +13,7 @@ const tplForm=reactive({name:'',category:'Onboarding',description:'',items:[{tit
 function addItem(){ tplForm.items.push({title:'',responsible_role:'HR'}); }
 function createTpl(){ router.post(route('hrm.checklists.templates.store'), tplForm as any, {onSuccess:()=>{showTpl.value=false; tplForm.name=''; tplForm.items=[{title:'',responsible_role:'HR'}];}}); }
 function seed(){ router.post(route('hrm.checklists.seed')); }
-const assignForm=reactive({employee_id:null as any, template_id:null as any});
+const assignForm=reactive({employee_id:null as number | string | null, template_id:null as number | string | null});
 function assign(){ router.post(route('hrm.checklists.assign'), assignForm as any); }
 const expanded = ref<Set<number>>(new Set());
 function toggleOpen(id:number){

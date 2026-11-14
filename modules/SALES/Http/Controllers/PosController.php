@@ -170,9 +170,22 @@ class PosController extends Controller
 
     public function sell(PosSaleRequest $r): RedirectResponse
     {
+        /*
+         * F22: a submission the ledger has already answered is not a new sale.
+         *
+         * The till sends `client_ref` when it submits, whether it is online or not, so a cashier who
+         * pressed Sell twice because the response was slow gets the receipt of the sale that happened
+         * instead of a second one. The redirect is the same shape the first answer took, which is the
+         * point: the till cannot tell the difference, and neither can the drawer.
+         */
+        if (($ref = $r->input('client_ref')) && ($existing = PosSale::where('client_ref', $ref)->first())) {
+            return redirect()->route('sales.pos.receipt', $existing->id)
+                ->with('success', "Sale {$existing->pos_no} was already recorded — this repeat of the same submission changed nothing.");
+        }
+
         try {
             $lines = array_map(fn ($it) => new InvoiceLineData(productId: (int) $it['product_id'], qty: (float) $it['qty'], unitPrice: (float) $it['unit_price'], variantId: $it['variant_id'] ?? null, discountPct: (float) ($it['discount_pct'] ?? 0), vatRate: (float) ($it['vat_rate'] ?? 0)), $r->input('items'));
-            $dto = new PosSaleData(warehouseId: (int) $r->input('warehouse_id'), lines: $lines, paymentMethod: $r->input('payment_method'), customerId: $r->input('customer_id'), customerName: $r->input('customer_name', 'Walk-in Customer'), bankId: $r->input('bank_id'), cashAmount: (float) ($r->input('cash_amount', 0)), bankAmount: (float) ($r->input('bank_amount', 0)), sessionId: $r->input('session_id'), paidAmount: (float) ($r->input('paid_amount', 0)), tenderedAmount: (float) ($r->input('tendered_amount', 0)));
+            $dto = new PosSaleData(warehouseId: (int) $r->input('warehouse_id'), lines: $lines, paymentMethod: $r->input('payment_method'), customerId: $r->input('customer_id'), customerName: $r->input('customer_name', 'Walk-in Customer'), bankId: $r->input('bank_id'), cashAmount: (float) ($r->input('cash_amount', 0)), bankAmount: (float) ($r->input('bank_amount', 0)), sessionId: $r->input('session_id'), paidAmount: (float) ($r->input('paid_amount', 0)), tenderedAmount: (float) ($r->input('tendered_amount', 0)), clientRef: $ref);
             $sale = $this->svc->sell($dto);
 
             $message = match (true) {

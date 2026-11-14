@@ -1,21 +1,26 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
+import type { Journal } from '@accounts/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 import { BookOpen, ShieldCheck, AlertTriangle, Pencil, Ban, CheckCircle2 } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
 import AcctSection from '../../Components/AcctSection.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 import { ref } from 'vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{ journal:any }>();
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+import { useToast } from '@core/Composables/useToast';
+const { confirm } = useConfirm();
+const toast = useToast();
+defineProps<{ journal:Journal }>();
 const voidReason=ref('');
-function post(id:number){ if(confirm('Post this journal? Ledger will be updated. Fiscal must be open.')) router.post(route('accounts.journals.post', id)); }
-function voidJ(id:number){ if(!voidReason.value) return alert('Provide void reason'); if(!confirm('Void — a reversal journal will be created?')) return; router.post(route('accounts.journals.void', id), {reason: voidReason.value}); }
-function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') return 'warning'; return 'danger'; }
+async function post(id:number){ if(await confirm({ description: 'Post this journal? Ledger will be updated. Fiscal must be open.', danger: false })) router.post(route('accounts.journals.post', id)); }
+async function voidJ(id:number){ if(!voidReason.value) return toast.warning('Provide void reason'); if(!await confirm({ description: 'Void — a reversal journal will be created?', danger: true })) return; router.post(route('accounts.journals.void', id), {reason: voidReason.value}); }
+async function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') return 'warning'; return 'danger'; }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Accounts' }, { title: 'Journals', href: route('accounts.journals.index') }, { title: journal.journal_no }]">

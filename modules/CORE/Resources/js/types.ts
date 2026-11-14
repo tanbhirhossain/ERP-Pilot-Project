@@ -105,3 +105,50 @@ export interface ActivityRow {
     subject: { type: string; id: number; label: string } | null;
     created_at: string | null;
 }
+
+// ── F13: API tokens & the published v1 contract ────────────────────────
+export interface ApiTokenRow {
+    id: number;
+    name: string;
+    abilities: string[];
+    last_used_at?: string | null;
+    expires_at?: string | null;
+    expired: boolean;
+    created_at?: string | null;
+}
+
+export interface ApiTokenIssued {
+    token: string;
+    name: string;
+    abilities: string[];
+    expires_at?: string | null;
+}
+
+export interface ApiSpecParam {
+    name: string;
+    in: 'path' | 'query';
+    required?: boolean;
+    description?: string;
+    schema?: Record<string, unknown>;
+}
+
+export interface ApiSpecOperation {
+    operationId?: string;
+    summary: string;
+    description?: string;
+    tags?: string[];
+    'x-required-permission'?: string;
+    'x-required-ability'?: string;
+    'x-middleware'?: string[];
+    parameters?: ApiSpecParam[];
+    requestBody?: { content?: { 'application/json'?: { schema?: Record<string, unknown> } } };
+    responses?: Record<string, Record<string, unknown>>;
+}
+
+export interface ApiSpec {
+    openapi: string;
+    info: { title: string; version: string; summary?: string; description?: string };
+    servers?: Array<{ url: string; description?: string }>;
+    paths: Record<string, Record<string, ApiSpecOperation>>;
+    components?: { schemas?: Record<string, Record<string, unknown>> };
+}

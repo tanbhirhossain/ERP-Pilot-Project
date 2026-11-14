@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Head, Link} from '@inertiajs/vue3';
 import { BarChart3, Users, Plane, Clock3, Timer, Download, Building2} from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { Button } from '@/components/ui/button';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 const props = defineProps<{ overview:any; filters:any }>();
 const o = props.overview;
 function pct(part:number, total:number){ return total? Math.round(part/total*100) : 0; }

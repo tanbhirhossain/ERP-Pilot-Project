@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { formatCurrency } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ stocks:any[]; stats:any }>();
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Reorder & ABC' }]">
     <Head title="Reorder & ABC Analysis" />
     <div class="space-y-4 max-w-7xl mx-auto">
-      <div><h1 class="text-xl font-bold">📉 Reorder Alert + ABC Classification</h1><p class="text-sm text-muted-foreground">Reorder when <code>on_hand ≤ reorder_level</code>. ABC: A=80% value (focus), B=15%, C=5% (tail). Calculated from <code>inventory_stocks.total_value</code>.</p></div>
+      <div><PageHeader title="Reorder Alert + ABC Classification" /><p class="text-sm text-muted-foreground">Reorder when <code>on_hand ≤ reorder_level</code>. ABC: A=80% value (focus), B=15%, C=5% (tail). Calculated from <code>inventory_stocks.total_value</code>.</p></div>
       <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
         <div class="bg-card border rounded-xl p-3 text-center"><div class="text-xs text-muted-foreground">Total SKUs</div><div class="text-xl font-bold">{{ stats.total_products }}</div></div>
         <div class="bg-amber-100 border border-amber-300 rounded-xl p-3 text-center"><div class="text-xs text-amber-800">Low Stock</div><div class="text-xl font-bold text-amber-700">{{ stats.low_stock }}</div></div>

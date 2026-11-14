@@ -11,7 +11,7 @@ class PAYROLLPermissionSeeder extends Seeder
     public function run(): void
     {
         $permissions = [
-            'payroll.view', 'payroll.settings.manage', 'payroll.sheets.manage', 'payroll.sheets.release', 'payroll.slips.view', 'payroll.slips.pay',
+            'payroll.view', 'payroll.settings.manage', 'payroll.sheets.manage', 'payroll.sheets.release', 'payroll.cutlists.review', 'payroll.slips.view', 'payroll.slips.pay',
             'payroll.increments.manage', 'payroll.increments.approve', 'payroll.loans.manage', 'payroll.loans.approve',
             'payroll.pf.view', 'payroll.pf.manage', 'payroll.tax.manage', 'payroll.adjustments.manage',
             'payroll.bonus.manage', 'payroll.settlements.manage', 'payroll.settlements.approve',

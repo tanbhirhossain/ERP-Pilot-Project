@@ -3,13 +3,13 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, Receipt, Eye } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 interface Row { id:number; invoice_no:string; customer?:{name:string}; invoice_date:string; due_date?:string; total_amount:string; paid_amount:string; status:string; payment_status:string; items_count:number; created_at:string }
 defineProps<{ invoices: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -30,7 +30,7 @@ function tone(s:string){ if(s==='paid') return 'success'; if(s==='posted') retur
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Invoices' }]">
     <Head title="Invoices" />
     <PageHeader title="Invoices" description="Draft → Posted (stock deducted + journal) → Paid. Links to Orders." :icon="Receipt" :actions="[{ label:'New Invoice', route:'sales.invoices.create', icon: Plus }]">
-    <DataTable route-name="sales.invoices.index" title="Invoices" :columns="columns" :rows="(invoices.data as unknown as Record<string,unknown>[])" :meta="invoices.meta" search-placeholder="Search invoice no…">
+    <DataTable route-name="sales.invoices.index" title="Invoices" :columns="columns" :rows="invoices.data" :meta="invoices.meta" search-placeholder="Search invoice no…">
       <template #cell-invoice_no="{row}"><span class="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600">{{ row.invoice_no }}</span></template>
       <template #cell-customer="{row}"><span class="text-sm">{{ row.customer?.name || '—' }}</span></template>
       <template #cell-invoice_date="{row}"><span class="text-sm">{{ formatDate(row.invoice_date) }}</span><span v-if="row.due_date" class="text-xs text-muted-foreground"> due {{ formatDate(row.due_date) }}</span></template>

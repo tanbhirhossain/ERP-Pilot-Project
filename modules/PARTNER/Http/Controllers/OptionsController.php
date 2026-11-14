@@ -27,6 +27,8 @@ class OptionsController extends Controller
     /** @var array<string, list<string>> type => permissions, any of which is sufficient */
     private const PERMISSIONS = [
         'vendors' => [
+            // F18: an RFQ is sent to named vendors and a quote is entered against one.
+            'purchase.rfq.view', 'purchase.rfq.manage', 'purchase.rfq.award',
             'partner.vendors.view', 'partner.vendors.create', 'partner.vendors.update', 'partner.exports',
             'purchase.orders.view', 'purchase.orders.manage', 'purchase.orders.confirm', 'purchase.orders.approve',
             'purchase.receipts.view', 'purchase.receipts.manage', 'purchase.receipts.post',

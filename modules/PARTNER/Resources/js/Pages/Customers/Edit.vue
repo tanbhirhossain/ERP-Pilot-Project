@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import type { Partner } from '@partner/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PartnerForm from '../../Components/PartnerForm.vue';
 
-defineProps<{ partner: any; groupOptions: any[]; priceListOptions: any[]; userOptions: any[] }>();
+defineProps<{ partner: Partner; groupOptions: any[]; priceListOptions: any[]; userOptions: any[] }>();
 </script>
 
 <template>

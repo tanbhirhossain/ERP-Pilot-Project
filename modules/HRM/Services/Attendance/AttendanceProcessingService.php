@@ -495,10 +495,21 @@ class AttendanceProcessingService
         }
     }
 
-    /** Batch recalc for date range (useful after roster corrections) */
+    /**
+     * Batch recalc for date range (useful after roster corrections).
+     *
+     * `duty_date` is cast to `date` on AttendancePair, so it is *stored* as 'Y-m-d 00:00:00' on SQLite.
+     * Passing bare dates to whereBetween therefore dropped the range's LAST day ('2026-10-31 00:00:00'
+     * is not <= '2026-10-31'): a repair or a pipeline run ending on the 31st silently recalculated nothing
+     * for the 31st, and since the reconciler deliberately leaves any date that has a pair to this method,
+     * that day ended up with no daily row at all. Both bounds are widened to the whole day.
+     */
     public function recalcForDateRange(string $from, string $to): int
     {
-        $pairs = AttendancePair::whereBetween('duty_date', [$from, $to])->get();
+        $pairs = AttendancePair::whereBetween('duty_date', [
+            Carbon::parse($from)->startOfDay()->toDateTimeString(),
+            Carbon::parse($to)->endOfDay()->toDateTimeString(),
+        ])->get();
         $affected = collect($pairs)->unique(fn ($p) => $p->employee_id.'|'.$p->duty_date)->count();
         foreach ($pairs as $pair) {
             $this->dailies->upsertForPair($pair);

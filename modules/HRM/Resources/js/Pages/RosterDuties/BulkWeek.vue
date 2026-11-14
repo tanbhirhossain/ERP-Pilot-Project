@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
+import type { SelectOption } from '@core/types';
 import { ref, computed} from 'vue';
 import { CalendarDays, Users, Filter, Save, Eye } from 'lucide-vue-next';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 
-const props = defineProps<{ shiftOptions:any[], shifts:any[] }>();
+const props = defineProps<{ shiftOptions:SelectOption[], shifts:any[] }>();
 const departments = ref<any[]>([]);
 const weekdays = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const filters = ref({

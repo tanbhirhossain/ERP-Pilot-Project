@@ -3,13 +3,13 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, FileText, Eye } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 interface Row { id:number; quotation_no:string; customer?:{name:string}; quotation_date:string; expiry_date?:string; total_amount:string; status:string; items_count:number; created_at:string }
 defineProps<{ quotations: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -29,7 +29,7 @@ function tone(s:string){ if(s==='accepted') return 'success'; if(s==='sent') ret
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Quotations' }]">
     <Head title="Quotations" />
     <PageHeader title="Quotations" description="Price offers — draft → sent → accepted → converted to Order." :icon="FileText" :actions="[{ label:'New Quotation', route:'sales.quotations.create', icon: Plus }]">
-    <DataTable route-name="sales.quotations.index" title="Quotations" :columns="columns" :rows="(quotations.data as unknown as Record<string,unknown>[])" :meta="quotations.meta" search-placeholder="Search quotation no…">
+    <DataTable route-name="sales.quotations.index" title="Quotations" :columns="columns" :rows="quotations.data" :meta="quotations.meta" search-placeholder="Search quotation no…">
       <template #cell-quotation_no="{row}"><span class="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600">{{ row.quotation_no }}</span></template>
       <template #cell-customer="{row}"><span class="text-sm">{{ row.customer?.name || '—' }}</span></template>
       <template #cell-quotation_date="{row}"><span class="text-sm">{{ formatDate(row.quotation_date) }}</span><span v-if="row.expiry_date" class="text-xs text-muted-foreground"> exp {{ formatDate(row.expiry_date) }}</span></template>

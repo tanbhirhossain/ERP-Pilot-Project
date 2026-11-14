@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import type { Product } from '@inventory/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import ProductForm from '../../Components/ProductForm.vue';
 
 defineProps<{
-    product: any;
+    product: Product;
     categoryOptions: any[];
     brandOptions: any[];
     uomOptions: any[];

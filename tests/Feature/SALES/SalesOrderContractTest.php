@@ -166,6 +166,11 @@ const VATLESS_LINE_FORMS = [
     // sales_return_items has no discount_pct, and SalesReturnService sets vat_rate itself from
     // the source invoice item rather than reading it off the form.
     'SALES/Resources/js/Pages/Returns/Create.vue',
+    // A requisition line is an estimate, not a taxable document: `expected_unit_price` feeds the budget
+    // check, VAT arrives later on the purchase order (`purchase_order_items.vat_rate`), and there is no
+    // column to reset. The RFQ form is absent from this list because it collects no price at all — a
+    // round asks for one — so the scan never reached it.
+    'PURCHASE/Resources/js/Components/RequisitionForm.vue',
 ];
 
 test('every line-item editor that collects a price also collects VAT', function () {

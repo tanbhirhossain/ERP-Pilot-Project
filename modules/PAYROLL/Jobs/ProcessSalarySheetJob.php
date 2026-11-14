@@ -24,6 +24,13 @@ final class ProcessSalarySheetJob implements ShouldBeUnique, ShouldQueue
 
     public int $timeout = 900;
 
+    /**
+     * The worker re-reserves a job after `queue.connections.database.retry_after` (400s in this app), and a job
+     * that is still legitimately running at that point is handed to a second worker while the first is mid
+     * flight. So the reserve window for this job has to outlast its own ceiling — with `tries = 3` here, a re-reservation is not a retry after failure — it is a second batch computing the same sheet.
+     */
+    public int $retryAfter = 960;
+
     public int $backoff = 30;
 
     public int $uniqueFor = 3600;

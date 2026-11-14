@@ -17,11 +17,11 @@ import { ArrowLeft, Ban, Banknote, CreditCard, FileText, HandCoins, Printer, Rec
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import { confirmDialog } from '../../../../../CORE/Resources/js/Composables/useConfirm';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { confirmDialog } from '@core/Composables/useConfirm';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 
 const props = defineProps<{
   sale: any;

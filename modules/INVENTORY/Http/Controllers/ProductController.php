@@ -138,4 +138,55 @@ class ProductController extends Controller
             return back()->with('error', $e->getMessage());
         }
     }
+
+    /**
+     * Bulk actions from the DataTable selection bar (Phase 2 — U7).
+     *
+     * Activate/deactivate flips the active flag only (status is a lifecycle
+     * enum). Delete reuses the same per-product guard as single delete — rows
+     * with stock or movement history are skipped and reported, never force-
+     * deleted. Permission is checked per action, not just per route.
+     */
+    public function bulk(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'action' => 'required|in:activate,deactivate,delete',
+            'ids' => 'required|array|min:1|max:500',
+            'ids.*' => 'integer',
+        ]);
+
+        $permission = $data['action'] === 'delete' ? 'inventory.products.delete' : 'inventory.products.update';
+        abort_unless($request->user()->can($permission), 403);
+
+        $products = Product::whereIn('id', $data['ids'])->get();
+
+        if ($products->isEmpty()) {
+            return back()->with('error', 'No matching products found.');
+        }
+
+        if ($data['action'] !== 'delete') {
+            $active = $data['action'] === 'activate';
+            Product::whereIn('id', $products->pluck('id'))->update(['is_active' => $active, 'updated_at' => now()]);
+            $verb = $active ? 'activated' : 'deactivated';
+
+            return back()->with('success', "{$products->count()} product(s) {$verb}.");
+        }
+
+        $deleted = 0;
+        $skipped = [];
+        foreach ($products as $product) {
+            try {
+                $this->products->delete($product);
+                $deleted++;
+            } catch (\DomainException $e) {
+                $skipped[] = "{$product->sku}: {$e->getMessage()}";
+            }
+        }
+
+        if ($skipped !== []) {
+            return back()->with('error', "Deleted {$deleted} product(s); skipped ".count($skipped).'. '.implode(' ', array_slice($skipped, 0, 3)));
+        }
+
+        return back()->with('success', "{$deleted} product(s) deleted.");
+    }
 }

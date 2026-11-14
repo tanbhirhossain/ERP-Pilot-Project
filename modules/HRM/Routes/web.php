@@ -27,6 +27,7 @@ use Modules\HRM\Http\Controllers\InformedRequestController;
 use Modules\HRM\Http\Controllers\LeaveRequestController;
 use Modules\HRM\Http\Controllers\LeaveTypeController;
 use Modules\HRM\Http\Controllers\LeaveYearEndController;
+use Modules\HRM\Http\Controllers\MyHrController;
 use Modules\HRM\Http\Controllers\OptionsController;
 use Modules\HRM\Http\Controllers\OrganizationController;
 use Modules\HRM\Http\Controllers\OvertimePolicyController;
@@ -191,6 +192,7 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->name('hrm.')->group(function 
     // Attendance Fix — by Department / Employee / All
     Route::get('attendance/fix', [AttendanceFixController::class, 'index'])->middleware(PermissionMiddleware::class.':hrm.attendance.view')->name('attendance.fix.index');
     Route::post('attendance/fix', [AttendanceFixController::class, 'fix'])->middleware(PermissionMiddleware::class.':hrm.attendance.manage')->name('attendance.fix');
+    Route::get('attendance/fix/status', [AttendanceFixController::class, 'status'])->middleware(PermissionMiddleware::class.':hrm.attendance.view')->name('attendance.fix.status');
 
     // Attendance Sync Panel
     Route::get('attendance/sync', [AttendanceSyncController::class, 'index'])->middleware(PermissionMiddleware::class.':hrm.attendance.sync')->name('attendance.sync.index');
@@ -287,4 +289,15 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->name('hrm.')->group(function 
     Route::get('reports/attendance', [HrmReportsController::class, 'attendance'])->middleware(PermissionMiddleware::class.':hrm.reports.view')->name('reports.attendance');
     Route::get('reports/ot', [HrmReportsController::class, 'ot'])->middleware(PermissionMiddleware::class.':hrm.reports.view')->name('reports.ot');
     Route::get('reports/export', [HrmReportsController::class, 'export'])->middleware(PermissionMiddleware::class.':hrm.reports.view')->name('reports.export');
+
+    // ── Employee Self-Service (Phase 1 F9) ──────────────────────────────
+    // `auth` only (inherited from the group). Every query is scoped to the
+    // signed-in user's own employee record in the controller — there is no
+    // route parameter that could expose a colleague's data, so no permission
+    // can widen it. A user with no linked employee gets an actionable page.
+    Route::get('my', [MyHrController::class, 'dashboard'])->name('my.dashboard');
+    Route::get('my/payslips', [MyHrController::class, 'payslips'])->name('my.payslips');
+    Route::get('my/payslips/{id}', [MyHrController::class, 'payslip'])->name('my.payslip');
+    Route::get('my/leave', [MyHrController::class, 'leave'])->name('my.leave');
+    Route::get('my/attendance', [MyHrController::class, 'attendance'])->name('my.attendance');
 });

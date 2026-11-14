@@ -14,12 +14,12 @@ import { computed, ref } from 'vue';
 import { Banknote, CalendarDays, CreditCard, FileText, HandCoins, Landmark, Printer, ReceiptText, TriangleAlert, Users } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { printDocument } from '../../../../../CORE/Resources/js/Composables/usePrint';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import { printDocument } from '@core/Composables/usePrint';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatCurrency } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
 
 interface ReportRow {
   session_id: number;

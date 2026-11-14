@@ -5,10 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, ReceiptText, Percent, Coins } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { computed } from 'vue';
 
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const form = useForm({
   vendor_id: null as number | null,
   warehouse_id: null as number | null,
@@ -17,6 +19,7 @@ const form = useForm({
   notes: '',
   items: [{ product_id: null as number | null, qty: 1, unit_price: null as number | null, discount_pct: 0, vat_rate: 0 }],
 });
+useUnsavedGuard(() => form.isDirty);
 
 /*
  * Money is worked out per line and summed, in the same order the ledger will read it: gross, then
@@ -46,7 +49,7 @@ function submit() { form.post(route('purchase.orders.store')); }
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: 'New PO' }]">
     <Head title="New Purchase Order" />
     <div class="space-y-4">
-      <h1 class="text-xl font-bold">New Purchase Order</h1>
+      <PageHeader title="New Purchase Order" />
       <p class="text-sm text-muted-foreground">Vendor → confirm → GRN (stock IN 1200) → Bill (AP 2100). VAT posts to 1330 (input) / 2110 (payable).</p>
       <form @submit.prevent="submit" class="space-y-4">
         <p v-if="Object.keys(form.errors).length" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ Object.values(form.errors)[0] as string }}</p>

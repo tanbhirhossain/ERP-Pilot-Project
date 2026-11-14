@@ -39,6 +39,12 @@ final class PayrollSalarySheetController extends Controller
             'defaultMonth' => $month,
             'defaultIncludePunishments' => $existing?->include_punishments ?? false,
             'employeeOptions' => $employees->employeeOptions(null, 200),
+            // Told before the run, not after: an employee with no salary history is left out of the sheet
+            // (they would otherwise throw and mark the whole month `failed`), so name them here instead.
+            'payrollWarnings' => $employees->unpayableForPeriod(
+                sprintf('%d-%02d-01', $year, $month),
+                sprintf('%d-%02d-%02d', $year, $month, cal_days_in_month(CAL_GREGORIAN, $month, $year)),
+            ),
         ]);
     }
 
@@ -83,9 +89,11 @@ final class PayrollSalarySheetController extends Controller
         return back()->with('success', 'Salary sheet released. Individual pay slips can now be paid or placed on hold.');
     }
 
-    public function show(Request $request, PayrollSalarySheet $salarySheet): Response
+    public function show(Request $request, PayrollSalarySheet $salarySheet, EmployeePayrollDataProviderInterface $employees): Response
     {
         $sheet = $salarySheet->load('cutlist');
+        $periodStart = sprintf('%d-%02d-01', (int) $sheet->pay_year, (int) $sheet->pay_month);
+        $periodEnd = sprintf('%d-%02d-%02d', (int) $sheet->pay_year, (int) $sheet->pay_month, cal_days_in_month(CAL_GREGORIAN, (int) $sheet->pay_month, (int) $sheet->pay_year));
         $dt = DataTableQuery::fromRequest($request, ['employee_name', 'employee_id', 'gross_salary', 'total_deductions', 'net_salary'], [], 'employee_name', 'asc');
         $slipQuery = PayrollSlip::query()->where('salary_sheet_id', $sheet->id);
         if ($dt->search !== null && trim($dt->search) !== '') {
@@ -110,6 +118,7 @@ final class PayrollSalarySheetController extends Controller
             'releaseAudit' => PayrollWorkflowAudit::query()->where('subject_type', 'salary_sheet')->where('subject_id', $sheet->id)->where('event', 'released')->first(['actor_id', 'occurred_at']),
             'canRelease' => (bool) $request->user()?->can('payroll.sheets.release'),
             'canRefreshCutlist' => $sheet->status === 'failed' && ! $sheet->slips()->exists(),
+            'payrollWarnings' => $employees->unpayableForPeriod($periodStart, $periodEnd),
             'slips' => PaginatedResource::from($slips),
         ]);
     }

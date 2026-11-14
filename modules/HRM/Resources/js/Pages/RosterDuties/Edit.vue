@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-const props=defineProps<{ duty:{id:number;employee_id:string;shift_id:number|null;roster_date:string;status:string;remarks?:string}, shiftOptions:any[], employeeOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props=defineProps<{ duty:{id:number;employee_id:string;shift_id:number|null;roster_date:string;status:string;remarks?:string}, shiftOptions:SelectOption[], employeeOptions:SelectOption[] }>();
 const form=useForm({employee_id:props.duty.employee_id,shift_id:props.duty.shift_id,roster_date:props.duty.roster_date,status:props.duty.status,remarks:props.duty.remarks||''});
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('hrm.duties.update',props.duty.id)); }
 </script>
 <template>

@@ -3,10 +3,12 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props=defineProps<{ shift:{id:number;shift_name:string;start_time?:string;end_time?:string;punch_in_window_start?:string;punch_in_window_end?:string;crosses_midnight:boolean;max_duration_hours:number} }>();
 const form=useForm({shift_name:props.shift.shift_name,start_time:props.shift.start_time||'',end_time:props.shift.end_time||'',punch_in_window_start:props.shift.punch_in_window_start||'',punch_in_window_end:props.shift.punch_in_window_end||'',crosses_midnight:props.shift.crosses_midnight,max_duration_hours:props.shift.max_duration_hours});
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('hrm.shifts.update',props.shift.id)); }
 </script>
 <template>

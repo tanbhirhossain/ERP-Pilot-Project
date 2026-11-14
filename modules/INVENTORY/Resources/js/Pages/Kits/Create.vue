@@ -4,10 +4,11 @@ import { reactive } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 defineProps<{products:any[],warehouses:any[]}>();
-const form=reactive({product_id:null as any, warehouse_id:null as any, qty_to_produce:1, notes:'', items:[{component_product_id:null, required_qty:1, is_optional:false}] as any[]});
+const form=reactive({product_id:null as number | string | null, warehouse_id:null as number | string | null, qty_to_produce:1, notes:'', items:[{component_product_id:null, required_qty:1, is_optional:false}] as any[]});
 function add(){form.items.push({component_product_id:null, required_qty:1, is_optional:false});}
 function submit(){router.post(route('inventory.kits.store'), form as any);}
 </script>
@@ -15,7 +16,7 @@ function submit(){router.post(route('inventory.kits.store'), form as any);}
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Kits / BOM Production', href: route('inventory.kits.index') }, { title: 'Create' }]">
     <Head title="New Kit"/>
     <div class="space-y-4">
-      <h1 class="text-xl font-bold">New Kit / BOM Production Order</h1>
+      <PageHeader title="New Kit / BOM Production Order" />
       <div class="bg-card border rounded-xl p-4 space-y-3">
         <div class="grid md:grid-cols-3 gap-3">
           <div class="space-y-1"><Label>Finished Product (Kit) *</Label><SearchableSelect v-model="form.product_id" endpoint="/inventory/api/options/products" placeholder="Kit SKU — e.g., Gift Box" /></div>

@@ -76,6 +76,13 @@ class AccountsDemoSeeder extends Seeder
             // Equity
             [$equity, '3100', 'Capital', 'equity', 'credit', ['is_system' => true]],
             [$equity, '3200', 'Retained Earnings', 'equity', 'credit', ['is_system' => true]],
+            // Opening Balance Equity — the take-on suspense account (Phase 1 F4).
+            // Opening COA/AR/AP/stock batches post their net here; the accountant
+            // journals it to Retained Earnings once take-on is audited.
+            [$equity, '3900', 'Opening Balance Equity', 'equity', 'credit', [
+                'is_system' => true,
+                'description' => 'Temporary suspense for go-live opening balances. Close to 3200 Retained Earnings after take-on is audited.',
+            ]],
             // Income
             [$income, '4001', 'Sales Revenue', 'income', 'credit', []],
             [$income, '4002', 'Service Revenue', 'income', 'credit', []],

@@ -5,22 +5,24 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2 } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { computed } from 'vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props = defineProps<{ receipt?: any, bill?: any }>();
-const src = (props as any).receipt ?? (props as any).bill;
+const src = props.receipt ?? props.bill;
 const initItems = src?.items?.map((it:any)=>({ product_id: it.product_id, receipt_item_id: it.id ?? null, qty: 1, unit_price: Number(it.unit_price), discount_pct: Number(it.discount_pct||0), vat_rate: Number(it.vat_rate||0) })) ?? [{ product_id: null as number|null, receipt_item_id: null as number|null, qty: 1, unit_price: null as number|null, discount_pct: 0, vat_rate: 0 }];
 const form = useForm({
-  vendor_id: (src as any)?.vendor_id ?? null as number|null,
-  warehouse_id: (src as any)?.warehouse_id ?? null as number|null,
-  receipt_id: (props as any).receipt?.id ?? null as number|null,
-  bill_id: (props as any).bill?.id ?? null as number|null,
-  order_id: (src as any)?.order_id ?? null as number|null,
+  vendor_id: src?.vendor_id ?? null as number|null,
+  warehouse_id: src?.warehouse_id ?? null as number|null,
+  receipt_id: props.receipt?.id ?? null as number|null,
+  bill_id: props.bill?.id ?? null as number|null,
+  order_id: src?.order_id ?? null as number|null,
   return_date: new Date().toISOString().slice(0,10),
-  notes: src ? `Return for ${(src as any).receipt_no ?? (src as any).bill_no}` : '',
+  notes: src ? `Return for ${src.receipt_no ?? src.bill_no}` : '',
   items: initItems,
 });
+useUnsavedGuard(() => form.isDirty);
 const total = computed(()=> form.items.reduce((s,i)=>{ const g=(Number(i.qty)||0)*(Number(i.unit_price)||0); return s+g*(1-(Number(i.discount_pct)||0)/100)*(1+(Number(i.vat_rate)||0)/100); },0));
 function addItem(){ form.items.push({ product_id: null, receipt_item_id: null, qty: 1, unit_price: null, discount_pct: 0, vat_rate: 0 }); }
 function removeItem(i:number){ form.items.splice(i,1); if(!form.items.length) addItem(); }
@@ -30,7 +32,7 @@ function submit(){ form.post(route('purchase.returns.store')); }
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: 'New Return' }]">
     <Head title="New Purchase Return" />
     <div class="space-y-4">
-      <h1 class="text-xl font-bold">New Purchase Return (Debit Note) <span v-if="src" class="text-sm text-muted-foreground">for {{ (src as any).receipt_no ?? (src as any).bill_no }}</span></h1>
+      <h1 class="text-xl font-bold">New Purchase Return (Debit Note) <span v-if="src" class="text-sm text-muted-foreground">for {{ src.receipt_no ?? src.bill_no }}</span></h1>
       <p class="text-sm text-muted-foreground">Stock OUT + AP Dr / Inventory Cr / VAT Cr.</p>
       <form @submit.prevent="submit" class="space-y-4">
         <p v-if="Object.keys(form.errors).length" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ Object.values(form.errors)[0] as string }}</p>

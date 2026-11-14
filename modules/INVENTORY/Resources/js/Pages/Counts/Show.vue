@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-defineProps<{ count:any }>();
+import type { StockCount } from '@inventory/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+defineProps<{ count:StockCount }>();
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Physical Counts', href: route('inventory.counts.index') }, { title: count.count_no }]"><Head :title="count.count_no"/><PageHeader title="Pages Detail" description="{{ count.warehouse?.name }}" :icon="FileText">

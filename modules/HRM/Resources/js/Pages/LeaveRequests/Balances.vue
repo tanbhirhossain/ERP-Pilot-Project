@@ -5,10 +5,10 @@ import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 const props=defineProps<{employeeOptions:{value:string;label:string}[];employeeId:string|null;year:number;balances:any[]}>();
 const employeeId=ref(props.employeeId), year=ref(props.year);
 function search(){router.get(route('hrm.leaves.balances'),{employee_id:employeeId.value||undefined,year:year.value},{preserveState:true,preserveScroll:true});}

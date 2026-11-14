@@ -11,6 +11,7 @@ use Modules\SALES\Interfaces\OrderRepositoryInterface;
 use Modules\SALES\Interfaces\QuotationRepositoryInterface;
 use Modules\SALES\Models\Order;
 use Modules\SALES\Models\Quotation;
+use Modules\SALES\Support\LinePricer;
 
 class QuotationService
 {
@@ -118,6 +119,8 @@ class QuotationService
                     $it['uom_id'] = $it['uom_id'] ?? $p->uom_id;
                 }
             }
+            // Contract/tier pricing when no explicit price was typed (Phase 1).
+            LinePricer::apply($it, isset($data['customer_id']) ? (int) $data['customer_id'] : null, $data['quotation_date'] ?? null);
             $qty = (float) ($it['qty'] ?? 0);
             $price = (float) ($it['unit_price'] ?? 0);
             $discPct = (float) ($it['discount_pct'] ?? 0);

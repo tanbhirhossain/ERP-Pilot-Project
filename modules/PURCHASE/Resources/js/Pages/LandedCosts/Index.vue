@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{landedCosts:any}>();
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: 'Landed Costs' }]">
     <Head title="Landed Costs"/>
     <div class="max-w-6xl mx-auto space-y-4">
-      <div class="flex justify-between items-center"><h1 class="text-xl font-bold">🚢 Landed Costs — Freight/Customs Allocation</h1><Link :href="route('purchase.landed-costs.create')"><span class="px-3 py-2 rounded bg-primary text-primary-foreground text-sm">New Landed Cost</span></Link></div>
+      <PageHeader title="Landed Costs" description="Freight/Customs Allocation">
+      <template #actions><Link :href="route('purchase.landed-costs.create')"><span class="px-3 py-2 rounded bg-primary text-primary-foreground text-sm">New Landed Cost</span></Link></template>
+    </PageHeader>
       <p class="text-sm text-muted-foreground">Allocate freight, customs duty, insurance to GRN items by value/qty/weight → bumps FIFO layer unit_cost & stock avg_cost.</p>
       <div class="bg-card border rounded-xl p-4">
         <StaticTable

@@ -3,12 +3,12 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, Layers } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
 interface Row { id:number; name:string; code?:string; parent?:{name:string}; description?:string; sort_order:number; is_active:boolean; products_count:number; created_at:string }
 defineProps<{ categories: Paginator<Row>; tree:any[]; parentOptions:any[] }>();
 const columns: DataTableColumn[] = [
@@ -27,7 +27,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
   <AdminLayout :breadcrumbs="[{title:'Inventory'},{title:'Categories'}]">
     <Head title="Categories" />
     <PageHeader title="Categories" description="Organize products hierarchically." :icon="Layers" :actions="[{ label:'Add Category', route:'inventory.categories.create', icon: Plus }]">
-    <DataTable route-name="inventory.categories.index" title="Categories" :columns="columns" :rows="(categories.data as unknown as Record<string,unknown>[])" :meta="categories.meta" search-placeholder="Search categories…">
+    <DataTable route-name="inventory.categories.index" title="Categories" :columns="columns" :rows="categories.data" :meta="categories.meta" search-placeholder="Search categories…">
       <template #cell-name="{row}"><div><p class="font-semibold">{{ row.name }}</p><p class="text-xs text-muted-foreground">{{ row.description || '' }}</p></div></template>
       <template #cell-code="{row}"><span class="font-mono text-xs px-1.5 py-0.5 bg-muted rounded">{{ row.code || '—' }}</span></template>
       <template #cell-parent="{row}"><span class="text-sm">{{ row.parent?.name || '—' }}</span></template>

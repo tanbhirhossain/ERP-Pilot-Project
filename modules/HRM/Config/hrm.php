@@ -30,6 +30,42 @@ return [
 
     'sync' => [
         'allow_simulation' => env('HRM_ALLOW_ATTENDANCE_SIMULATION', false),
+
+        /*
+        |----------------------------------------------------------------------
+        | How long one device sync may keep working
+        |----------------------------------------------------------------------
+        |
+        | A sync stops between records once it has spent this many seconds, and
+        | says so (`partial` in the result, `Partial` in the sync log). Whatever
+        | it did not read is left for the next run, because `last_sync_at` is
+        | only advanced by a sync that finished.
+        |
+        | This is the number that keeps a queue worker alive. The code used to
+        | call `set_time_limit(300)` instead, which *lowered* the limit a job had
+        | just removed, and on Windows (wall-clock) killed the worker mid-sync —
+        | and a budget that a fatal error enforces is not a budget.
+        |
+        | Keep it under whatever `php -d max_execution_time` / FPM `request_
+        | timeouts` the caller has, and under the job's own `$timeout`.
+        */
+        'budget_seconds' => (int) env('HRM_SYNC_BUDGET_SECONDS', 240),
+
+        /*
+        |----------------------------------------------------------------------
+        | PHP extensions a device sync cannot work without
+        |----------------------------------------------------------------------
+        |
+        | `hrm:pipeline` checks these before it contacts a device. The ZKTeCo
+        | client opens a UDP socket through `ext-sockets`, which a stock Windows
+        | PHP ships disabled in php.ini — so every device in the fleet fails in
+        | under a second, identically, and the run looks like a device problem.
+        | Failing once, loudly, with the fix in the message is worth more than
+        | three timeouts. Listed as configuration so the guard can be tested
+        | with an extension that really is absent.
+        |
+        */
+        'required_extensions' => ['sockets'],
     ],
 
     'attendance' => [

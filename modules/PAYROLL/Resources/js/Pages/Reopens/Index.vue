@@ -2,12 +2,12 @@
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { RotateCcw, AlertTriangle, CheckCircle2, FileBarChart, Plus } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 
 const props = defineProps<{
   pending: any[];

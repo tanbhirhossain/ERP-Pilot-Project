@@ -35,6 +35,14 @@
     margin: 14mm 14mm 16mm;
 }
 
+/* Screen: the sheet letterhead and colophon must NEVER render in the app.
+   This rule previously sat inside @media print, where it was dead code (the
+   `display: block !important` below won), so the "Printed by …" furniture
+   leaked onto the top of every page on screen. It belongs out here. */
+.print-furniture {
+    display: none;
+}
+
 @media print {
     /* ── 1. Reinstate the light token set ─────────────────────────────── */
     :root,
@@ -149,10 +157,6 @@
     }
 
     /* ── Sheet furniture ─────────────────────────────────────────────── */
-
-    .print-furniture {
-        display: none;
-    }
 
     .print-sheet-header {
         display: flex;

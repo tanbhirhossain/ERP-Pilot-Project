@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { ShiftSwap } from '@hrm/types';
 import {ArrowLeft, ArrowLeftRight, Check, X, Clock, User, FileText} from 'lucide-vue-next';
 import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-const props = defineProps<{ swap: any }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
+const props = defineProps<{ swap: ShiftSwap }>();
 const processing=ref(false);
-function approve(){ processing.value=true; router.post(route('hrm.swaps.approve', props.swap.id), {}, { onFinish(){ processing.value=false; }}); }
-function reject(){ if(!confirm('Reject?')) return; processing.value=true; router.post(route('hrm.swaps.reject', props.swap.id), {}, { onFinish(){ processing.value=false; }}); }
+async function approve(){ processing.value=true; router.post(route('hrm.swaps.approve', props.swap.id), {}, { onFinish(){ processing.value=false; }}); }
+async function reject(){ if(!await confirm({ description: 'Reject?', danger: true })) return; processing.value=true; router.post(route('hrm.swaps.reject', props.swap.id), {}, { onFinish(){ processing.value=false; }}); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Roster' }, { title: 'Roster Swaps', href: route('hrm.swaps.index') }, { title: `#${swap.id}` }]">

@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import { Head, router, Link } from '@inertiajs/vue3';
 import { ref, reactive } from 'vue';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BadgeCent, Clock, AlertTriangle, CheckCircle, Timer } from 'lucide-vue-next';
-import Pagination from '../../../../../CORE/Resources/js/Components/Pagination.vue';
-import { confirmDialog, promptDialog } from '../../../../../CORE/Resources/js/Composables/useConfirm';
-import { useToast } from '../../../../../CORE/Resources/js/Composables/useToast';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import Pagination from '@core/Components/Pagination.vue';
+import { confirmDialog, promptDialog } from '@core/Composables/useConfirm';
+import { useToast } from '@core/Composables/useToast';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ probations: any; stats: any }>();
 const showCreate = ref(false);
-const form = reactive({ employee_id: null as any, probation_start: '', probation_end: '', remarks: '' });
+const form = reactive({ employee_id: null as number | string | null, probation_start: '', probation_end: '', remarks: '' });
 function create(){ router.post(route('hrm.probations.store'), form, { onSuccess: ()=> showCreate.value=false }); }
 const toast = useToast();
 async function extend(id:number){

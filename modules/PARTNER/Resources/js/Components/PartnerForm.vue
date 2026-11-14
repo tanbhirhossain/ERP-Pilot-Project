@@ -26,13 +26,13 @@ import {
     Trash2,
     User,
 } from 'lucide-vue-next';
-import SearchableSelect from '../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import PageHeader from '../../../../CORE/Resources/js/Components/PageHeader.vue';
-import FormField from '../../../../CORE/Resources/js/Components/FormField.vue';
-import FormSection from '../../../../CORE/Resources/js/Components/FormSection.vue';
-import FormActions from '../../../../CORE/Resources/js/Components/FormActions.vue';
-import FormSelect from '../../../../CORE/Resources/js/Components/FormSelect.vue';
-import FormCheckbox from '../../../../CORE/Resources/js/Components/FormCheckbox.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import FormField from '@core/Components/FormField.vue';
+import FormSection from '@core/Components/FormSection.vue';
+import FormActions from '@core/Components/FormActions.vue';
+import FormSelect from '@core/Components/FormSelect.vue';
+import FormCheckbox from '@core/Components/FormCheckbox.vue';
 
 const props = withDefaults(
     defineProps<{

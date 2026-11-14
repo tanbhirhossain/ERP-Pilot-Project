@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { Brand } from '@inventory/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-const props=defineProps<{ brand:any }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props=defineProps<{ brand:Brand }>();
 const form=useForm({ name:props.brand.name, code:props.brand.code??'', description:props.brand.description??'', website:props.brand.website??'', is_active:props.brand.is_active });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('inventory.brands.update', props.brand.id)); }
 </script>
 <template>

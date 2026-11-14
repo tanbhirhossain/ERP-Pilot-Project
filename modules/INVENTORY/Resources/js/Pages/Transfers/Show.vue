@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { Transfer } from '@inventory/types';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{ transfer:any }>();
-function ship(id:number){ if(confirm('Ship this transfer? Stock will be deducted from source.')) router.post(route('inventory.transfers.ship', id), {}, {preserveScroll:true}); }
-function receive(id:number){ if(confirm('Receive this transfer? Stock will be added to destination.')) router.post(route('inventory.transfers.receive', id), {}, {preserveScroll:true}); }
-function tone(s:string){ if(s==='received') return 'success'; if(s==='in_transit') return 'info'; if(s==='draft') return 'warning'; return 'neutral'; }
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatDate } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
+defineProps<{ transfer:Transfer }>();
+async function ship(id:number){ if(await confirm({ description: 'Ship this transfer? Stock will be deducted from source.', danger: false })) router.post(route('inventory.transfers.ship', id), {}, {preserveScroll:true}); }
+async function receive(id:number){ if(await confirm({ description: 'Receive this transfer? Stock will be added to destination.', danger: false })) router.post(route('inventory.transfers.receive', id), {}, {preserveScroll:true}); }
+async function tone(s:string){ if(s==='received') return 'success'; if(s==='in_transit') return 'info'; if(s==='draft') return 'warning'; return 'neutral'; }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Transfers', href: route('inventory.transfers.index') }, { title: transfer.transfer_no }]">

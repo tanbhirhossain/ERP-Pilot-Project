@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { Account } from '@accounts/types';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-const props=defineProps<{ account:any; parentOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props=defineProps<{ account:Account; parentOptions:SelectOption[] }>();
 const form=useForm({ code:props.account.code, name:props.account.name, name_bn:props.account.name_bn??'', account_type:props.account.account_type, nature:props.account.nature, parent_id:props.account.parent_id, is_group:props.account.is_group, is_active:props.account.is_active, description:props.account.description??'' });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('accounts.coa.update', props.account.id)); }
 </script>
 <template>

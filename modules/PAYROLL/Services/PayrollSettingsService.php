@@ -17,6 +17,7 @@ final class PayrollSettingsService
             'missing_punch_penalty_amount' => 0,
             'unpaid_leave_day_divisor' => 30,
             'loan_approval_steps' => [['label' => 'Payroll', 'role' => 'Administrator']],
+            'cutlist_review_required' => false,
         ]);
     }
 
@@ -33,6 +34,7 @@ final class PayrollSettingsService
                 'missing_punch_penalty_amount' => $data['missing_punch_penalty_amount'],
                 'unpaid_leave_day_divisor' => $data['unpaid_leave_day_divisor'],
                 'loan_approval_steps' => $steps,
+                'cutlist_review_required' => (bool) ($data['cutlist_review_required'] ?? false),
             ]);
 
             return $settings->refresh();

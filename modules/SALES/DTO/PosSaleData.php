@@ -25,6 +25,16 @@ readonly class PosSaleData
         public float $paidAmount = 0,
         /** What the customer actually handed over on a settled sale, so the till can give change. */
         public float $tenderedAmount = 0,
+        /**
+         * F22 — set only when the ticket was queued on a device while the network was down.
+         *
+         * `clientRef` is the device-minted UUID and the idempotency key of the replay: two syncs of
+         * one ticket are one sale, not two. `rangUpAt` is when the cashier actually took the money,
+         * which is not the moment the row is written — the gap is what makes a stale ticket visible
+         * enough to refuse rather than quietly date it today.
+         */
+        public ?string $clientRef = null,
+        public ?string $rangUpAt = null,
     ) {
         if (empty($this->lines)) {
             throw new \InvalidArgumentException('POS sale requires at least 1 line');

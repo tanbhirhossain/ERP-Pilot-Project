@@ -4,13 +4,11 @@ namespace Modules\SALES\Services;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
-use Modules\ACCOUNTS\Models\Receivable;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\INVENTORY\Interfaces\InventoryStockProviderInterface;
 use Modules\INVENTORY\Interfaces\InventoryValuationProviderInterface;
 use Modules\INVENTORY\Models\Product;
 use Modules\INVENTORY\Services\ValuationService;
-use Modules\PARTNER\Models\Partner;
 use Modules\SALES\DTO\PosSaleData;
 use Modules\SALES\Interfaces\PosRepositoryInterface;
 use Modules\SALES\Models\PosCollection;
@@ -237,6 +235,11 @@ class PosService
             }
 
             $sale = $this->repo->createSale([
+                // F22: the offline markers ride the same insert as everything else. Writing them in
+                // a second statement would leave a window where a queued ticket exists on the server
+                // with no key — and an unkeyed row is exactly the duplicate a replay is looking for.
+                'client_ref' => $dto->clientRef,
+                'rang_up_at' => $dto->rangUpAt,
                 'session_id' => $dto->sessionId,
                 'customer_id' => $dto->customerId,
                 'customer_name' => $dto->customerName,
@@ -446,47 +449,10 @@ class PosService
      */
     private function assertWithinCreditLimit(?int $customerId, int $dueCents): void
     {
-        if ($dueCents <= 0 || $customerId === null) {
-            return;
-        }
-
-        $partner = Partner::find($customerId);
-
-        if ($partner === null) {
-            return;
-        }
-
-        $limitCents = (int) round(((float) $partner->credit_limit) * 100);
-
-        if ($limitCents <= 0) {
-            return;
-        }
-
-        $owedCents = (int) round(((float) Receivable::open()->where('partner_id', $customerId)->sum('balance')) * 100);
-
-        $openSessions = PosSession::where('status', 'open')->pluck('id');
-        $unpostedCents = (int) round(((float) PosSale::query()
-            ->where('customer_id', $customerId)
-            ->where('status', '<>', 'void')
-            ->whereRaw('due_amount > collected_amount')
-            ->where(fn ($q) => $q->whereNull('session_id')->orWhereIn('session_id', $openSessions))
-            ->sum(DB::raw('due_amount - collected_amount'))) * 100);
-
-        $exposureCents = $owedCents + $unpostedCents + $dueCents;
-
-        if ($exposureCents > $limitCents) {
-            throw new \DomainException(sprintf(
-                'This sale would take %s past their credit limit of %s BDT. They already owe %s BDT%s, '
-                .'and this sale adds %s BDT, which is %s BDT over. Take a payment at the counter first, '
-                .'raise the limit on the customer record, or ring the sale up as paid.',
-                $partner->name,
-                number_format($limitCents / 100, 2),
-                number_format(($owedCents + $unpostedCents) / 100, 2),
-                $unpostedCents > 0 ? ' (including '.number_format($unpostedCents / 100, 2).' BDT not yet posted from open drawers)' : '',
-                number_format($dueCents / 100, 2),
-                number_format(($exposureCents - $limitCents) / 100, 2),
-            ));
-        }
+        // Phase 1: one credit rule for every door. The counter, the sales order
+        // and the invoice all call CreditControlService, so a customer refused
+        // here cannot be sold the same goods on credit through SO→INV.
+        app(CreditControlService::class)->assertWithinLimit($customerId, $dueCents / 100, 'sale');
     }
 
     /**

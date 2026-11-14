@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { Order } from '@sales/types';
 import { Button } from '@/components/ui/button';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{ order:any }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import ActivityTimeline from '@core/Components/ActivityTimeline.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
+import StaticTable from '@core/Components/StaticTable.vue';
+defineProps<{ order:Order; activities?: any[] }>();
 // Renamed from `confirm`, which shadowed window.confirm for the whole file.
 function confirmOrder(id:number){ router.post(route('sales.orders.confirm', id)); }
 function cancel(id:number){ router.post(route('sales.orders.cancel', id)); }
@@ -39,6 +41,7 @@ function createInvoice(id:number){ router.post(route('sales.orders.create-invoic
         <div v-if="!order.invoices.length" class="text-sm text-muted-foreground py-4 text-center">No invoices yet.</div>
         <div v-for="inv in order.invoices" :key="inv.id" class="flex justify-between text-sm border-b py-1"><Link :href="route('sales.invoices.show', inv.id)" class="text-primary hover:underline">{{ inv.invoice_no }}</Link><span>{{ formatCurrency(Number(inv.total_amount)) }} · {{ inv.status }}</span></div>
       </div>
+      <ActivityTimeline :activities="activities" class="mt-4" />
     </div>
   </AdminLayout>
 </template>

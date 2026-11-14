@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { FileText, Plus, Eye } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
 
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
+import { formatCurrency } from '@core/Utils/format';
 const props = defineProps<{ orders?: any, receipts?: any, bills?: any }>();
-const data = (props as any).orders ?? (props as any).receipts ?? (props as any).bills;
+const data = props.orders ?? props.receipts ?? props.bills;
 const columns: DataTableColumn[] = [
   {key:'bill_no',label:'Bill No',sortable:true},
   {key:'vendor',label:'Vendor'},
@@ -22,7 +22,7 @@ function tone(s:string){ if(['posted','received','confirmed'].includes(s)) retur
   <AdminLayout :breadcrumbs="[{title:'Purchase'},{title:'Vendor Bills'}]">
     <Head title="Vendor Bills" />
     <PageHeader title="Vendor Bills" description="AP • GRN → Bill posted = AP 2100 Cr • Payment clears AP" :icon="FileText" :actions="[{ label:'New Vendor Bill', route:'purchase.bills.create', icon: Plus }]">
-    <DataTable route-name="purchase.bills.index" title="Vendor Bills" :columns="columns" :rows="(data.data as unknown as Record<string,unknown>[])" :meta="data.meta" search-placeholder="Search...">
+    <DataTable route-name="purchase.bills.index" title="Vendor Bills" :columns="columns" :rows="data.data" :meta="data.meta" search-placeholder="Search...">
       <template #cell-bill_no="{row}"><span class="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700">{{ row.bill_no }}</span></template>
       <template #cell-vendor="{row}"><span class="text-sm">{{ row.vendor?.name || '—' }}</span></template>
       <template #cell-total_amount="{row}"><span class="font-mono font-bold">{{ formatCurrency(Number(row.total_amount)) }}</span></template>

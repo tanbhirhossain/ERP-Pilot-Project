@@ -4,8 +4,10 @@ import { ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props=defineProps<{
   supervisor:{id:number;employee_id:string;supervisor_kind:string;supervisor_id:number|null;supervisor_employee_id:string|null;supervisor_type:string;is_active:boolean;is_primary:boolean;effective_from:string|null;effective_to:string|null;remarks:string|null};
   employeeOptions:{value:string;label:string}[];
@@ -27,6 +29,7 @@ const form=useForm({
   effective_to: props.supervisor.effective_to||'',
   remarks: props.supervisor.remarks||'',
 });
+useUnsavedGuard(() => form.isDirty);
 watch(kind,(v)=>{ form.supervisor_kind=v; if(v==='user') form.supervisor_employee_id=null; else form.supervisor_id=null; });
 function submit(){ form.put(route('hrm.supervisors.update',props.supervisor.id)); }
 // Ensure current selection is in options if not already
@@ -37,7 +40,7 @@ const userOpts = props.currentUser && !props.userOptions.find(o=>o.value===props
   <AdminLayout :breadcrumbs="[{title:'HRM'},{title:'Supervisors',href:route('hrm.supervisors.index')},{title:'Edit'}]">
     <Head title="Edit Supervisor"/>
     <div style="max-width:720px;margin:0 auto;background:white;border:1px solid #e2e8f0;border-radius:12px;padding:20px">
-      <h1 style="font-size:16px;font-weight:700;margin-bottom:4px">Edit Assignment #{{ supervisor.id }}</h1>
+      <PageHeader :title="`Edit Assignment #${supervisor.id}`" />
       <p style="font-size:12px;color:#64748b;margin-bottom:16px">Change supervisor kind (User ⇄ Employee) at any time.</p>
       <form @submit.prevent="submit" style="display:flex;flex-direction:column;gap:16px">
         <div style="display:flex;flex-direction:column;gap:6px"><Label>Employee *</Label><SearchableSelect v-model="form.employee_id" :options="empOpts" placeholder="Select employee..."/><p v-if="form.errors.employee_id" style="font-size:12px;color:#dc2626">{{ form.errors.employee_id }}</p></div>

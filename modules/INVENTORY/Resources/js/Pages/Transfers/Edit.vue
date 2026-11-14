@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { Transfer } from '@inventory/types';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-const props=defineProps<{ transfer:any; warehouseOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props=defineProps<{ transfer:Transfer; warehouseOptions:SelectOption[] }>();
 const form=useForm({ from_warehouse_id:props.transfer.from_warehouse_id, to_warehouse_id:props.transfer.to_warehouse_id, reason:props.transfer.reason??'', notes:props.transfer.notes??'', items:props.transfer.items.map((i:any)=>({ product_id:i.product_id, qty_requested:i.qty_requested, unit_cost:i.unit_cost })) });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('inventory.transfers.update', props.transfer.id)); }
 </script>
 <template>

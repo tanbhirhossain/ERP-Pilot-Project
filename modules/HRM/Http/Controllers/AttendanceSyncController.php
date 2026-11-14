@@ -77,7 +77,7 @@ class AttendanceSyncController extends Controller
                 SyncDeviceJob::dispatch($device->id, auth()->id(), $from, $to);
                 $range = ($from || $to) ? " [{$from} → {$to}]" : ' [incremental]';
 
-                return back()->with('success', "Sync queued for {$device->name} ({$device->ip_address}:{$device->port}){$range}. Run: php -d max_execution_time=0 artisan queue:work --timeout=300 if needed. Or use direct sync without ?queue=1.");
+                return back()->with('success', "Sync queued for {$device->name} ({$device->ip_address}:{$device->port}){$range}. Process it with: php artisan queue:work --max-time=3600 (the worker is unlimited by default; a sync stops itself at hrm.sync.budget_seconds and reports Partial). Or use direct sync without ?queue=1.");
             } catch (\Throwable $e) {
                 Log::warning('Queue dispatch failed, falling back to direct sync', ['device' => $device->id, 'error' => $e->getMessage()]);
             }
@@ -134,7 +134,7 @@ class AttendanceSyncController extends Controller
             }
             $range = ($from || $to) ? " [{$from} → {$to}]" : ' [incremental]';
 
-            return back()->with('success', "Queued sync for {$devices->count()} device(s){$range}. Run: php -d max_execution_time=0 artisan queue:work --timeout=300 --sleep=3 to process (CLI needs 0 timeout, not 60). Or add ?queue=0 for direct sync (may timeout).");
+            return back()->with('success', "Queued sync for {$devices->count()} device(s){$range}. Process with: php artisan queue:work --sleep=3 --max-time=3600 — no max_execution_time flag needed now, since a sync bounds itself (hrm.sync.budget_seconds, default 240s) and leaves the rest for the next run. Or add ?queue=0 for direct sync (may timeout).");
         }
 
         // Unified: syncAll = pipeline runForAll (full pipeline per device)

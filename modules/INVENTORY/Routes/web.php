@@ -9,6 +9,7 @@ use Modules\INVENTORY\Http\Controllers\CountController;
 use Modules\INVENTORY\Http\Controllers\KitController;
 use Modules\INVENTORY\Http\Controllers\MovementController;
 use Modules\INVENTORY\Http\Controllers\OptionsController;
+use Modules\INVENTORY\Http\Controllers\PosCatalogController;
 use Modules\INVENTORY\Http\Controllers\PosLookupController;
 use Modules\INVENTORY\Http\Controllers\ProductController;
 use Modules\INVENTORY\Http\Controllers\ReportController;
@@ -22,6 +23,9 @@ Route::middleware(['web', 'auth'])->prefix('inventory')->name('inventory.')->gro
 
     Route::get('api/options/{type}', OptionsController::class)->where('type', '[a-z\\-]+')->name('api.options');
     Route::get('api/pos-product/{key}', PosLookupController::class)->name('api.pos-product');
+    // F22: the bulk sibling of the lookup above — every sellable product with its price and stock, for
+    // a till to cache and search offline. Same gate, same pinning (see OptionEndpointAuthorisationTest).
+    Route::get('api/pos-catalog', PosCatalogController::class)->name('api.pos-catalog');
 
     // ── Products ─────────────────────────────────────────────────────────
     Route::get('products/barcode-print', [BarcodeController::class, 'index'])->middleware(PermissionMiddleware::class.':inventory.products.view')->name('products.barcode-print');
@@ -30,6 +34,9 @@ Route::middleware(['web', 'auth'])->prefix('inventory')->name('inventory.')->gro
     Route::get('products', [ProductController::class, 'index'])->middleware(PermissionMiddleware::class.':inventory.products.view')->name('products.index');
     Route::get('products/create', [ProductController::class, 'create'])->middleware(PermissionMiddleware::class.':inventory.products.create')->name('products.create');
     Route::post('products', [ProductController::class, 'store'])->middleware(PermissionMiddleware::class.':inventory.products.create')->name('products.store');
+    // Bulk actions (Phase 2 U7) — route gate is list visibility; the controller
+    // enforces the per-action permission (update for activate, delete for delete).
+    Route::post('products/bulk', [ProductController::class, 'bulk'])->middleware(PermissionMiddleware::class.':inventory.products.view')->name('products.bulk');
     Route::get('products/{product}', [ProductController::class, 'show'])->middleware(PermissionMiddleware::class.':inventory.products.view')->name('products.show');
     Route::get('products/{product}/edit', [ProductController::class, 'edit'])->middleware(PermissionMiddleware::class.':inventory.products.update')->name('products.edit');
     Route::put('products/{product}', [ProductController::class, 'update'])->middleware(PermissionMiddleware::class.':inventory.products.update')->name('products.update');

@@ -17,9 +17,11 @@ import {
 } from '@/components/ui/sidebar';
 import { Link, usePage } from '@inertiajs/vue3';
 import { ChevronRight, Search, Command, X } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAcl } from '../Composables/useAcl';
-import { sidebarMenu, type SidebarItem } from '../Config/menu';
+import { useSidebarScroll } from '../Composables/useSidebarScroll';
+import { useLocale } from '../Composables/useLocale';
+import { menuMatchesQuery, sidebarMenu, type SidebarItem } from '../Config/menu';
 
 /**
  * The collapsible tree sidebar.
@@ -55,16 +57,31 @@ import { sidebarMenu, type SidebarItem } from '../Config/menu';
  * Super Admin. Filtering could not find them either, for the same reason. Both are fixed here, and
  * `treeSidebarPolish.test.ts` pins the reachability rather than the markup.
  */
+// Which branches are open is a preference that outlives the tab, so it goes in storage; where the list is
+// scrolled is not (see `useSidebarScroll` below).
 const STORAGE_KEY = 'core.sidebar.tree.v2';
 const { can } = useAcl();
+const { t } = useLocale();
 // usePage's generic is the *props* type, not the page: wrapping it in `{ props: … }` types every
 // shared prop away, which is how `page.props.auth.user` ends up reading from `{}`.
 const page = usePage<{ auth?: { user?: { name?: string; email?: string } | null }; name?: string }>();
 const openState = ref<Record<string, boolean>>({});
 let hydrated = false;
-
 const currentUser = computed(() => page.props.auth?.user ?? null);
 const appName = computed(() => page.props.name ?? 'ERP');
+
+/**
+ * `SidebarContent` renders the scrolling element itself (`data-sidebar="content"`, `overflow-auto`), so the
+ * kit component's root node is the element whose offset is saved and restored. The shell is rebuilt on every
+ * visit and a fresh scroll container starts at the top — that is the "menu jumps back after a click" this
+ * composable exists to stop.
+ */
+const contentEl = ref<{ $el?: HTMLElement } | null>(null);
+const sidebarScroll = useSidebarScroll(() => {
+    const el = contentEl.value?.$el;
+
+    return el instanceof HTMLElement ? el : null;
+});
 
 function isAllowed(item: SidebarItem): boolean {
     if (item.children?.length) return item.children.some((child) => isAllowed(child));
@@ -75,7 +92,10 @@ const sidebarSearch = ref('');
 const filterRef = ref<HTMLInputElement | null>(null);
 
 function labelMatches(item: SidebarItem, q: string): boolean {
-    return item.label.toLowerCase().includes(q) || item.key.toLowerCase().includes(q);
+    // Match the English label, the translated label (so a Bangla search finds it), the key, and the
+    // operator words the label does not carry — see menuMatchesQuery() for why a two-word search widens
+    // instead of returning nothing.
+    return menuMatchesQuery(item, q, t(item.label).toLowerCase());
 }
 
 /**
@@ -202,11 +222,17 @@ function onKeydown(event: KeyboardEvent) {
     }
 }
 
-onMounted(() => {
+onMounted(async () => {
     loadState();
     expandActiveBranches();
     window.addEventListener('keydown', onKeydown);
+
+    // After the tick in which `expandActiveBranches()` grows the list: measuring before it would restore an
+    // offset against markup that is about to change height.
+    await nextTick();
+    sidebarScroll.settle();
 });
+
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 </script>
 
@@ -247,7 +273,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
             </div>
         </SidebarHeader>
 
-        <SidebarContent class="premium-scrollbar px-2 py-3 gap-0" style="scrollbar-gutter: stable">
+        <SidebarContent ref="contentEl" class="premium-scrollbar px-2 py-3 gap-0" style="scrollbar-gutter: stable">
             <SidebarGroup class="p-0">
                 <SidebarMenu class="gap-0.5">
                     <template v-for="(item, index) in visibleMenu" :key="item.key">
@@ -256,15 +282,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
                         </li>
 
                         <SidebarMenuItem v-if="!item.children?.length">
-                            <SidebarMenuButton as-child :is-active="isActive(item)" :tooltip="item.label" class="h-9 rounded-lg font-[450] data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-sidebar-border">
-                                <Link :href="hrefFor(item)"><component :is="item.icon" class="size-4 shrink-0 opacity-70 data-[active=true]:opacity-100" /><span class="truncate">{{ item.label }}</span></Link>
+                            <SidebarMenuButton as-child :is-active="isActive(item)" data-nav-target :tooltip="item.label" class="h-9 rounded-lg font-[450] data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-sidebar-border">
+                                <Link :href="hrefFor(item)"><component :is="item.icon" class="size-4 shrink-0 opacity-70 data-[active=true]:opacity-100" /><span class="truncate">{{ t(item.label) }}</span></Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                         <Collapsible v-else v-model:open="openState[item.key]" as-child>
                             <SidebarMenuItem>
                                 <CollapsibleTrigger as-child>
                                     <SidebarMenuButton :is-active="hasActiveChild(item)" :tooltip="item.label" class="h-9 rounded-lg font-[450] data-[active=true]:bg-sidebar-accent data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-sidebar-border">
-                                        <component :is="item.icon" class="size-4 shrink-0 opacity-70" /><span class="truncate">{{ item.label }}</span>
+                                        <component :is="item.icon" class="size-4 shrink-0 opacity-70" /><span class="truncate">{{ t(item.label) }}</span>
                                         <span v-if="item.children.length" class="ml-auto rounded-full bg-sidebar-accent px-1.5 text-[10px] font-medium tabular-nums text-sidebar-foreground/50 group-data-[state=open]:hidden group-data-[collapsible=icon]:hidden">{{ item.children.length }}</span>
                                         <ChevronRight class="ml-auto size-3.5 shrink-0 text-sidebar-foreground/40 transition-transform duration-200 data-[state=open]:rotate-90" />
                                     </SidebarMenuButton>
@@ -273,8 +299,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
                                     <SidebarMenuSub class="ml-3 mr-1 mt-0.5 gap-0.5 border-l border-sidebar-border/60 pl-2 pr-0 group-data-[collapsible=icon]:hidden">
                                         <SidebarMenuSubItem v-for="child in item.children" :key="child.key">
                                             <!-- A leaf: the ordinary case. -->
-                                            <SidebarMenuSubButton v-if="!child.children?.length" as-child :is-active="isActive(child)" class="h-8 rounded-md text-[13px] data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium">
-                                                <Link :href="hrefFor(child)"><component :is="child.icon" class="size-3.5 shrink-0 opacity-60" /><span class="truncate">{{ child.label }}</span></Link>
+                                            <SidebarMenuSubButton v-if="!child.children?.length" as-child :is-active="isActive(child)" data-nav-target class="h-8 rounded-md text-[13px] data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium">
+                                                <Link :href="hrefFor(child)"><component :is="child.icon" class="size-3.5 shrink-0 opacity-60" /><span class="truncate">{{ t(child.label) }}</span></Link>
                                             </SidebarMenuSubButton>
                                             <!-- A sub-group, e.g. Accounts › Financial Reports › Trial Balance.
                                                  Rendered as a nested collapsible, not as a link: it has no route of
@@ -284,15 +310,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
                                                 <div>
                                                     <CollapsibleTrigger as-child>
                                                         <SidebarMenuSubButton :is-active="hasActiveChild(child)" class="h-8 w-full rounded-md text-[13px] font-medium data-[active=true]:text-sidebar-accent-foreground">
-                                                            <component :is="child.icon" class="size-3.5 shrink-0 opacity-60" /><span class="truncate">{{ child.label }}</span>
+                                                            <component :is="child.icon" class="size-3.5 shrink-0 opacity-60" /><span class="truncate">{{ t(child.label) }}</span>
                                                             <ChevronRight class="ml-auto size-3.5 shrink-0 text-sidebar-foreground/40 transition-transform duration-200 data-[state=open]:rotate-90" />
                                                         </SidebarMenuSubButton>
                                                     </CollapsibleTrigger>
                                                     <CollapsibleContent class="tree-content overflow-hidden">
                                                         <SidebarMenuSub class="ml-3 mt-0.5 gap-0.5 border-l border-sidebar-border/60 pl-2 group-data-[collapsible=icon]:hidden">
                                                             <SidebarMenuSubItem v-for="leaf in child.children" :key="leaf.key">
-                                                                <SidebarMenuSubButton as-child :is-active="isActive(leaf)" class="h-8 rounded-md text-[13px] data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium">
-                                                                    <Link :href="hrefFor(leaf)"><component :is="leaf.icon" class="size-3.5 shrink-0 opacity-60" /><span class="truncate">{{ leaf.label }}</span></Link>
+                                                                <SidebarMenuSubButton as-child :is-active="isActive(leaf)" data-nav-target class="h-8 rounded-md text-[13px] data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium">
+                                                                    <Link :href="hrefFor(leaf)"><component :is="leaf.icon" class="size-3.5 shrink-0 opacity-60" /><span class="truncate">{{ t(leaf.label) }}</span></Link>
                                                                 </SidebarMenuSubButton>
                                                             </SidebarMenuSubItem>
                                                         </SidebarMenuSub>

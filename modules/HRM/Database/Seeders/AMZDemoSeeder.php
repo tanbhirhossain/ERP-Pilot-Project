@@ -62,9 +62,12 @@ class AMZDemoSeeder extends Seeder
             // -------------------------------------------------
             // 3) Designations — linked to IT
             // -------------------------------------------------
-            $sd = Designation::updateOrCreate(
-                ['code' => 'SD'],
-                [
+            // Reuse a designation that already exists under either key, untouched: a demo seeder must not
+            // rename HRM's real job titles, and the unique slug index makes a naive insert collide when an
+            // imported designation row holds the slug under a different code. Create only when truly absent.
+            $sd = Designation::query()->where('slug', 'software-developer')->orWhere('code', 'SD')->orderBy('id')->first()
+                ?: Designation::create([
+                    'code' => 'SD',
                     'name' => 'Software Developer',
                     'slug' => 'software-developer',
                     'description' => 'Develops and maintains hospital software systems',
@@ -72,12 +75,11 @@ class AMZDemoSeeder extends Seeder
                     'grade' => 'G-7',
                     'level' => 7,
                     'is_active' => true,
-                ]
-            );
+                ]);
 
-            $srOp = Designation::updateOrCreate(
-                ['code' => 'SO'],
-                [
+            $srOp = Designation::query()->where('slug', 'sr-operator')->orWhere('code', 'SO')->orderBy('id')->first()
+                ?: Designation::create([
+                    'code' => 'SO',
                     'name' => 'Sr Operator',
                     'slug' => 'sr-operator',
                     'description' => 'Senior Operator — Front-desk & ward operations',
@@ -85,17 +87,20 @@ class AMZDemoSeeder extends Seeder
                     'grade' => 'G-5',
                     'level' => 5,
                     'is_active' => true,
-                ]
-            );
+                ]);
 
             $this->command?->info("Designations: {$sd->name} ({$sd->code}), {$srOp->name} ({$srOp->code})");
 
             // -------------------------------------------------
             // 4) Employees — TANBHIR HOSSAIN (L1009001) & Rimon Mia (L402001)
             // -------------------------------------------------
-            $tanbhir = Employee::updateOrCreate(
-                ['employee_id' => 'L1009001'],
-                [
+            // Create-if-absent for REAL people and their policies: on a demo database this seeds; on a live
+            // one (which this seeder has already been run against) L1009001/L402001 are real employees whose
+            // attributes — and whose biometric IDs — must not be rewritten by a demo. updateOrCreate used to
+            // do exactly that and died on `employees.biometric_id` being unique when another person holds it.
+            $tanbhir = Employee::query()->firstOrNew(['employee_id' => 'L1009001']);
+            if (! $tanbhir->exists) {
+                $tanbhir->fill([
                     'biometric_id' => '101',
                     'first_name' => 'TANBHIR',
                     'last_name' => 'HOSSAIN',
@@ -110,12 +115,14 @@ class AMZDemoSeeder extends Seeder
                     'joining_date' => '2024-01-15',
                     'gender' => 'Male',
                     'is_active' => true,
-                ]
-            );
+                ])->save();
+            } else {
+                $this->command?->info('L1009001 already exists — attributes untouched');
+            }
 
-            $rimon = Employee::updateOrCreate(
-                ['employee_id' => 'L402001'],
-                [
+            $rimon = Employee::query()->firstOrNew(['employee_id' => 'L402001']);
+            if (! $rimon->exists) {
+                $rimon->fill([
                     'biometric_id' => '102',
                     'first_name' => 'Rimon',
                     'last_name' => 'Mia',
@@ -130,22 +137,25 @@ class AMZDemoSeeder extends Seeder
                     'joining_date' => '2024-03-01',
                     'gender' => 'Male',
                     'is_active' => true,
-                ]
-            );
+                ])->save();
+            } else {
+                $this->command?->info('L402001 already exists — attributes untouched');
+            }
 
             $this->command?->info("Employees: {$tanbhir->full_name} ({$tanbhir->employee_id}), {$rimon->full_name} ({$rimon->employee_id})");
 
-            // Employee policies — required for attendance engine (Fixed, grace 10)
+            // Employee policies — required for attendance engine (Fixed, grace 10). Create only when missing:
+            // a real policy (shift, grace, punishability) is HRM's decision, not a demo's.
             foreach ([$tanbhir, $rimon] as $emp) {
-                EmployeePolicy::updateOrCreate(
-                    ['employee_id' => $emp->employee_id],
-                    [
+                if (! EmployeePolicy::query()->where('employee_id', $emp->employee_id)->exists()) {
+                    EmployeePolicy::query()->create([
+                        'employee_id' => $emp->employee_id,
                         'grace_time_in' => 10,
                         'grace_time_out' => 10,
                         'shift_type' => 'Fixed',
                         'is_punishable' => false,
-                    ]
-                );
+                    ]);
+                }
             }
 
             // -------------------------------------------------
@@ -182,6 +192,19 @@ class AMZDemoSeeder extends Seeder
             ];
 
             foreach ($mappings as $m) {
+                // Live mappings win: device_users.employee_id is unique, and on a real database the person
+                // may already be enrolled under another ZK id. Never hijack or duplicate that for a demo.
+                $existing = DeviceUser::query()->where('device_user_id', $m['device_user_id'])->first();
+                if ($existing !== null && $existing->employee_id !== null && $existing->employee_id !== $m['employee_id']) {
+                    $this->command?->info("DeviceUser {$m['device_user_id']} is already mapped to {$existing->employee_id} — left alone");
+
+                    continue;
+                }
+                if ($existing === null && DeviceUser::query()->where('employee_id', $m['employee_id'])->exists()) {
+                    $this->command?->info("Employee {$m['employee_id']} already holds a device mapping — DeviceUser {$m['device_user_id']} not created");
+
+                    continue;
+                }
                 DeviceUser::updateOrCreate(
                     ['device_user_id' => $m['device_user_id']],
                     [
@@ -194,6 +217,14 @@ class AMZDemoSeeder extends Seeder
             }
 
             $this->command?->info('DeviceUser mappings: 101 → L1009001, 102 → L402001 (global, cross-device)');
+
+            // -------------------------------------------------
+            // 7) October 2026 demo attendance calendar (requested 2026-11-10): roster duty for L402003
+            //    2026-10-01..31 on 'Evening 03PM-11PM' with Fridays Off, approved sick leaves (L402003
+            //    2026-10-22, L1009001 2026-10-17), Hindu Durga puja public holidays 2026-10-20/21.
+            //    Lives in its own seeder, also registered in the main DatabaseSeeder — one source of truth.
+            // -------------------------------------------------
+            $this->call([AMZOctober2026CalendarSeeder::class]);
 
             $this->command?->info('AMZ Demo seeded successfully — Organization, Department, Designations, Employees, Device & global mappings ready.');
             $this->command?->info('Tip: On ZK device, enroll fingers for UID 101 (TANBHIR) & 102 (Rimon). Then sync: php artisan hrm:sync-attendance --device='.$device->id.' or via UI Attendance Sync → Sync Now.');

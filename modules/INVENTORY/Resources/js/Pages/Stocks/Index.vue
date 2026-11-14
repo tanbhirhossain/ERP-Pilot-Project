@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { Boxes, AlertTriangle, Package, Wallet } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatCurrency } from '@core/Utils/format';
 interface Row { id:number; product:{name:string; sku:string; reorder_level:number}; variant?:{name:string}; warehouse:{name:string; code:string}; location?:{name:string}; lot_no?:string; qty_on_hand:string; qty_reserved:string; qty_available:string; avg_cost:string; total_value:string; status:string; last_movement_at?:string }
 defineProps<{ stocks: Paginator<Row>; warehouseOptions:any[]; summary:any }>();
 const columns: DataTableColumn[] = [
@@ -29,7 +29,7 @@ const columns: DataTableColumn[] = [
       <div class="bg-card border rounded-xl p-3"><p class="text-xs text-muted-foreground flex items-center gap-1"><Boxes class="size-3"/> Stock Lines</p><p class="text-lg font-bold">{{ stocks.meta.total }}</p></div>
     </div>
         <PageHeader title="Stock Overview" description="Stock Overview" :icon="Boxes" >
-    <DataTable route-name="inventory.stocks.index" title="Stock Overview" :columns="columns" :rows="(stocks.data as unknown as Record<string,unknown>[])" :meta="stocks.meta" search-placeholder="Search product…">
+    <DataTable route-name="inventory.stocks.index" title="Stock Overview" :columns="columns" :rows="stocks.data" :meta="stocks.meta" search-placeholder="Search product…">
       <template #cell-product="{row}"><div><p class="font-semibold">{{ row.product.name }}</p><p class="text-xs text-muted-foreground font-mono">{{ row.product.sku }} <span v-if="row.lot_no" class="ml-1 px-1 py-0.5 bg-muted rounded">Lot: {{ row.lot_no }}</span></p></div></template>
       <template #cell-warehouse="{row}"><div><p class="text-sm">{{ row.warehouse.name }}</p><p class="text-xs text-muted-foreground">{{ row.location?.name || 'No location' }}</p></div></template>
       <template #cell-qty_on_hand="{row}"><span class="font-mono font-bold" :class="row.status==='out'?'text-rose-600':row.status==='low'?'text-amber-600':'text-emerald-600'">{{ row.qty_on_hand }}</span></template>

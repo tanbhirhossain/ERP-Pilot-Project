@@ -1,5 +1,12 @@
 <?php
 
+use Modules\ACCOUNTS\Models\Journal;
+use Modules\PURCHASE\Models\PurchaseOrder;
+use Modules\PURCHASE\Models\PurchaseRequisition;
+use Modules\PURCHASE\Models\PurchaseRfq;
+use Modules\PURCHASE\Models\VendorBill;
+use Modules\SALES\Models\Invoice;
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -151,5 +158,94 @@ return [
         // Used only to word the refusal message; the guard blocks on the password,
         // so keeping the published address with a real password still works.
         'published_emails' => ['admin@example.com'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Document attachments (Phase 2 — F19)
+    |--------------------------------------------------------------------------
+    |
+    | The allow-list of records that can carry attachments. Each type maps to its
+    | model plus the permissions for reading (download) and managing (upload /
+    | delete) files. Adding a type here is all it takes to enable attachments on
+    | another record — the controller, routes and panel are generic.
+    |
+    */
+    /*
+    |--------------------------------------------------------------------------
+    | Single sign-on (Phase 3)
+    |--------------------------------------------------------------------------
+    |
+    | The whole feature is off until someone pastes a client id in. `enabled` gates the routes at request
+    | time (not at boot), so turning it on is an env change plus `config:cache` — the login page asks the
+    | service which providers are usable rather than reading the config itself, so a half-configured
+    | provider cannot render a button that 500s.
+    |
+    | The flow is a plain OAuth2 authorization-code exchange that then reads the provider's `userinfo`
+    | endpoint with the access token. That is deliberate: the alternative is fetching the OIDC discovery
+    | document, downloading JWKS and verifying the id_token signature by hand, and a hand-rolled JWT
+    | verifier is the kind of code that looks correct in review and fails open in production. `userinfo`
+    | is authoritative because answering requires the token the provider just minted.
+    |
+    | `token_url` / `userinfo_url` are env-overridable so a private IdP (Keycloak, ADFS, an on-prem
+    | Entra-compatible gateway) needs no code change — only the issuer's two endpoints and a client.
+    |
+    */
+    'sso' => [
+        'enabled' => filter_var(env('SSO_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+
+        // Who may get an account minted on the spot. An existing local account is always allowed to sign
+        // in by link — this switch is about *creating* people, not about admitting them.
+        'auto_provision' => filter_var(env('SSO_AUTO_PROVISION', true), FILTER_VALIDATE_BOOLEAN),
+
+        // Empty means "any verified address". A non-empty list is a hard gate on both paths: a directory
+        // of identities is only as good as the domain you trust the issuer to have verified.
+        'allowed_domains' => array_values(array_filter(array_map(
+            static fn ($d): string => strtolower(trim((string) $d)),
+            explode(',', (string) env('SSO_ALLOWED_DOMAINS', '')),
+        ))),
+
+        // State must come back inside this window. Long enough for a corporate SSO bounce and a password
+        // prompt, short enough that a URL pasted into Slack next week cannot complete a login.
+        'state_ttl' => (int) env('SSO_STATE_TTL', 600),
+
+        'providers' => [
+            'google' => [
+                'label' => 'Google Workspace',
+                'authorize_url' => env('SSO_GOOGLE_AUTHORIZE_URL', 'https://accounts.google.com/o/oauth2/v2/auth'),
+                'token_url' => env('SSO_GOOGLE_TOKEN_URL', 'https://oauth2.googleapis.com/token'),
+                'userinfo_url' => env('SSO_GOOGLE_USERINFO_URL', 'https://openidconnect.googleapis.com/v1/userinfo'),
+                'client_id' => (string) env('SSO_GOOGLE_CLIENT_ID', ''),
+                'client_secret' => (string) env('SSO_GOOGLE_CLIENT_SECRET', ''),
+                'scopes' => ['openid', 'email', 'profile'],
+            ],
+            'microsoft' => [
+                'label' => 'Microsoft Entra ID',
+                // The `{tenant}` placeholder is replaced with the configured tenant, so a single-tenant
+                // app and a common-tenant app are both expressible.
+                'authorize_url' => env('SSO_MICROSOFT_AUTHORIZE_URL', 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize'),
+                'token_url' => env('SSO_MICROSOFT_TOKEN_URL', 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token'),
+                'userinfo_url' => env('SSO_MICROSOFT_USERINFO_URL', 'https://graph.microsoft.com/oidc/userinfo'),
+                'tenant' => (string) env('SSO_MICROSOFT_TENANT', 'common'),
+                'client_id' => (string) env('SSO_MICROSOFT_CLIENT_ID', ''),
+                'client_secret' => (string) env('SSO_MICROSOFT_CLIENT_SECRET', ''),
+                'scopes' => ['openid', 'email', 'profile'],
+            ],
+        ],
+    ],
+
+    'attachments' => [
+        'max_kb' => (int) env('CORE_ATTACHMENT_MAX_KB', 10240),
+        'mimes' => ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt'],
+        'types' => [
+            'invoice' => ['model' => Invoice::class, 'view' => 'sales.invoices.view', 'manage' => 'sales.invoices.manage'],
+            'bill' => ['model' => VendorBill::class, 'view' => 'purchase.bills.view', 'manage' => 'purchase.bills.manage'],
+            'purchase-order' => ['model' => PurchaseOrder::class, 'view' => 'purchase.orders.view', 'manage' => 'purchase.orders.manage'],
+            // F18: a requisition carries the quotation PDF it was estimated from, and an RFQ carries the
+            // vendors' papers — which is the document an audit asks for next to an award decision.
+            'purchase-requisition' => ['model' => PurchaseRequisition::class, 'view' => 'purchase.requisitions.view', 'manage' => 'purchase.requisitions.manage'],
+            'purchase-rfq' => ['model' => PurchaseRfq::class, 'view' => 'purchase.rfq.view', 'manage' => 'purchase.rfq.manage'],
+            'journal' => ['model' => Journal::class, 'view' => 'accounts.journals.view', 'manage' => 'accounts.journals.create'],
+        ],
     ],
 ];

@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { BankAdvice } from '../../types';
 import { CreditCard, Download, CheckCircle2, Clock3} from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { Button } from '@/components/ui/button';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-const p = defineProps<{ advice:any }>();
-function money(v:any){ return Number(v||0).toLocaleString('en-BD',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function confirmAdvice(){ router.post(route('payroll.bank-advices.confirm', p.advice.id), {}, {preserveScroll:true}); }
-function markPaid(){ if(confirm('Mark as PAID and update slips?')) router.post(route('payroll.bank-advices.paid', p.advice.id), {}, {preserveScroll:true}); }
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
+const p = defineProps<{ advice:BankAdvice }>();
+async function money(v:any){ return Number(v||0).toLocaleString('en-BD',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+async function confirmAdvice(){ router.post(route('payroll.bank-advices.confirm', p.advice.id), {}, {preserveScroll:true}); }
+async function markPaid(){ if(await confirm({ description: 'Mark as PAID and update slips?', danger: false })) router.post(route('payroll.bank-advices.paid', p.advice.id), {}, {preserveScroll:true}); }
 </script>
 <template>
  <AdminLayout :breadcrumbs="[{ title: 'Payroll' }, { title: 'Bank Advices (BEFTN)', href: route('payroll.bank-advices.index') }, { title: advice.advice_no }]">

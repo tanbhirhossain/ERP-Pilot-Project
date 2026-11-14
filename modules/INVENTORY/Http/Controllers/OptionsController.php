@@ -45,6 +45,9 @@ class OptionsController extends Controller
             'purchase.bills.view', 'purchase.bills.manage', 'purchase.bills.post',
             'purchase.returns.view', 'purchase.returns.manage', 'purchase.returns.post',
             'purchase.landed.view', 'purchase.landed.manage',
+            // F18: a requisition line names a product, so whoever can raise one can look products up.
+            'purchase.requisitions.view', 'purchase.requisitions.manage',
+            'purchase.rfq.view', 'purchase.rfq.manage',
             'sales.invoices.view', 'sales.invoices.manage', 'sales.invoices.post',
             'sales.orders.view', 'sales.orders.manage', 'sales.orders.confirm',
             'sales.quotations.view', 'sales.quotations.manage',
@@ -61,7 +64,8 @@ class OptionsController extends Controller
             'purchase.receipts.view', 'purchase.receipts.manage',
             'purchase.bills.view', 'purchase.bills.manage',
             'purchase.returns.view', 'purchase.returns.manage',
-            'sales.invoices.view', 'sales.invoices.manage',
+            // F18: the requisition's receiving warehouse, picked by someone who may never see a GRN.
+            'purchase.requisitions.view', 'purchase.requisitions.manage',
             'sales.orders.view', 'sales.orders.manage',
             'sales.deliveries.view', 'sales.deliveries.manage',
             'pos.terminal.sell', 'pos.sessions.manage',
@@ -77,6 +81,9 @@ class OptionsController extends Controller
         'uoms' => [
             'inventory.uoms.manage', 'inventory.products.view', 'inventory.products.create',
             'inventory.products.update',
+            // F18: a requisition line states its unit; without this the form can ask for a product but
+            // cannot say "40 bags" in a unit it can name.
+            'purchase.requisitions.view', 'purchase.requisitions.manage',
         ],
         'units' => [
             'inventory.uoms.manage', 'inventory.products.view', 'inventory.products.create',

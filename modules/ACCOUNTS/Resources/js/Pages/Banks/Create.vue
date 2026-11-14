@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-defineProps<{ accountOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+defineProps<{ accountOptions:SelectOption[] }>();
 const form=useForm({ name:'', code:'', bank_name:'', branch_name:'', account_no:'', account_holder:'', swift_code:'', account_id:null as number|null, currency:'BDT', opening_balance:0, is_default:false, is_active:true, notes:'' });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.post(route('accounts.banks.store')); }
 </script>
 <template>

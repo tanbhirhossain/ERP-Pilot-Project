@@ -5,8 +5,8 @@ import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import { formatDateTime } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import { formatDateTime } from '@core/Utils/format';
 
 interface Device { id:number; name:string; ip_address:string; port:number; status:string; is_enabled:boolean; auto_sync_enabled:boolean; sync_interval_minutes:number; last_sync_at?:string; syncSetting?:any }
 interface SyncLog { id:number; device:string; status:string; records_fetched:number; records_processed:number; message?:string; error?:string; synced_at?:string; created_at:string }

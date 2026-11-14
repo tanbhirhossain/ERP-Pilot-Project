@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import type { Order } from '@sales/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import SalesOrderForm from '../../Components/SalesOrderForm.vue';
 
-const props = defineProps<{ order: any }>();
+const props = defineProps<{ order: Order }>();
 </script>
 
 <template>

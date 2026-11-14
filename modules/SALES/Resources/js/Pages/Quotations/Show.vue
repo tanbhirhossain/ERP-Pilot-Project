@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import type { Quotation } from '@sales/types';
 import { Button } from '@/components/ui/button';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import { formatCurrency, formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 import { ref } from 'vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
-defineProps<{ quotation:any }>();
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useToast } from '@core/Composables/useToast';
+const toast = useToast();
+defineProps<{ quotation:Quotation }>();
 const warehouseId=ref<number|null>(null);
-function send(id:number){ router.post(route('sales.quotations.send', id)); }
-function accept(id:number){ router.post(route('sales.quotations.accept', id)); }
-function convert(id:number){ if(!warehouseId.value) return alert('Select fulfillment warehouse'); router.post(route('sales.quotations.convert', id), {warehouse_id: warehouseId.value}); }
+async function send(id:number){ router.post(route('sales.quotations.send', id)); }
+async function accept(id:number){ router.post(route('sales.quotations.accept', id)); }
+async function convert(id:number){ if(!warehouseId.value) return toast.warning('Select fulfillment warehouse'); router.post(route('sales.quotations.convert', id), {warehouse_id: warehouseId.value}); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Quotations', href: route('sales.quotations.index') }, { title: quotation.quotation_no }]">

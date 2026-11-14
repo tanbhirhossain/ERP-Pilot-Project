@@ -6,25 +6,27 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import Pagination from '../../../../../CORE/Resources/js/Components/Pagination.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import Pagination from '@core/Components/Pagination.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
+import { useConfirm } from '@core/Composables/useConfirm';
+const { confirm } = useConfirm();
 interface Holiday {id:number;name:string;holiday_date:string;holiday_type:string;department_id:number|null;department:string|null;notes:string|null}
 defineProps<{holidays:{data:Holiday[];links:any[];meta?:any};departmentOptions:{value:number;label:string}[];canManage:boolean}>();
 const editing=ref<number|null>(null), open=ref(false);
 const form=useForm({name:'',holiday_date:new Date().toISOString().slice(0,10),holiday_type:'Public Holiday',department_id:null as number|null,notes:''});
-function startCreate(){editing.value=null;form.reset();form.holiday_date=new Date().toISOString().slice(0,10);open.value=true;}
-function startEdit(h:Holiday){editing.value=h.id;form.name=h.name;form.holiday_date=h.holiday_date;form.holiday_type=h.holiday_type;form.department_id=h.department_id;form.notes=h.notes??'';open.value=true;}
-function submit(){
+async function startCreate(){editing.value=null;form.reset();form.holiday_date=new Date().toISOString().slice(0,10);open.value=true;}
+async function startEdit(h:Holiday){editing.value=h.id;form.name=h.name;form.holiday_date=h.holiday_date;form.holiday_type=h.holiday_type;form.department_id=h.department_id;form.notes=h.notes??'';open.value=true;}
+async function submit(){
   if (editing.value) {
     form.put(route('hrm.holidays.update', editing.value), { preserveScroll:true, onSuccess(){ open.value=false; } });
   } else {
     form.post(route('hrm.holidays.store'), { preserveScroll:true, onSuccess(){ open.value=false; } });
   }
 }
-function remove(id:number){if(confirm('Remove this holiday entry?'))router.delete(route('hrm.holidays.destroy',id),{preserveScroll:true});}
+async function remove(id:number){if(await confirm({ description: 'Remove this holiday entry?', danger: true }))router.delete(route('hrm.holidays.destroy',id),{preserveScroll:true});}
 </script>
 <template>
 <AdminLayout :breadcrumbs="[{ title: 'Leave' }, { title: 'Holiday Calendar' }]"><Head title="Holiday Calendar"/>

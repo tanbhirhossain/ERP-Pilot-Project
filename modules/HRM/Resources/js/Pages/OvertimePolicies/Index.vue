@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { Head, router} from '@inertiajs/vue3';
 import { ref, reactive } from 'vue';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Timer } from 'lucide-vue-next';
-import Pagination from '../../../../../CORE/Resources/js/Components/Pagination.vue';
-import StaticTable from '../../../../../CORE/Resources/js/Components/StaticTable.vue';
+import Pagination from '@core/Components/Pagination.vue';
+import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ policies:any }>();
 const showCreate=ref(false);
 const form=reactive({name:'Standard OT Policy 2026',employment_type:'All',max_ot_hours_daily:3,max_ot_hours_monthly:36,ot_rate_multiplier:1,holiday_ot_rate:2,extra_duty_rate:1,requires_approval:true,approval_levels:1});

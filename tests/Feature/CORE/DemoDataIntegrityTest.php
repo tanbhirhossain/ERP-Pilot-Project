@@ -56,6 +56,10 @@ const DD_MINIMUMS = [
     'leave_requests' => 4,
     'leave_request_workflows' => 1,
     'leave_approval_actions' => 1,
+    // Measured: 28 rows — derived by syncFromAttendance from the October roster the base seed lays.
+    // The floor is 1, not 28: this table is only promised as "the derivation works", and its size is
+    // content the pipeline measures, not something this test should pin.
+    'roster_overtimes' => 1,
     'hrm_leave_balances' => 10,
     // PAYROLL
     'payroll_settings' => 1,
@@ -131,10 +135,12 @@ const DD_MINIMUMS = [
  * This is the executable form of the gap: each entry is asserted to still be empty, so the list
  * cannot silently drift, and promoting a table into DD_MINIMUMS is a deliberate act. Reasons:
  *
- *  - `roster_overtimes` is derived by `RosterOvertimeService::syncFromAttendance('Overtime')`, which
- *    only picks up dailies with `total_overtime_hours > 0.5`. Probed twice, including with two
- *    employees punching out at 19:45: the reconciler recorded no overtime hours against the rostered
- *    09:00-18:00 shift, so there was nothing to derive. Left uncovered rather than forced.
+ *  - `roster_overtimes` used to appear here: `RosterOvertimeService::syncFromAttendance('Overtime')`
+ *    only picks up dailies with `total_overtime_hours > 0.5`, and the reconciler recorded no overtime
+ *    hours against the demo's own rostered 09:00-18:00 shift, so there was nothing to derive. Since
+ *    the main DatabaseSeeder carries a roster of its own (AMZOctober2026CalendarSeeder: 15:00-23:00 on
+ *    the Evening shift, whose max_duration_hours does not cap the day), the derivation now finds rows
+ *    — so the table moved into DD_MINIMUMS rather than being force-suppressed.
  *  - `payroll_settlements` is a leaver process, and no employee in the cohort leaves.
  *  - `payroll_journal_posts` used to appear here: the per-slip salary-payment journal could not be
  *    posted at all, because `unique(salary_sheet_id, posting_type)` refused the second slip of any
@@ -152,7 +158,6 @@ const DD_UNCOVERED = [
     'hrm_checklist_templates',
     'hrm_checklist_items',
     'informed_requests',
-    'roster_overtimes',
     'festival_bonus_policies',
     'gratuity_policies',
     'payroll_settlements',
@@ -253,9 +258,25 @@ test('the tables it fills were genuinely empty before', function () {
     // so instead of quietly crediting the demo dataset for it.
     $expectedBaseline = ['inventory_stock_moves' => 16];
 
+    // Since 2026-11-10 the main DatabaseSeeder also registers RosterShiftSeeder, LeaveTypeSeeder and
+    // AMZOctober2026CalendarSeeder (the October 2026 demo calendar the HRM desks are exercised
+    // against). Those write four of the tables this twin watches, so "empty before" is no longer the
+    // expectation for them — the demo dataset still has to reach its own minimums on top, which
+    // `the demo dataset fills the tables that were empty` keeps asserting. Floor of 1: the row counts
+    // are content, the fact that the base seed touches them is the contract.
+    $baseSeedFills = ['roster_duties', 'leave_requests', 'leave_types', 'hrm_holidays'];
+
     $wrong = [];
 
     foreach ($baseline as $table => $count) {
+        if (in_array($table, $baseSeedFills, true)) {
+            if ($count < 1) {
+                $wrong[] = "$table is seeded by the main DatabaseSeeder but held $count rows";
+            }
+
+            continue;
+        }
+
         $expected = $expectedBaseline[$table] ?? 0;
 
         if ($count !== $expected) {
@@ -366,10 +387,18 @@ test('the payroll chain hangs together', function () {
     expect($slips)->not->toBeEmpty();
 
     foreach ($slips as $slip) {
-        // net = gross + benefits - deductions, which is what the slip screen and the accrual both read.
-        $expected = round((float) $slip->gross_salary + (float) $slip->total_benefits - (float) $slip->total_deductions, 2);
+        // net = gross - deductions. `total_benefits` is NOT a third number to add: the engine folds
+        // benefit amounts INTO gross_salary (`gross = period_base_gross + sum(benefits)`) and stores
+        // the sum alongside it purely so the slip screen can itemise what gross is made of
+        // (PayrollCalculationEngineService::calculate, and `My/Payslip.vue` lists benefits then shows
+        // the single Gross line). Adding them again here asserted an identity no slip can satisfy once
+        // a benefit exists — it only ever passed while demo employees had none, and the October
+        // calendar seeded by the main DatabaseSeeder gave the cohort a real roster whose extra-duty
+        // rows produce one (approved extra duty 427.80 on L101025). The accrual reads the same way:
+        // `PayrollJournalService` splits OT/extra-duty OUT of gross, never adds to it.
+        $expected = round((float) $slip->gross_salary - (float) $slip->total_deductions, 2);
 
-        expect(abs(round((float) $slip->net_salary, 2) - $expected))->toBeLessThan(0.01, "slip {$slip->id}: net {$slip->net_salary} but gross {$slip->gross_salary} + benefits {$slip->total_benefits} - deductions {$slip->total_deductions} = $expected");
+        expect(abs(round((float) $slip->net_salary, 2) - $expected))->toBeLessThan(0.01, "slip {$slip->id}: net {$slip->net_salary} but gross {$slip->gross_salary} - deductions {$slip->total_deductions} = $expected (benefits {$slip->total_benefits} are already inside gross)");
     }
 
     // The sheet header must be the sum of its slips, or the two screens disagree.

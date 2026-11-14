@@ -8,8 +8,10 @@ import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
 import PermissionGrid from '../../Components/PermissionGrid.vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import type { SelectOption } from '../../types';
 
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 interface Props {
     permissionOptions: SelectOption[];
 }
@@ -20,6 +22,7 @@ const form = useForm({
     name: '',
     permissions: [] as number[],
 });
+useUnsavedGuard(() => form.isDirty);
 
 function submit() {
     form.post(route('core.roles.store'), {
@@ -43,7 +46,7 @@ function submit() {
                 <ArrowLeft class="size-4" />
             </Link>
             <div>
-                <h1 class="text-xl font-bold tracking-tight">Create role</h1>
+                <PageHeader title="Create role" />
                 <p class="mt-0.5 text-sm text-muted-foreground">
                     Name the profile, then grant the exact permission set it needs.
                 </p>

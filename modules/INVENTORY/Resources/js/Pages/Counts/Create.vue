@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-defineProps<{ warehouseOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+defineProps<{ warehouseOptions:SelectOption[] }>();
 const form=useForm({ warehouse_id:null as number|null, notes:'', items:[{ product_id:null as number|null, system_qty:null as number|null, counted_qty:null as number|null }] });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.post(route('inventory.counts.store')); }
 </script>
 <template>

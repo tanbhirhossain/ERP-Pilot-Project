@@ -15,6 +15,7 @@ use Modules\PAYROLL\Http\Controllers\PayrollSlipController;
 use Modules\PAYROLL\Http\Controllers\ProvidentFundController;
 use Modules\PAYROLL\Http\Controllers\SalaryIncrementController;
 use Modules\PAYROLL\Http\Controllers\TaxConfigurationController;
+use Modules\PAYROLL\Http\Middleware\EnsureCutlistReviewer;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 
 Route::middleware(['web', 'auth'])->prefix('payroll')->name('payroll.')->group(function (): void {
@@ -25,8 +26,12 @@ Route::middleware(['web', 'auth'])->prefix('payroll')->name('payroll.')->group(f
     Route::post('salary-sheets', [PayrollSalarySheetController::class, 'store'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('sheets.store');
     Route::post('salary-sheets/{salarySheet}/release', [PayrollSalarySheetController::class, 'release'])->middleware(PermissionMiddleware::class.':payroll.sheets.release')->name('sheets.release');
     Route::get('salary-sheets/{salarySheet}', [PayrollSalarySheetController::class, 'show'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('sheets.show');
+    Route::get('cutlists', [PayrollCutlistController::class, 'index'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.index');
     Route::post('cutlists/generate', [PayrollCutlistController::class, 'generate'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('cutlists.generate');
-    Route::get('cutlists/{cutlist}', [PayrollCutlistController::class, 'show'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('cutlists.show');
+    Route::get('cutlists/{cutlist}', [PayrollCutlistController::class, 'show'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.show');
+    Route::post('cutlists/{cutlist}/approve', [PayrollCutlistController::class, 'approve'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.approve');
+    Route::post('cutlists/{cutlist}/reopen', [PayrollCutlistController::class, 'reopen'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.reopen');
+    Route::patch('cutlists/{cutlist}/items/{item}', [PayrollCutlistController::class, 'updateItem'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.items.update');
 
     Route::get('slips/{slip}', [PayrollSlipController::class, 'show'])->middleware(PermissionMiddleware::class.':payroll.slips.view')->name('slips.show');
     Route::post('slips/{slip}/payment-status', [PayrollSlipController::class, 'setPaymentStatus'])->middleware(PermissionMiddleware::class.':payroll.slips.pay')->name('slips.payment-status');

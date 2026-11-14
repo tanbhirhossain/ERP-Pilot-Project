@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-defineProps<{ userOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+defineProps<{ userOptions:SelectOption[] }>();
 const form=useForm({ name:'', code:'', short_code:'', type:'main', address_line:'', city:'', district:'', division:'', phone:'', email:'', manager_user_id:null as number|null, is_default:false, is_active:true, allow_negative_stock:false, notes:'' });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.post(route('inventory.warehouses.store')); }
 </script>
 <template>

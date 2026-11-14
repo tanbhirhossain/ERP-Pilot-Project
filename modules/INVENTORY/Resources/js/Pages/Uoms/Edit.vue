@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { Uom } from '@inventory/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-const props=defineProps<{ uom:any }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props=defineProps<{ uom:Uom }>();
 const form=useForm({ name:props.uom.name, symbol:props.uom.symbol, category:props.uom.category, ratio_to_base:props.uom.ratio_to_base, is_active:props.uom.is_active });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('inventory.uoms.update', props.uom.id)); }
 </script>
 <template>

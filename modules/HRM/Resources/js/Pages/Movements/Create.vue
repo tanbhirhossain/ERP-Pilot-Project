@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { reactive } from 'vue';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 defineProps<{ departments:any[]; designations:any[] }>();
-const form=reactive({employee_id:null as any, movement_type:'Transfer', effective_date:new Date().toISOString().slice(0,10), to_department_id:null as any, to_designation_id:null as any, to_grade:'', to_salary:null as any, reason:''});
+const form=reactive({employee_id:null as number | string | null, movement_type:'Transfer', effective_date:new Date().toISOString().slice(0,10), to_department_id:null as number | string | null, to_designation_id:null as number | string | null, to_grade:'', to_salary:null as number | string | null, reason:''});
 const types=['Transfer','Promotion','Demotion','Department Change','Designation Change','Grade Change','Location Transfer'];
 function submit(){ router.post(route('hrm.movements.store'), form as any); }
 </script>

@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import type { Bank } from '@accounts/types';
+import type { SelectOption } from '@core/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import SearchableSelect from '../../../../../CORE/Resources/js/Components/SearchableSelect.vue';
-const props=defineProps<{ bank:any; accountOptions:any[] }>();
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
+const props=defineProps<{ bank:Bank; accountOptions:SelectOption[] }>();
 const form=useForm({ name:props.bank.name, code:props.bank.code, bank_name:props.bank.bank_name, branch_name:props.bank.branch_name??'', account_no:props.bank.account_no, account_holder:props.bank.account_holder??'', swift_code:props.bank.swift_code??'', account_id:props.bank.account_id, opening_balance:props.bank.opening_balance, is_active:props.bank.is_active });
+useUnsavedGuard(() => form.isDirty);
 function submit(){ form.put(route('accounts.banks.update', props.bank.id)); }
 </script>
 <template>

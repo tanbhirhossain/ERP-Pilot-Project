@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { Undo2, Plus, Eye } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
 
-import { formatCurrency } from '../../../../../CORE/Resources/js/Utils/format';
+import { formatCurrency } from '@core/Utils/format';
 defineProps<{ returns: any }>();
 const columns: DataTableColumn[] = [
   {key:'return_no',label:'Return No',sortable:true},
@@ -21,7 +21,7 @@ function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') retu
   <AdminLayout :breadcrumbs="[{title:'Purchase'},{title:'Returns'}]">
     <Head title="Purchase Returns" />
     <PageHeader title="Purchase Returns (Debit Notes)" description="Return to vendor — stock OUT (deduct) + AP debit note (AP Dr / Inv Cr / VAT Cr)." :icon="Undo2" :actions="[{ label:'New Return', route:'purchase.returns.create', icon: Plus }]">
-    <DataTable route-name="purchase.returns.index" title="Returns" :columns="columns" :rows="(returns.data as unknown as Record<string,unknown>[])" :meta="returns.meta" search-placeholder="Search PR-...">
+    <DataTable route-name="purchase.returns.index" title="Returns" :columns="columns" :rows="returns.data" :meta="returns.meta" search-placeholder="Search PR-...">
       <template #cell-return_no="{row}"><span class="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700">{{ row.return_no }}</span></template>
       <template #cell-vendor="{row}"><span class="text-sm">{{ row.vendor?.name || '—' }}</span></template>
       <template #cell-total_amount="{row}"><span class="font-mono font-bold">{{ formatCurrency(Number(row.total_amount)) }}</span></template>

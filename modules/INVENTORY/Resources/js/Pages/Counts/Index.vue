@@ -2,12 +2,12 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { ClipboardCheck, Plus } from 'lucide-vue-next';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatDate } from '@core/Utils/format';
 interface Row { id:number; count_no:string; warehouse?:{name:string}; status:string; counted_at?:string; created_at:string; items_count:number }
 defineProps<{ counts: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -24,7 +24,7 @@ function tone(s:string){ if(s==='posted') return 'success'; if(s==='counted') re
   <AdminLayout :breadcrumbs="[{title:'Inventory'},{title:'Physical Counts'}]">
     <Head title="Physical Counts" />
     <PageHeader title="Physical Counts" description="Cycle counts — freeze, count, post variances." :icon="ClipboardCheck" :actions="[{ label:'New Count', route:'inventory.counts.create', icon: Plus }]">
-    <DataTable route-name="inventory.counts.index" title="Physical Counts" :columns="columns" :rows="(counts.data as unknown as Record<string,unknown>[])" :meta="counts.meta" search-placeholder="Search counts…">
+    <DataTable route-name="inventory.counts.index" title="Physical Counts" :columns="columns" :rows="counts.data" :meta="counts.meta" search-placeholder="Search counts…">
       <template #cell-count_no="{row}"><span class="font-mono text-sm font-semibold bg-teal-500/10 text-teal-600 px-1.5 py-0.5 rounded">{{ row.count_no }}</span></template>
       <template #cell-warehouse="{row}"><span class="text-sm">{{ row.warehouse?.name || '—' }}</span></template>
       <template #cell-status="{row}"><StatusBadge :label="row.status" :tone="tone(row.status)" /></template>

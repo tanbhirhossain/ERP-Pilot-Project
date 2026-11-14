@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { History, ArrowDown, ArrowUp } from 'lucide-vue-next';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
-import { formatDate } from '../../../../../CORE/Resources/js/Utils/format';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
+import { formatDate } from '@core/Utils/format';
 interface Row { id:number; move_no:string; product?:{name:string; sku:string}; warehouse?:{name:string}; qty:string; direction:string; unit_cost:string; total_cost:string; reference_type:string; reference_no?:string; mover?:string; moved_at:string }
 defineProps<{ movements: Paginator<Row>; warehouseOptions:any[] }>();
 const columns: DataTableColumn[] = [
@@ -23,7 +23,7 @@ const columns: DataTableColumn[] = [
   <AdminLayout :breadcrumbs="[{title:'Inventory'},{title:'Stock Ledger'}]">
     <Head title="Stock Ledger" />
     <PageHeader title="Stock Ledger" description="Append-only audit of every stock movement — source for valuation & audit." :icon="History" >
-    <DataTable route-name="inventory.movements.index" title="Stock Ledger" :columns="columns" :rows="(movements.data as unknown as Record<string,unknown>[])" :meta="movements.meta" search-placeholder="Search move no, ref…">
+    <DataTable route-name="inventory.movements.index" title="Stock Ledger" :columns="columns" :rows="movements.data" :meta="movements.meta" search-placeholder="Search move no, ref…">
       <template #cell-move_no="{row}"><span class="font-mono text-xs font-semibold bg-slate-500/10 text-slate-600 px-1.5 py-0.5 rounded">{{ row.move_no }}</span></template>
       <template #cell-product="{row}"><div><p class="font-medium text-sm">{{ row.product?.name || '—' }}</p><p class="text-xs text-muted-foreground font-mono">{{ row.product?.sku }}</p></div></template>
       <template #cell-warehouse="{row}"><span class="text-sm">{{ row.warehouse?.name || '—' }}</span></template>

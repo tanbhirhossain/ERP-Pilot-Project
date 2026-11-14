@@ -8,6 +8,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Modules\CORE\Models\Attachment;
+use Modules\CORE\Services\ActivityTimelineService;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\CORE\Support\PaginatedResource;
 use Modules\SALES\Models\Invoice;
@@ -46,11 +48,18 @@ class InvoiceController extends Controller
         return redirect()->route('sales.invoices.show', $inv->id)->with('success', "Invoice {$inv->invoice_no} created.");
     }
 
-    public function show(Invoice $invoice): Response
+    public function show(Invoice $invoice, ActivityTimelineService $timeline): Response
     {
         $invoice->load(['customer', 'warehouse', 'order', 'items.product', 'payments', 'journal']);
 
-        return Inertia::render('SALES::Invoices/Show', ['invoice' => $invoice]);
+        return Inertia::render('SALES::Invoices/Show', [
+            'invoice' => $invoice,
+            'activities' => $timeline->for($invoice),
+            'attachments' => Attachment::where('attachable_type', $invoice::class)
+                ->where('attachable_id', $invoice->id)
+                ->with('uploader:id,name')->orderByDesc('created_at')->get(),
+            'canManageAttachments' => request()->user()->can('sales.invoices.manage'),
+        ]);
     }
 
     public function edit(Invoice $invoice): Response

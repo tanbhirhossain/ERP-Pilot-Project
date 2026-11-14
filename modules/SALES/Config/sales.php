@@ -24,6 +24,15 @@ return [
         'default_warehouse_id' => env('SALES_DEFAULT_WAREHOUSE', null),
     ],
 
+    // Credit control (Phase 1). The same exposure rule the POS counter applies,
+    // now enforced on the SO→INV credit path too. `credit_limit <= 0` on a
+    // partner means "no limit set". Set these false only for a deliberate
+    // no-limit deployment.
+    'credit' => [
+        'enforce_on_order' => env('SALES_CREDIT_ENFORCE_ON_ORDER', true),
+        'enforce_on_invoice' => env('SALES_CREDIT_ENFORCE_ON_INVOICE', true),
+    ],
+
     'pos' => [
         'allow_cash' => true,
         'allow_bank' => true,

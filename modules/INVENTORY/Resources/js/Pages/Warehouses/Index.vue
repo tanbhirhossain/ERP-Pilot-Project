@@ -3,12 +3,12 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, Warehouse, Eye } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import StatusBadge from '../../../../../CORE/Resources/js/Components/StatusBadge.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
+import type { Paginator } from '@core/types';
 interface Row { id:number; name:string; code:string; type:string; city?:string; manager?:{name:string}; is_default:boolean; is_active:boolean; locations_count:number; stocks_count:number; created_at:string }
 defineProps<{ warehouses: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -28,7 +28,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
   <AdminLayout :breadcrumbs="[{title:'Inventory'},{title:'Warehouses'}]">
     <Head title="Warehouses" />
     <PageHeader title="Warehouses" description="Storage locations — main, sub, transit." :icon="Warehouse" :actions="[{ label:'Add Warehouse', route:'inventory.warehouses.create', icon: Plus }]">
-    <DataTable route-name="inventory.warehouses.index" title="Warehouses" :columns="columns" :rows="(warehouses.data as unknown as Record<string,unknown>[])" :meta="warehouses.meta" search-placeholder="Search warehouses…">
+    <DataTable route-name="inventory.warehouses.index" title="Warehouses" :columns="columns" :rows="warehouses.data" :meta="warehouses.meta" search-placeholder="Search warehouses…">
       <template #cell-code="{row}"><span class="font-mono text-sm font-semibold bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded">{{ row.code }}</span></template>
       <template #cell-name="{row}"><div><p class="font-semibold">{{ row.name }}</p><p class="text-xs text-muted-foreground">{{ row.manager?.name || 'No manager' }} · {{ row.locations_count }} locations · {{ row.stocks_count }} stock lines</p></div></template>
       <template #cell-type="{row}"><StatusBadge :label="row.type" :tone="row.type==='main'?'primary':'neutral'" /></template>

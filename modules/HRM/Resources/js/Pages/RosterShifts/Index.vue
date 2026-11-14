@@ -3,11 +3,11 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
-import PageHeader from '../../../../../CORE/Resources/js/Components/PageHeader.vue';
-import ConfirmDialog from '../../../../../CORE/Resources/js/Components/ConfirmDialog.vue';
-import DataTable, { type DataTableColumn } from '../../../../../CORE/Resources/js/Components/DataTable.vue';
-import type { Paginator } from '../../../../../CORE/Resources/js/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
+import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
+import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import type { Paginator } from '@core/types';
 interface Row { id:number; shift_name:string; start_time?:string; end_time?:string; punch_in_window_start?:string; punch_in_window_end?:string; crosses_midnight:boolean; max_duration_hours:number; created_at:string }
 defineProps<{ shifts: Paginator<Row> }>();
 const columns: DataTableColumn[] = [
@@ -26,7 +26,7 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
   <AdminLayout :breadcrumbs="[{ title: 'Roster' }, { title: 'Roster Shifts' }]">
     <Head title="Roster Shifts"/>
     <PageHeader title="Roster Shifts" description="Define Fixed / Flexible / Custom shifts — midnight crossing supported." :icon="Pencil" :actions="[{ label:'New Shift', route:'hrm.shifts.create', icon: Plus }]">
-    <DataTable route-name="hrm.shifts.index" title="Roster Shifts" :columns="columns" :rows="(shifts.data as unknown as Record<string,unknown>[])" :meta="shifts.meta">
+    <DataTable route-name="hrm.shifts.index" title="Roster Shifts" :columns="columns" :rows="shifts.data" :meta="shifts.meta">
       <template #cell-shift_name="{row}"><span class="font-semibold">{{ row.shift_name }}</span></template>
       <template #cell-start_time="{row}"><span class="text-sm font-mono bg-muted px-1.5 py-0.5 rounded">{{ row.start_time || '—' }} → {{ row.end_time || '—' }}</span></template>
       <template #cell-punch_in_window_start="{row}"><span class="text-sm font-mono">{{ row.punch_in_window_start && row.punch_in_window_end ? `${row.punch_in_window_start} - ${row.punch_in_window_end}` : '—' }}</span></template>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import AdminLayout from '../../../../../CORE/Resources/js/Layouts/AdminLayout.vue';
+import type { Quotation } from '@sales/types';
+import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import QuotationForm from '../../Components/QuotationForm.vue';
 
-const props = defineProps<{ quotation: any }>();
+const props = defineProps<{ quotation: Quotation }>();
 </script>
 
 <template>
