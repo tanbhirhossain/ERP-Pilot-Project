@@ -12,6 +12,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import type { SelectOption } from '../../types';
 import { formatDate } from '../../Utils/format';
 
+import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 interface Props {
     user: {
         id: number;
@@ -34,6 +35,7 @@ const form = useForm({
     roles: [...props.user.roles] as number[],
     verified: props.user.verified,
 });
+useUnsavedGuard(() => form.isDirty);
 
 function submit() {
     form.put(route('core.users.update', props.user.id), {
@@ -125,7 +127,7 @@ function submit() {
                     </div>
 
                     <label class="flex cursor-pointer items-center gap-2.5 rounded-lg border bg-muted/30 px-3 py-2.5 text-sm transition hover:bg-muted/60">
-                        <Checkbox v-model="form.verified" />
+                        <Checkbox v-model:checked="form.verified" />
                         <span>
                             <span class="font-medium">Email verified</span>
                             <span class="block text-xs text-muted-foreground">
