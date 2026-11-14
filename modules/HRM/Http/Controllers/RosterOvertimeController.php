@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Illuminate\Support\Facades\DB;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\CORE\Support\PaginatedResource;
 use Modules\HRM\Models\Attendance\AttendanceDaily;
@@ -48,7 +49,14 @@ final class RosterOvertimeController extends Controller
         $rows = $page->getCollection();
         $dates = $rows->pluck('overtime_date')->map(fn ($date) => $date?->toDateString())->filter()->unique();
         $employees = $rows->pluck('employee_id')->unique();
-        $dailyByKey = AttendanceDaily::query()->whereIn('employee_id', $employees)->whereIn('duty_date', $dates)->get()->keyBy(fn ($daily) => $daily->employee_id.'|'.$daily->duty_date?->toDateString());
+        // duty_date is stored in BOTH shapes ('2026-10-17' and '2026-10-17 00:00:00'),
+        // so a plain whereIn on the date column silently missed half the rows and the
+        // queue rendered 0.00 h for every attendance-derived figure. Compare on date only.
+        $dailyByKey = AttendanceDaily::query()
+            ->whereIn('employee_id', $employees)
+            ->whereIn(DB::raw('date(duty_date)'), $dates->all())
+            ->get()
+            ->keyBy(fn ($daily) => $daily->employee_id.'|'.$daily->duty_date?->toDateString());
         $mapped = $page->through(function (RosterOvertime $row) use ($dailyByKey, $kind): array {
             $date = $row->overtime_date?->toDateString();
             $daily = $dailyByKey->get($row->employee_id.'|'.$date);

@@ -38,7 +38,9 @@ class RosterOvertimeRepository implements RosterOvertimeRepositoryInterface
                 ->whereExists(function ($daily) {
                     $daily->selectRaw('1')->from('attendance_dailies')
                         ->whereColumn('attendance_dailies.employee_id', 'roster_overtimes.employee_id')
-                        ->whereColumn('attendance_dailies.duty_date', 'roster_overtimes.overtime_date')
+                        // duty_date is stored in both shapes ('2026-10-17' and '2026-10-17 00:00:00'),
+                        // so the link must be made on the date, not on the raw column value.
+                        ->whereRaw('date(attendance_dailies.duty_date) = date(roster_overtimes.overtime_date)')
                         ->where('attendance_dailies.total_overtime_hours', '>', 0.5);
                 });
         } else {
@@ -46,7 +48,7 @@ class RosterOvertimeRepository implements RosterOvertimeRepositoryInterface
                 ->whereExists(function ($daily) {
                     $daily->selectRaw('1')->from('attendance_dailies')
                         ->whereColumn('attendance_dailies.employee_id', 'roster_overtimes.employee_id')
-                        ->whereColumn('attendance_dailies.duty_date', 'roster_overtimes.overtime_date')
+                        ->whereRaw('date(attendance_dailies.duty_date) = date(roster_overtimes.overtime_date)')
                         ->where('attendance_dailies.status', 'Extra Duty');
                 });
         }
