@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Modules\PAYROLL\Console\Commands\PayrollAttendanceBenchmarkCommand;
 use Modules\PAYROLL\Console\Commands\PayrollPreflightCommand;
+use Modules\PAYROLL\Console\Commands\RecalculateTax;
 use Modules\PAYROLL\Interfaces\HRM\AttendancePayrollDataProviderInterface;
 use Modules\PAYROLL\Interfaces\HRM\EmployeePayrollDataProviderInterface;
 use Modules\PAYROLL\Interfaces\Repositories\PayrollLoanRepositoryInterface;
@@ -34,7 +35,7 @@ final class PAYROLLServiceProvider extends ServiceProvider
         $this->loadRoutesFrom(__DIR__.'/../Routes/web.php');
         $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
         if ($this->app->runningInConsole()) {
-            $this->commands([PayrollPreflightCommand::class, PayrollAttendanceBenchmarkCommand::class]);
+            $this->commands([PayrollPreflightCommand::class, PayrollAttendanceBenchmarkCommand::class, RecalculateTax::class]);
         }
     }
 
