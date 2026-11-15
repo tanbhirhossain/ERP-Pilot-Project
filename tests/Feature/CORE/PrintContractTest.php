@@ -219,7 +219,10 @@ test('the scanner is looking at the application it claims to describe', function
     // statement, request) replacing one, and the tax screen was rewritten as a reading rather than a
     // policy form. Four net new files: Dashboard, Register, Schedule, Show and ModuleNav minus the
     // old single-page layout.
-    expect($files)->toHaveCount(440, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
+    // 443 since P16: the salary-sheet module became five screens (overview, sheet, departments,
+    // release desk, new run) replacing a list and a stub. Three net new files: ModuleNav,
+    // Departments and Release — the old Index and Show were rewritten in place.
+    expect($files)->toHaveCount(443, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
         ->and($files)->toContain(PC_LAYOUT);
 
     $withStyle = array_filter($files, static fn (string $path): bool => pcStyleBlocks(pcRead($path)) !== []);
@@ -356,7 +359,10 @@ test('every page prints through the engine, and nothing calls window.print() dir
     // 26 since P14: the advance schedule prints a month's deductions as a working paper, and the
     // advance statement prints one employee's schedule — both are documents that get signed, not
     // screens that get shown.
-    expect($callers)->toHaveCount(26, 'the set of pages that print through the engine changed; re-measure and say why');
+    // 27 since P16: the department breakdown prints through the engine. A cost-centre schedule is
+    // signed by whoever approves the month, so it goes to paper as a working paper rather than being
+    // screenshotted — the same reason the advance schedule and fund register do.
+    expect($callers)->toHaveCount(27, 'the set of pages that print through the engine changed; re-measure and say why');
 
     // With DataTable migrated, nothing in the component tree calls the browser directly any more.
     foreach (pcVueFiles() as $path) {
@@ -463,5 +469,8 @@ test('one page marks at most one print region', function () {
     // statement marks its ledger, because a member is handed a statement, not shown a page.
     // 15 since P14: the advance schedule and the advance statement each mark their table, so the
     // module navigation, the staging form and the figure strip stay off the sheet.
-    expect($marked)->toHaveCount(15, 'the set of pages that mark a print region changed; re-measure and say why');
+    // 16 since P16: the department breakdown marks its cost-centre table, so the tabs, the figure
+    // strip and the chart stay off the sheet — what is signed is the schedule, not the desk that
+    // produced it.
+    expect($marked)->toHaveCount(16, 'the set of pages that mark a print region changed; re-measure and say why');
 });

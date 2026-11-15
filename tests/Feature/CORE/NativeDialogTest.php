@@ -43,7 +43,7 @@ const ND_ROOTS = ['modules', 'resources/js'];
  */
 // 45 since the attendance-regularization page, whose reviewer remarks were collected with a native
 // `prompt()` — the ratchet only falls.
-const ND_BASELINE_CALLS = 45;
+const ND_BASELINE_CALLS = 44;
 
 /** Files that have been migrated and must never grow a native dialog again. */
 const ND_MIGRATED = [

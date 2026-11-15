@@ -25,6 +25,9 @@ Route::middleware(['web', 'auth'])->prefix('payroll')->name('payroll.')->group(f
     Route::get('salary-sheets/create', [PayrollSalarySheetController::class, 'create'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('sheets.create');
     Route::post('salary-sheets', [PayrollSalarySheetController::class, 'store'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('sheets.store');
     Route::post('salary-sheets/{salarySheet}/release', [PayrollSalarySheetController::class, 'release'])->middleware(PermissionMiddleware::class.':payroll.sheets.release')->name('sheets.release');
+    // Literal segments before the {salarySheet} binding, or "departments" is read as an id.
+    Route::get('salary-sheets/{salarySheet}/departments', [PayrollSalarySheetController::class, 'departments'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('sheets.departments');
+    Route::get('salary-sheets/{salarySheet}/release-check', [PayrollSalarySheetController::class, 'releaseCheck'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('sheets.release-check');
     Route::get('salary-sheets/{salarySheet}', [PayrollSalarySheetController::class, 'show'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('sheets.show');
     Route::get('cutlists', [PayrollCutlistController::class, 'index'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.index');
     Route::post('cutlists/generate', [PayrollCutlistController::class, 'generate'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('cutlists.generate');

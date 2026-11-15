@@ -16,13 +16,24 @@ use Modules\PAYROLL\Models\PayrollSalarySheet;
 use Modules\PAYROLL\Models\PayrollSlip;
 use Modules\PAYROLL\Models\PayrollWorkflowAudit;
 use Modules\PAYROLL\Services\PayrollSalarySheetService;
+use Modules\PAYROLL\Services\PayrollSalarySheetWorkspaceService;
 
 final class PayrollSalarySheetController extends Controller
 {
-    public function index(Request $request, PayrollSalarySheetService $sheets): Response
+    /**
+     * The payroll desk.
+     *
+     * `$sheets` (the paginator) is still handed over because the page's run list is a server-side
+     * table with its own search and filters, but the figures above it come from the workspace service:
+     * the list says which runs exist, the figures say what they cost.
+     */
+    public function index(Request $request, PayrollSalarySheetService $sheets, PayrollSalarySheetWorkspaceService $workspace): Response
     {
         return Inertia::render('PAYROLL::SalarySheets/Index', [
             'sheets' => PaginatedResource::from($sheets->paginate(['status' => $request->input('filters.status', $request->input('status')), 'search' => $request->input('search')], $request->integer('per_page', 25))),
+            'workspace' => $workspace->overview(),
+            'trend' => $workspace->trend(),
+            'canCreate' => (bool) $request->user()?->can('payroll.sheets.manage'),
         ]);
     }
 
@@ -82,6 +93,54 @@ final class PayrollSalarySheetController extends Controller
         return redirect()->route('payroll.sheets.show', $sheet)->with('success', $message);
     }
 
+    /**
+     * The month's departments — where the money went, by unit.
+     *
+     * Read-only and computed from slips, so it can never disagree with the sheet page: both call the
+     * same aggregate.
+     */
+    public function departments(Request $request, PayrollSalarySheet $salarySheet, PayrollSalarySheetWorkspaceService $workspace): Response
+    {
+        return Inertia::render('PAYROLL::SalarySheets/Departments', [
+            'sheet' => $salarySheet->only(['id', 'pay_year', 'pay_month', 'status', 'employee_count']),
+            'context' => $workspace->sheetContext($salarySheet->id),
+            'departments' => $workspace->departments($salarySheet->id),
+            'selected' => $request->string('department')->toString() ?: null,
+            'drilldown' => $request->string('department')->toString()
+                ? $workspace->departmentSlips($salarySheet->id, $request->string('department')->toString())
+                : [],
+            'canRelease' => (bool) $request->user()?->can('payroll.sheets.release'),
+        ]);
+    }
+
+    /**
+     * The release desk — what has to be true before the month can be paid.
+     *
+     * Separate from `show` because release is a decision, not an inspection: the sheet page answers
+     * "is this payroll right", this one answers "may I release it, and what happens if I do".
+     */
+    public function releaseCheck(Request $request, PayrollSalarySheet $salarySheet, PayrollSalarySheetWorkspaceService $workspace): Response
+    {
+        $context = $workspace->sheetContext($salarySheet->id);
+
+        return Inertia::render('PAYROLL::SalarySheets/Release', [
+            'sheet' => $salarySheet->only(['id', 'pay_year', 'pay_month', 'status', 'employee_count', 'processed_count', 'failure_message']),
+            'context' => $context,
+            'readiness' => $workspace->readiness($salarySheet->id),
+            'departments' => $workspace->departments($salarySheet->id),
+            'canRelease' => (bool) $request->user()?->can('payroll.sheets.release'),
+            'canPostAccrual' => (bool) $request->user()?->can('payroll.finance.post'),
+            'periodExclusions' => PayrollPeriodExclusion::query()->with(['employee:id,employee_id,full_name', 'creator:id,name'])
+                ->where('pay_year', (int) $salarySheet->pay_year)->where('pay_month', (int) $salarySheet->pay_month)
+                ->orderBy('employee_id')->get()->map(fn (PayrollPeriodExclusion $exclusion) => [
+                    'employee_id' => (string) $exclusion->employee_id,
+                    'employee_name' => $exclusion->employee?->full_name,
+                    'reason' => $exclusion->reason,
+                    'created_by_name' => $exclusion->creator?->name,
+                ])->values(),
+        ]);
+    }
+
     public function release(Request $request, PayrollSalarySheet $salarySheet, PayrollSalarySheetService $sheets): RedirectResponse
     {
         $sheets->release($salarySheet, $request->user()?->id);
@@ -89,7 +148,7 @@ final class PayrollSalarySheetController extends Controller
         return back()->with('success', 'Salary sheet released. Individual pay slips can now be paid or placed on hold.');
     }
 
-    public function show(Request $request, PayrollSalarySheet $salarySheet, EmployeePayrollDataProviderInterface $employees): Response
+    public function show(Request $request, PayrollSalarySheet $salarySheet, EmployeePayrollDataProviderInterface $employees, PayrollSalarySheetWorkspaceService $workspace): Response
     {
         $sheet = $salarySheet->load('cutlist');
         $periodStart = sprintf('%d-%02d-01', (int) $sheet->pay_year, (int) $sheet->pay_month);
@@ -114,6 +173,9 @@ final class PayrollSalarySheetController extends Controller
 
         return Inertia::render('PAYROLL::SalarySheets/Show', [
             'sheet' => $sheet,
+            'context' => $workspace->sheetContext($sheet->id),
+            'readiness' => $workspace->readiness($sheet->id),
+            'departmentSummary' => $workspace->departments($sheet->id),
             'periodExclusions' => $periodExclusions,
             'releaseAudit' => PayrollWorkflowAudit::query()->where('subject_type', 'salary_sheet')->where('subject_id', $sheet->id)->where('event', 'released')->first(['actor_id', 'occurred_at']),
             'canRelease' => (bool) $request->user()?->can('payroll.sheets.release'),
