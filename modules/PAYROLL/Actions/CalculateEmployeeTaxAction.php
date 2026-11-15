@@ -32,20 +32,39 @@ final class CalculateEmployeeTaxAction
             return $this->result((float) ($configuration['fixed_monthly_tax'] ?? 0), $monthlyTaxableIncome * 12, 'global_fixed', []);
         }
 
-        $annualIncome = max(0, ($monthlyTaxableIncome * 12 * ((float) ($configuration['taxable_salary_percent'] ?? 100) / 100)) - (float) ($configuration['annual_exemption'] ?? 0));
+        /**
+         * Slabs are bands of *gross* annual income; the exemption is a floor beneath them.
+         *
+         * The old formula was `annualIncome = gross - exemption` and then it measured the slabs from
+         * zero. With the configured bands beginning at 0–350,000 @ 0%, that subtraction landed the
+         * whole of a modest income inside a band that already said "untaxed", so it was applied
+         * twice: an employee on ৳40,000/month (৳480,000/year) was charged ৳0 instead of ৳8,000.
+         *
+         * The two knobs must not both mean "the first 350,000 is free". So the bands stay exactly as
+         * the operator configured them — in gross terms — and the relief is enforced as a floor:
+         * nothing below the exemption threshold is ever taxed, whichever band it nominally falls in.
+         * A policy whose first band already runs 0 → 350,000 @ 0% therefore produces the same answer
+         * as one that omits that band entirely, which is the only way both are safe to type in.
+         */
+        $annualGross = $monthlyTaxableIncome * 12 * ((float) ($configuration['taxable_salary_percent'] ?? 100) / 100);
+        $exemption = max(0, (float) ($configuration['annual_exemption'] ?? 0));
+        $annualIncome = max(0, $annualGross);
         $annualTax = 0.0;
         $breakdown = [];
 
         foreach (($configuration['slabs'] ?? []) as $slab) {
-            $lower = (float) ($slab['lower_limit'] ?? 0);
+            $configuredLower = (float) ($slab['lower_limit'] ?? 0);
             $upperLimit = $slab['upper_limit'] ?? null;
             $upper = $upperLimit === null ? $annualIncome : (float) $upperLimit;
+            // The band's taxable portion starts at the higher of its own floor and the relief floor.
+            $lower = max($configuredLower, $exemption);
             $taxableInSlab = max(0, min($annualIncome, $upper) - $lower);
             $tax = round($taxableInSlab * ((float) ($slab['rate_percent'] ?? 0) / 100), 2);
             $annualTax += $tax;
             $breakdown[] = [
-                'lower_limit' => $lower,
-                'upper_limit' => $upperLimit === null ? 'unlimited' : $upper,
+                // The configured band, so the breakdown still reads like the policy screen.
+                'lower_limit' => $configuredLower,
+                'upper_limit' => $upperLimit === null ? 'unlimited' : (float) $upperLimit,
                 'rate_percent' => (float) ($slab['rate_percent'] ?? 0),
                 'taxable_amount' => round($taxableInSlab, 2),
                 'annual_tax' => $tax,

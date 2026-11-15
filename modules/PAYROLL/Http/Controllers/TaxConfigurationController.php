@@ -15,15 +15,72 @@ use Modules\HRM\Models\Employee\Employee;
 use Modules\PAYROLL\Interfaces\HRM\EmployeePayrollDataProviderInterface;
 use Modules\PAYROLL\Models\EmployeeTaxProfile;
 use Modules\PAYROLL\Models\EmployeeTaxProfileVersion;
+use Modules\PAYROLL\Models\PayrollSlip;
 use Modules\PAYROLL\Models\PayrollTaxAudit;
 use Modules\PAYROLL\Services\TaxConfigurationService;
 
 final class TaxConfigurationController extends Controller
 {
+    /**
+     * What payroll has actually withheld — the figure the policy screen never showed.
+     *
+     * The screen could edit a policy and an employee override, but nothing on it said what tax the
+     * last payroll run produced. That silence is why an unconfigured policy could go unnoticed for
+     * 981 payslips: the form looked correct, and only the slips knew it was not.
+     *
+     * @return array{withheld: float, taxable_income: float, slips: int, unconfigured: int, configured: int, employees: int, periods: int, latest_period: string|null, effective_rate: float}
+     */
+    private function payrollImpact(): array
+    {
+        $slips = PayrollSlip::query()
+            // `tax_amount` is not a column: the tax lives inside `breakdown_json` under `tax`. Reading a
+            // column that does not exist would have 500'd the screen that reports on tax.
+            ->select(['id', 'employee_id', 'pay_year', 'pay_month', 'gross_salary', 'breakdown_json'])
+            ->get();
+
+        $withheld = 0.0;
+        $taxable = 0.0;
+        $unconfigured = 0;
+        $configured = 0;
+        $periods = [];
+        $latest = null;
+
+        foreach ($slips as $slip) {
+            $breakdown = $slip->breakdown_json ?? [];
+            $tax = $breakdown['tax'] ?? [];
+            $mode = $tax['mode'] ?? null;
+            $monthly = (float) ($tax['monthly_tax'] ?? 0);
+
+            $withheld += $monthly;
+            $taxable += (float) ($tax['allocation']['monthly_taxable_income'] ?? 0);
+            $mode === 'unconfigured' ? $unconfigured++ : $configured++;
+
+            $key = sprintf('%04d-%02d', $slip->pay_year, $slip->pay_month);
+            $periods[$key] = true;
+            if ($latest === null || $key > $latest) {
+                $latest = $key;
+            }
+        }
+
+        return [
+            'withheld' => round($withheld, 2),
+            'taxable_income' => round($taxable, 2),
+            'slips' => $slips->count(),
+            'unconfigured' => $unconfigured,
+            'configured' => $configured,
+            'employees' => $slips->pluck('employee_id')->unique()->count(),
+            'periods' => count($periods),
+            'latest_period' => $latest,
+            'effective_rate' => $taxable > 0 ? round($withheld / $taxable * 100, 2) : 0.0,
+        ];
+    }
+
     public function index(Request $request, TaxConfigurationService $tax, EmployeePayrollDataProviderInterface $employees): Response
     {
         return Inertia::render('PAYROLL::Tax/Index', [
             'configuration' => $tax->current(),
+            'readiness' => $tax->readiness(),
+            'impact' => $this->payrollImpact(),
             'employeeOptions' => $employees->employeeOptions(null, 200),
             'profiles' => PaginatedResource::from(EmployeeTaxProfile::query()->when($request->input('search'), function ($q) use ($request): void {
                 $needle = '%'.addcslashes(trim((string) $request->input('search')), '%_').'%';

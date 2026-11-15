@@ -42,13 +42,20 @@ Route::middleware(['web', 'auth'])->prefix('payroll')->name('payroll.')->group(f
     Route::post('increments/{increment}/approve', [SalaryIncrementController::class, 'approve'])->middleware(PermissionMiddleware::class.':payroll.increments.approve')->name('increments.approve');
     Route::post('increments/{increment}/reject', [SalaryIncrementController::class, 'reject'])->middleware(PermissionMiddleware::class.':payroll.increments.approve')->name('increments.reject');
 
+    // Staff advances. Five screens, and the order below is not cosmetic: `loans/{loan}` is declared
+    // last so that `register` and `schedule` remain reachable — a `{loan}` segment in front of them
+    // would swallow both, and `whereNumber` alone does not help because route *order* is what wins.
     Route::get('loans', [PayrollLoanController::class, 'index'])->middleware(PermissionMiddleware::class.':payroll.loans.manage')->name('loans.index');
+    Route::get('loans/register', [PayrollLoanController::class, 'register'])->middleware(PermissionMiddleware::class.':payroll.loans.manage')->name('loans.register');
+    Route::get('loans/schedule', [PayrollLoanController::class, 'schedule'])->middleware(PermissionMiddleware::class.':payroll.loans.manage')->name('loans.schedule');
     Route::get('loans/create', [PayrollLoanController::class, 'create'])->middleware(PermissionMiddleware::class.':payroll.loans.manage')->name('loans.create');
     Route::post('loans', [PayrollLoanController::class, 'store'])->middleware(PermissionMiddleware::class.':payroll.loans.manage')->name('loans.store');
     Route::post('loans/allocate-installments', [PayrollLoanController::class, 'allocateInstallments'])->middleware(PermissionMiddleware::class.':payroll.loans.manage')->name('loans.allocate-installments');
     Route::post('loans/allocate-monthly', [PayrollLoanController::class, 'allocateMonthly'])->middleware(PermissionMiddleware::class.':payroll.loans.manage')->name('loans.allocate-monthly');
+    Route::post('loans/post-ledger', [PayrollLoanController::class, 'postLedger'])->middleware([PermissionMiddleware::class.':payroll.loans.manage', 'throttle:payroll-bulk-write'])->name('loans.post-ledger');
     Route::post('loans/{loan}/approve', [PayrollLoanController::class, 'approve'])->middleware(PermissionMiddleware::class.':payroll.loans.approve')->name('loans.approve');
     Route::post('loans/{loan}/reject', [PayrollLoanController::class, 'reject'])->middleware(PermissionMiddleware::class.':payroll.loans.approve')->name('loans.reject');
+    Route::get('loans/{loan}', [PayrollLoanController::class, 'show'])->middleware(PermissionMiddleware::class.':payroll.loans.manage')->whereNumber('loan')->name('loans.show');
 
     // Provident fund. The fund is a liability with its own lifecycle (allocate -> accrue -> settle ->
     // withdraw), so it gets its own module rather than three buttons on one page. Every POST that

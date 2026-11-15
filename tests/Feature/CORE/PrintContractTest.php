@@ -215,7 +215,11 @@ test('the scanner is looking at the application it claims to describe', function
     // 436 since P13: the fund became a module rather than one crowded page - a dashboard and a member
     // roster join the register, the statement and the withdrawal desk. Cramming five jobs onto one
     // screen is what made the first rebuild feel like a poster; each job now owns a page.
-    expect($files)->toHaveCount(436, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
+    // 440 since P14: the staff-advance module became five screens (overview, register, schedule,
+    // statement, request) replacing one, and the tax screen was rewritten as a reading rather than a
+    // policy form. Four net new files: Dashboard, Register, Schedule, Show and ModuleNav minus the
+    // old single-page layout.
+    expect($files)->toHaveCount(440, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
         ->and($files)->toContain(PC_LAYOUT);
 
     $withStyle = array_filter($files, static fn (string $path): bool => pcStyleBlocks(pcRead($path)) !== []);
@@ -349,7 +353,10 @@ test('every page prints through the engine, and nothing calls window.print() dir
     // 24 since P12: the fund register prints its member list through the shared table, and the member
     // statement prints through the engine directly - a member's balance is a document they are handed,
     // not a screen they are shown.
-    expect($callers)->toHaveCount(24, 'the set of pages that print through the engine changed; re-measure and say why');
+    // 26 since P14: the advance schedule prints a month's deductions as a working paper, and the
+    // advance statement prints one employee's schedule — both are documents that get signed, not
+    // screens that get shown.
+    expect($callers)->toHaveCount(26, 'the set of pages that print through the engine changed; re-measure and say why');
 
     // With DataTable migrated, nothing in the component tree calls the browser directly any more.
     foreach (pcVueFiles() as $path) {
@@ -454,5 +461,7 @@ test('one page marks at most one print region', function () {
     // reconciliation strip and the enrolment rail stay off the sheet - a register that goes to an
     // auditor should be the register, not a screenshot of the desk that produced it - and the member
     // statement marks its ledger, because a member is handed a statement, not shown a page.
-    expect($marked)->toHaveCount(13, 'the set of pages that mark a print region changed; re-measure and say why');
+    // 15 since P14: the advance schedule and the advance statement each mark their table, so the
+    // module navigation, the staging form and the figure strip stay off the sheet.
+    expect($marked)->toHaveCount(15, 'the set of pages that mark a print region changed; re-measure and say why');
 });
