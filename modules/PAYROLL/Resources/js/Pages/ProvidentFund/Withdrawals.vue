@@ -113,7 +113,7 @@ const columns: DataTableColumn[] = [
 </script>
 
 <template>
-  <AdminLayout :breadcrumbs="[{ title: 'Payroll' }, { title: 'Provident Fund', href: route('payroll.pf.index') }, { title: 'Withdrawals' }]">
+  <AdminLayout :breadcrumbs="[{ title: 'Payroll' }, { title: 'Provident Fund', href: route('payroll.pf.dashboard') }, { title: 'Withdrawals' }]">
     <Head title="PF withdrawals" />
 
     <header class="border-b pb-4">
@@ -124,7 +124,7 @@ const columns: DataTableColumn[] = [
             A request, a decision, and a payment that posts the ledger debit — the only path money takes out of the fund.
           </p>
         </div>
-        <Button size="sm" variant="outline" @click="router.visit(route('payroll.pf.index'))">Fund register</Button>
+        <Button size="sm" variant="outline" @click="router.visit(route('payroll.pf.members'))">Member register</Button>
       </div>
 
       <dl class="mt-4 grid grid-cols-2 divide-y divide-border rounded-md border bg-card sm:grid-cols-4 sm:divide-x sm:divide-y-0">

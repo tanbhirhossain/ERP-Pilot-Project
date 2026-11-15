@@ -212,7 +212,10 @@ test('the scanner is looking at the application it claims to describe', function
     // 434 since P12: the provident-fund rebuild adds a member statement and a withdrawal desk. The
     // fund register is the existing page, rewritten; the two new pages are the statement (a member's
     // own ledger, which a member is entitled to on paper) and the withdrawal desk.
-    expect($files)->toHaveCount(434, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
+    // 436 since P13: the fund became a module rather than one crowded page - a dashboard and a member
+    // roster join the register, the statement and the withdrawal desk. Cramming five jobs onto one
+    // screen is what made the first rebuild feel like a poster; each job now owns a page.
+    expect($files)->toHaveCount(436, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
         ->and($files)->toContain(PC_LAYOUT);
 
     $withStyle = array_filter($files, static fn (string $path): bool => pcStyleBlocks(pcRead($path)) !== []);

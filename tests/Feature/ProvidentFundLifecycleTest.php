@@ -342,6 +342,41 @@ it('reports drift when a cached balance is edited behind the ledger\'s back', fu
         ->and((float) $drift[0]['employee_drift'])->toBe(-499.0);
 });
 
+it('serves every page of the fund module to someone who may view it', function (): void {
+    $policy = pfPolicy();
+    $account = pfAccount(pfEmployee(), $policy);
+    app(ProvidentFundService::class)->accrueFromSheet(pfSheet($account, 2026, 10, 'released'), 1);
+
+    $user = pfUser();
+
+    // The dashboard reads the fund; the register reads the months; the roster reads the accounts.
+    $this->actingAs($user)->get(route('payroll.pf.dashboard'))->assertOk();
+    $this->actingAs($user)->get(route('payroll.pf.index'))->assertOk();
+    $this->actingAs($user)->get(route('payroll.pf.members'))->assertOk();
+    $this->actingAs($user)->get(route('payroll.pf.show', $account->id))->assertOk();
+    $this->actingAs($user)->get(route('payroll.pf.withdrawals.index'))->assertOk();
+});
+
+it('orders the contribution trend oldest first, with a zero for a month that posted nothing', function (): void {
+    $policy = pfPolicy();
+    $account = pfAccount(pfEmployee(), $policy);
+    $service = app(ProvidentFundService::class);
+
+    // Two months, one of them empty: October posts, November does not.
+    $service->accrueFromSheet(pfSheet($account, 2026, 10, 'released', 500.0, 500.0), 1);
+    $service->accrueFromSheet(pfSheet($account, 2026, 12, 'released', 700.0, 700.0), 1);
+
+    $trend = collect($service->contributionTrend(3))->keyBy('period');
+
+    // A chart is read left to right, so the oldest month comes first — the opposite of a table.
+    expect(array_column($service->contributionTrend(3), 'period'))->toBe(['2026-10', '2026-11', '2026-12']);
+
+    // The gap is present and zero, so a missing month reads as a gap rather than collapsing the axis.
+    expect($trend['2026-11']['total'])->toBe(0.0)
+        ->and($trend['2026-10']['total'])->toBe(1000.0)
+        ->and($trend['2026-12']['total'])->toBe(1400.0);
+});
+
 it('allocates accounts one employee at a time and reports what it examined', function (): void {
     $policy = pfPolicy();
     pfEmployee('PF-1001');
@@ -368,9 +403,10 @@ it('writes a date-only eligible_from instead of a timestamp', function (): void 
 
     expect($account->eligible_from->toDateString())->toBe('2023-03-15');
 
-    // And the register must serialise it as a date the browser cannot shift by timezone.
+    // And the register must serialise it as a date the browser cannot shift by timezone. The member
+    // list lives on its own page now — `pf.index` is the contribution register, `pf.members` the roster.
     $user = pfUser();
-    $response = $this->actingAs($user)->get(route('payroll.pf.index'));
+    $response = $this->actingAs($user)->get(route('payroll.pf.members'));
     $response->assertOk();
 
     $rows = $response->viewData('page')['props']['accounts']['data'];

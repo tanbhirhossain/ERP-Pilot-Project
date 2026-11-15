@@ -802,6 +802,98 @@ final class ProvidentFundService
     }
 
     /**
+     * Everything the fund's overview page asks for, in one round trip.
+     *
+     * The desk is a hub: four figures at the top, the contribution trend, what is waiting for a
+     * decision, and whether the books agree. Three of those are already service methods; this
+     * composes them so the page opens in one query set rather than six sequential ones.
+     */
+    public function dashboard(int $months = 12): array
+    {
+        $summary = $this->fundSummary();
+        $cash = $this->cashPosition();
+
+        return [
+            'summary' => $summary,
+            'cash' => $cash,
+            'trend' => $this->contributionTrend($months),
+            'recent_withdrawals' => $this->recentWithdrawals(5),
+            'periods' => $this->accrualCandidates(6),
+            'drift_count' => count($this->reconcile()),
+            'composition' => [
+                'employee' => $summary['employee_side'],
+                'employer' => $summary['employer_side'],
+                'paid_out' => $cash['paid_out'],
+                'outstanding' => $cash['outstanding'],
+            ],
+        ];
+    }
+
+    /**
+     * The contribution trend, oldest first — the order a chart is read in.
+     *
+     * `monthlyActivity()` is newest-first because a treasurer reads a table from the top; a chart is
+     * the opposite, so the series is reversed here rather than making every caller remember which
+     * end is which. Months with nothing posted are present with zeroes, so a gap in the fund reads as
+     * a gap in the chart instead of silently collapsing the axis.
+     */
+    public function contributionTrend(int $months = 12): array
+    {
+        $rows = collect($this->monthlyActivity($months))->keyBy('period');
+
+        $latest = PfLedger::query()->whereNotNull('contribution_month')->max('contribution_month');
+
+        if ($latest === null) {
+            return [];
+        }
+
+        [$year, $month] = array_map('intval', explode('-', $latest));
+        $series = [];
+
+        for ($i = $months - 1; $i >= 0; $i--) {
+            $cursor = \Carbon\Carbon::create($year, $month, 1)->subMonthsNoOverflow($i);
+            $period = $cursor->format('Y-m');
+            $row = $rows->get($period);
+
+            $series[] = [
+                'period' => $period,
+                'label' => $cursor->format('M'),
+                'label_long' => $cursor->format('M Y'),
+                'employee_side' => round((float) ($row['employee_side'] ?? 0), 2),
+                'employer_side' => round((float) ($row['employer_side'] ?? 0), 2),
+                'total' => round((float) ($row['total'] ?? 0), 2),
+                'members' => (int) ($row['members'] ?? 0),
+            ];
+        }
+
+        return $series;
+    }
+
+    /** The most recent requests, with the member's name attached — a dashboard table needs one row per person. */
+    public function recentWithdrawals(int $limit = 5): array
+    {
+        return PfWithdrawal::query()
+            ->select(['id', 'pf_account_id', 'employee_id', 'type', 'requested_amount', 'approved_amount', 'reason', 'status', 'created_at'])
+            ->with(['account:id,employee_id,employee_name'])
+            ->latest('id')
+            ->limit($limit)
+            ->get()
+            ->map(fn (PfWithdrawal $row): array => [
+                'id' => $row->id,
+                'account_id' => $row->pf_account_id,
+                'employee_id' => $row->employee_id,
+                'employee_name' => $row->account?->employee_name,
+                'type' => $row->type,
+                'requested_amount' => round((float) $row->requested_amount, 2),
+                'approved_amount' => $row->approved_amount === null ? null : round((float) $row->approved_amount, 2),
+                'reason' => $row->reason,
+                'status' => $row->status,
+                'created_at' => $row->created_at?->toDateString(),
+            ])
+            ->all();
+    }
+
+    /**
      * Prove the cached balances against the ledger.
      *
      * Returns the accounts that disagree. An empty list is the only acceptable answer, and it is the

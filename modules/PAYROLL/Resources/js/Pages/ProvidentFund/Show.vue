@@ -207,14 +207,14 @@ function print(): void {
 </script>
 
 <template>
-  <AdminLayout :breadcrumbs="[{ title: 'Payroll' }, { title: 'Provident Fund', href: route('payroll.pf.index') }, { title: account.employee_name || account.employee_id }]">
+  <AdminLayout :breadcrumbs="[{ title: 'Payroll' }, { title: 'Provident Fund', href: route('payroll.pf.dashboard') }, { title: 'Members', href: route('payroll.pf.members') }, { title: account.employee_name || account.employee_id }]">
     <Head :title="`PF statement — ${account.employee_name || account.employee_id}`" />
 
     <header class="border-b pb-4">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0">
-          <button type="button" class="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" @click="router.visit(route('payroll.pf.index'))">
-            <ArrowLeft class="size-3" />Provident fund register
+          <button type="button" class="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" @click="router.visit(route('payroll.pf.members'))">
+            <ArrowLeft class="size-3" />Member register
           </button>
           <h1 class="text-lg font-semibold leading-tight tracking-tight">{{ account.employee_name || account.employee_id }}</h1>
           <p class="mt-0.5 text-[12.5px] text-muted-foreground">

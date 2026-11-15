@@ -18,16 +18,44 @@ use Modules\PAYROLL\Models\PayrollSalarySheet;
 use Modules\PAYROLL\Services\ProvidentFundService;
 
 /**
- * The provident-fund desk.
+ * The provident-fund module.
  *
- * Three screens, because a fund is three questions: what does the fund owe (summary + monthly
- * activity), who is in it (the account register), and what is leaving it (withdrawals). They were
- * one 31-line page before, which is why the fund looked broken — there was nowhere for the numbers
- * to be seen even once they were correct.
+ * Five screens, because a fund is five questions asked by five different people:
+ *
+ *   1. **Overview** — what does the fund owe, what does it hold, and is anything waiting on me?
+ *   2. **Contribution register** — what happened each payroll month, and can I accrue or settle it?
+ *   3. **Members** — who is in the fund and what does each hold?
+ *   4. **Member statement** — one person's passbook, entry by entry.
+ *   5. **Withdrawals** — what is leaving the fund, and has the money actually moved?
+ *
+ * They were one 31-line page before, which is why the fund looked broken: there was nowhere for the
+ * numbers to be seen even once they were correct. Cramming them back onto one screen would repeat
+ * that mistake in the opposite direction — a fund desk is a place to work, not a poster.
  */
 final class ProvidentFundController extends Controller
 {
-    public function index(Request $request, ProvidentFundService $pf, EmployeePayrollDataProviderInterface $employees): Response
+    /** The fund desk: four figures, the trend, and what needs a decision. */
+    public function dashboard(Request $request, ProvidentFundService $pf): Response
+    {
+        return Inertia::render('PAYROLL::ProvidentFund/Dashboard', array_merge($pf->dashboard(12), [
+            'canManage' => (bool) $request->user()?->can('payroll.pf.manage'),
+        ]));
+    }
+
+    /** The contribution register: one line per payroll month, plus its accrual and settlement state. */
+    public function index(Request $request, ProvidentFundService $pf): Response
+    {
+        return Inertia::render('PAYROLL::ProvidentFund/Index', [
+            'summary' => $pf->fundSummary(),
+            'cash' => $pf->cashPosition(),
+            'periods' => $pf->accrualCandidates(24),
+            'activity' => $pf->monthlyActivity(24),
+            'canManage' => (bool) $request->user()?->can('payroll.pf.manage'),
+        ]);
+    }
+
+    /** The member register: every account, what it holds, and how to enrol the rest. */
+    public function members(Request $request, ProvidentFundService $pf, EmployeePayrollDataProviderInterface $employees): Response
     {
         $dt = DataTableQuery::fromRequest(
             $request,
@@ -37,13 +65,9 @@ final class ProvidentFundController extends Controller
             defaultDirection: 'asc',
         );
 
-        return Inertia::render('PAYROLL::ProvidentFund/Index', [
+        return Inertia::render('PAYROLL::ProvidentFund/Members', [
             'accounts' => PaginatedResource::from($pf->accounts($dt)),
             'summary' => $pf->fundSummary(),
-            'cash' => $pf->cashPosition(),
-            'activity' => $pf->monthlyActivity(12),
-            'periods' => $pf->accrualCandidates(12),
-            'reconciliation' => $pf->reconcile(),
             'policies' => $pf->policies(),
             'employeeOptions' => $employees->employeeOptions(null, 200),
             'canManage' => (bool) $request->user()?->can('payroll.pf.manage'),
