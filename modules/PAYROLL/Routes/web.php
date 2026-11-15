@@ -32,6 +32,7 @@ Route::middleware(['web', 'auth'])->prefix('payroll')->name('payroll.')->group(f
     Route::get('cutlists', [PayrollCutlistController::class, 'index'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.index');
     Route::post('cutlists/generate', [PayrollCutlistController::class, 'generate'])->middleware(PermissionMiddleware::class.':payroll.sheets.manage')->name('cutlists.generate');
     Route::get('cutlists/{cutlist}', [PayrollCutlistController::class, 'show'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.show');
+    Route::get('cutlists/{cutlist}/sign-off', [PayrollCutlistController::class, 'signOff'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.sign-off');
     Route::post('cutlists/{cutlist}/approve', [PayrollCutlistController::class, 'approve'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.approve');
     Route::post('cutlists/{cutlist}/reopen', [PayrollCutlistController::class, 'reopen'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.reopen');
     Route::patch('cutlists/{cutlist}/items/{item}', [PayrollCutlistController::class, 'updateItem'])->middleware(EnsureCutlistReviewer::class)->name('cutlists.items.update');

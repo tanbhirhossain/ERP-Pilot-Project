@@ -19,6 +19,7 @@ use Modules\PAYROLL\Models\PayrollCutlistItem;
 use Modules\PAYROLL\Models\PayrollSalarySheet;
 use Modules\PAYROLL\Models\PayrollSetting;
 use Modules\PAYROLL\Models\PayrollSlip;
+use Modules\PAYROLL\Services\PayrollCutlistWorkspaceService;
 
 /**
  * The cutlist is the salary sheet's review twin: exactly the employee-level rows the salary calculation will
@@ -32,7 +33,7 @@ final class PayrollCutlistController extends Controller
     /** Reviewer-adjustable amounts; each maps 1:1 to a column the calculation engine reads from the cutlist item. */
     private const ADJUSTABLE = ['unpaid_leave_deduction', 'late_penalty_deduction', 'missing_punch_deduction', 'overtime_pay', 'extra_duty_pay'];
 
-    public function index(Request $request): Response
+    public function index(Request $request, PayrollCutlistWorkspaceService $workspace): Response
     {
         $cutlists = PayrollCutlist::query()
             ->withCount('items')
@@ -66,9 +67,11 @@ final class PayrollCutlistController extends Controller
 
         return Inertia::render('PAYROLL::Cutlists/Index', [
             'cutlists' => PaginatedResource::from($rows),
+            'workspace' => $workspace->overview(),
             'defaultYear' => (int) now()->format('Y'),
             'defaultMonth' => (int) now()->format('n'),
             'reviewRequired' => (bool) (PayrollSetting::query()->first()?->cutlist_review_required ?? false),
+            'canGenerate' => (bool) $request->user()?->can('payroll.sheets.manage'),
         ]);
     }
 
@@ -101,11 +104,25 @@ final class PayrollCutlistController extends Controller
         return back()->with('success', 'Attendance salary cutlist generated from HRM for '.$cutlist->items()->count().' employees. Review the rows, adjust anything that is wrong, then approve.');
     }
 
-    public function show(Request $request, PayrollCutlist $cutlist): Response
+    public function show(Request $request, PayrollCutlist $cutlist, PayrollCutlistWorkspaceService $workspace): Response
     {
         $allowedSorts = ['employee_name', 'employee_id', 'unpaid_leave_days', 'punishment_days', 'overtime_pay', 'extra_duty_pay'];
         $dt = DataTableQuery::fromRequest($request, $allowedSorts, [], 'employee_name', 'asc');
         $query = PayrollCutlistItem::query()->where('payroll_cutlist_id', $cutlist->id);
+
+        /*
+         * A reviewer does not work through 981 rows alphabetically; they work through the ones where
+         * something moves. The segment narrows the table to those rows, and `totals` below still
+         * reports the whole month so the narrowed view cannot be mistaken for the whole payroll.
+         */
+        $segment = $request->string('segment')->toString() ?: 'all';
+        $query->when($segment === 'money', fn ($q) => $q->where(fn ($w) => $w
+            ->where('unpaid_leave_deduction', '>', 0)->orWhere('late_penalty_deduction', '>', 0)
+            ->orWhere('missing_punch_deduction', '>', 0)->orWhere('overtime_pay', '>', 0)->orWhere('extra_duty_pay', '>', 0)))
+            ->when($segment === 'flagged', fn ($q) => $q->where('punishment_days', '>', 0)->where('punishable', 0)
+                ->where(fn ($w) => $w->where('late_penalty_deduction', 0)->orWhereNull('late_penalty_deduction')))
+            ->when($segment === 'adjusted', fn ($q) => $q->whereNotNull('source_breakdown')
+                ->whereRaw('CAST(source_breakdown AS TEXT) LIKE ?', ['%"review"%']));
         if ($dt->search !== null && trim($dt->search) !== '') {
             $needle = '%'.addcslashes(trim($dt->search), '%_').'%';
             $query->where(fn ($q) => $q->where('employee_id', 'like', $needle)->orWhere('employee_name', 'like', $needle));
@@ -118,12 +135,52 @@ final class PayrollCutlistController extends Controller
             && (PayrollSalarySheet::query()->whereIn('id', $sheetIds)->whereIn('status', ['queued', 'processing', 'ready', 'released'])->exists()
                 || PayrollSlip::query()->whereIn('salary_sheet_id', $sheetIds)->exists());
 
+        /*
+         * Every row carries its own explanation. The reason a number is zero is already stored in
+         * `source_breakdown` on the item — the old screen offered it as raw JSON in a <pre> tag,
+         * which is technically "available" and practically unreadable.
+         */
+        $items->through(fn (PayrollCutlistItem $item): array => array_merge($item->toArray(), [
+            'explanation' => $workspace->explain($item),
+        ]));
+
+        $context = $workspace->context($cutlist->id);
+
         return Inertia::render('PAYROLL::Cutlists/Show', [
             'cutlist' => $cutlist,
             'items' => PaginatedResource::from($items),
+            'context' => $context,
+            'readiness' => $workspace->readiness($cutlist->id),
+            'segment' => $segment,
+            // Month totals, not page totals: a filtered table must not look like a smaller payroll.
+            'totals' => [
+                'deductions' => $context['aggregate']['deductions'],
+                'earnings' => $context['aggregate']['earnings'],
+                'penalty' => $context['aggregate']['penalty'],
+                'rows' => $context['aggregate']['items'],
+            ],
             'editable' => $cutlist->status === 'generated' && ! $consumed,
             'consumedBySheet' => $consumed,
             'reviewRequired' => (bool) (PayrollSetting::query()->first()?->cutlist_review_required ?? false),
+        ]);
+    }
+
+    /**
+     * The sign-off desk.
+     *
+     * Approving a cutlist is the moment a proposal becomes what payroll is allowed to pay, and the
+     * old screen offered it as a button in a table row beside a link called "Review". This page is
+     * what that link should have led to: the checklist, what the sign-off covers, and the trail of
+     * every adjustment already made to it.
+     */
+    public function signOff(Request $request, PayrollCutlist $cutlist, PayrollCutlistWorkspaceService $workspace): Response
+    {
+        return Inertia::render('PAYROLL::Cutlists/SignOff', [
+            'cutlist' => $cutlist,
+            'context' => $workspace->context($cutlist->id),
+            'readiness' => $workspace->readiness($cutlist->id),
+            'adjustments' => $workspace->recentAdjustments($cutlist->id),
+            'canReview' => (bool) $request->user()?->can('payroll.cutlists.review') || (bool) $request->user()?->can('payroll.sheets.manage'),
         ]);
     }
 

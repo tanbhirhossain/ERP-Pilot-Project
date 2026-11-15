@@ -222,7 +222,9 @@ test('the scanner is looking at the application it claims to describe', function
     // 443 since P16: the salary-sheet module became five screens (overview, sheet, departments,
     // release desk, new run) replacing a list and a stub. Three net new files: ModuleNav,
     // Departments and Release — the old Index and Show were rewritten in place.
-    expect($files)->toHaveCount(443, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
+    // 445 since P17: the cutlist became three screens (periods, proposal rows, sign-off desk) instead
+    // of a list and a sixteen-column table. Two net new files: ModuleNav and SignOff.
+    expect($files)->toHaveCount(445, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
         ->and($files)->toContain(PC_LAYOUT);
 
     $withStyle = array_filter($files, static fn (string $path): bool => pcStyleBlocks(pcRead($path)) !== []);

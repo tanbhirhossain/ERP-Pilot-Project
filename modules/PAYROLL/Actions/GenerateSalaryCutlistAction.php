@@ -49,9 +49,20 @@ final class GenerateSalaryCutlistAction
             throw new \RuntimeException('This salary cutlist has been locked.');
         }
         // A recalculation is a full period rebuild; remove rows for employees who are no longer eligible.
+        //
+        // The approval is cleared with the rows, and that is not bookkeeping: a rebuild replaces every
+        // figure the sign-off attested to. Leaving `approved_at` behind produced a cutlist whose status
+        // said "generated" while its header still read "approved 2026-11-15" — a month that appeared
+        // signed off by a reviewer who had never seen the rows now on screen.
         DB::transaction(function () use ($cutlist): void {
             $cutlist->items()->delete();
-            $cutlist->update(['status' => 'draft', 'generated_at' => null]);
+            $cutlist->update([
+                'status' => 'draft',
+                'generated_at' => null,
+                'approved_at' => null,
+                'approved_by' => null,
+                'approval_note' => null,
+            ]);
         });
 
         $employees = $employeeSnapshot !== null
