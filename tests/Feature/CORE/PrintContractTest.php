@@ -224,7 +224,11 @@ test('the scanner is looking at the application it claims to describe', function
     // Departments and Release — the old Index and Show were rewritten in place.
     // 445 since P17: the cutlist became three screens (periods, proposal rows, sign-off desk) instead
     // of a list and a sixteen-column table. Two net new files: ModuleNav and SignOff.
-    expect($files)->toHaveCount(445, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
+    // 453 since P18: leave became seven screens (desk, requests, approvals, apply, balances, types &
+    // policy, year-end, reports) instead of ten small pages. Eight net new files under
+    // Pages/Leave: ModuleNav, Desk, Requests, Approvals, Apply, Balances, Types, TypeForm, YearEnd,
+    // EncashPreview, Reports — eleven written, of which three replace pages kept in place (Show).
+    expect($files)->toHaveCount(458, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
         ->and($files)->toContain(PC_LAYOUT);
 
     $withStyle = array_filter($files, static fn (string $path): bool => pcStyleBlocks(pcRead($path)) !== []);
@@ -364,7 +368,10 @@ test('every page prints through the engine, and nothing calls window.print() dir
     // 27 since P16: the department breakdown prints through the engine. A cost-centre schedule is
     // signed by whoever approves the month, so it goes to paper as a working paper rather than being
     // screenshotted — the same reason the advance schedule and fund register do.
-    expect($callers)->toHaveCount(27, 'the set of pages that print through the engine changed; re-measure and say why');
+    // 31 since P18: three leave surfaces print — the application slip (one person's record, signed by
+    // the approver), the balance register (an HR working paper) and the annual leave report (an
+    // appendix to the year's HR review). All three are read off paper in meetings, not off a screen.
+    expect($callers)->toHaveCount(31, 'the set of pages that print through the engine changed; re-measure and say why');
 
     // With DataTable migrated, nothing in the component tree calls the browser directly any more.
     foreach (pcVueFiles() as $path) {

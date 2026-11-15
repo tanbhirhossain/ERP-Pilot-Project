@@ -12,23 +12,46 @@ export function formatCompact(value: number | null | undefined): string {
     );
 }
 
-export function formatDate(value: string | null | undefined, withTime = false): string {
+/**
+ * A timestamp renders at 115px in a list column and at ~160px in a detail grid; the same string used
+ * for both wraps in the narrow one and reads as two facts ("14 Nov 2026" / "03:33 pm") in the wide
+ * one. `width` lets the caller say which it is, instead of every caller hard-coding a fixed format.
+ */
+export function formatDate(
+    value: string | null | undefined,
+    withTime = false,
+    width: 'short' | 'long' = 'long',
+): string {
     if (!value) return '—';
 
     const date = new Date(value);
 
     if (Number.isNaN(date.getTime())) return value;
 
-    return date.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        ...(withTime ? { hour: '2-digit', minute: '2-digit', hour12: true } : {}),
-    });
+    // A very old calendar date (a joining date, a holiday) has no meaningful time: midnight reads as
+    // a fabricated fact, so it is dropped rather than printed.
+    const midnight = date.getHours() === 0 && date.getMinutes() === 0;
+
+    if (width === 'short') {
+        return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    if (withTime && !midnight) {
+        return date.toLocaleString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+        });
+    }
+
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export function formatDateTime(value: string | null | undefined): string {
-    return formatDate(value, true);
+export function formatDateTime(value: string | null | undefined, width: 'short' | 'long' = 'long'): string {
+    return formatDate(value, true, width);
 }
 
 const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [

@@ -143,8 +143,13 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->name('hrm.')->group(function 
     Route::delete('leave-types/{leave_type}', [LeaveTypeController::class, 'destroy'])->middleware(PermissionMiddleware::class.':hrm.leave-types.manage')->name('leave-types.destroy');
 
     // Leave Requests
+    // P18: the module is a desk, a list, an approval queue, the register, and the application form —
+    // separate pages for separate jobs, in place of one screen with counters on top of a table.
     Route::get('leaves/balances', [LeaveRequestController::class, 'balances'])->middleware(PermissionMiddleware::class.':hrm.leaves.balance.view')->name('leaves.balances');
     Route::get('leaves/balance', [LeaveRequestController::class, 'balance'])->middleware(PermissionMiddleware::class.':hrm.leaves.view')->name('leaves.balance');
+    Route::get('leaves/requests', [LeaveRequestController::class, 'requests'])->middleware(PermissionMiddleware::class.':hrm.leaves.view')->name('leaves.requests');
+    Route::get('leaves/reports', [LeaveRequestController::class, 'reports'])->middleware(PermissionMiddleware::class.':hrm.leaves.view')->name('leaves.reports');
+    Route::get('leaves/approvals', [LeaveRequestController::class, 'approvals'])->middleware(PermissionMiddleware::class.':hrm.leaves.approve')->name('leaves.approvals');
     Route::get('leaves', [LeaveRequestController::class, 'index'])->middleware(PermissionMiddleware::class.':hrm.leaves.view')->name('leaves.index');
     Route::get('leaves/create', [LeaveRequestController::class, 'create'])->middleware(PermissionMiddleware::class.':hrm.leaves.view')->name('leaves.create');
     Route::post('leaves', [LeaveRequestController::class, 'store'])->middleware(PermissionMiddleware::class.':hrm.leaves.manage')->name('leaves.store');
@@ -282,8 +287,8 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->name('hrm.')->group(function 
 
     // ── Leave Year-End (carry-forward / encashment) ────────────────
     Route::get('leave-year-end', [LeaveYearEndController::class, 'index'])->middleware(PermissionMiddleware::class.':hrm.leave-year-end.view')->name('leave-year-end.index');
-    Route::post('leave-year-end/settings', [LeaveYearEndController::class, 'updateSettings'])->middleware(PermissionMiddleware::class.':hrm.leave-year-end.manage')->name('leave-year-end.settings');
     Route::post('leave-year-end/close', [LeaveYearEndController::class, 'closeYear'])->middleware(PermissionMiddleware::class.':hrm.leave-year-end.manage')->name('leave-year-end.close');
+    Route::post('leave-year-end/reopen', [LeaveYearEndController::class, 'reopenYear'])->middleware(PermissionMiddleware::class.':hrm.leave-year-end.manage')->name('leave-year-end.reopen');
     Route::get('leave-year-end/encash-preview', [LeaveYearEndController::class, 'encashPreview'])->middleware(PermissionMiddleware::class.':hrm.leave-year-end.view')->name('leave-year-end.encash-preview');
 
     // ── HR Reports & Analytics (H-P1-7) ──────────────────────────────

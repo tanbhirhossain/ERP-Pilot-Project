@@ -4,6 +4,7 @@ namespace Modules\HRM\Models\Leave;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
@@ -16,6 +17,11 @@ class LeaveType extends Model
     protected $guarded = [];
 
     protected $casts = ['days_per_year' => 'integer', 'is_paid' => 'boolean', 'is_active' => 'boolean'];
+
+    public function setting(): HasOne
+    {
+        return $this->hasOne(LeaveTypeSetting::class);
+    }
 
     public function getActivitylogOptions(): LogOptions
     {

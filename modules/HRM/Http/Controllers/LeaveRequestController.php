@@ -15,114 +15,192 @@ use Modules\HRM\Models\Leave\LeaveRequest;
 use Modules\HRM\Models\Leave\LeaveType;
 use Modules\HRM\Requests\StoreLeaveRequestRequest;
 use Modules\HRM\Services\EmployeeService;
+use Modules\HRM\Services\LeaveBalanceService;
 use Modules\HRM\Services\LeaveRequestService;
 use Modules\HRM\Services\LeaveTypeService;
+use Modules\HRM\Services\LeaveWorkspaceService;
 
+/**
+ * Leave: the desk, the request list, the detail page and the approval actions.
+ *
+ * The module used to be one screen with four coloured counters on top of a table, and the approval
+ * decision was two buttons inside a table row. The three jobs — "what needs a decision", "find an
+ * application", "decide on this one" — now have their own pages, and the detail page shows what the
+ * decision costs the employee's balance before it is taken.
+ */
 class LeaveRequestController extends Controller
 {
-    public function __construct(private readonly LeaveRequestService $svc, private readonly LeaveTypeService $types, private readonly EmployeeService $employees) {}
+    public function __construct(
+        private readonly LeaveRequestService $svc,
+        private readonly LeaveTypeService $types,
+        private readonly EmployeeService $employees,
+        private readonly LeaveWorkspaceService $workspace,
+        private readonly LeaveBalanceService $balances,
+    ) {}
 
+    /** The Leave Desk — the landing page of the module. */
     public function index(Request $r): Response
+    {
+        $year = (int) ($r->integer('year') ?: now()->format('Y'));
+
+        return Inertia::render('HRM::Leave/Desk', [
+            'overview' => $this->workspace->overview($year),
+            'decisions' => $this->workspace->recentDecisions(10),
+            'canApprove' => (bool) auth()->user()?->can('hrm.leaves.approve'),
+        ]);
+    }
+
+    /** The searchable list of applications. */
+    public function requests(Request $r): Response
     {
         $dt = DataTableQuery::fromRequest(
             $r,
-            ['id', 'from_date', 'created_at'],
+            ['id', 'from_date', 'created_at', 'days', 'status'],
             ['status', 'employee_id', 'leave_type_id', 'department_id', 'designation_id'],
         );
         $page = $this->svc->paginate($dt);
-        $mapped = $page->through(fn (LeaveRequest $leave) => [
-            'id' => $leave->id,
-            'employee_id' => $leave->employee_id,
-            'employee' => $leave->employee?->full_name ?? $leave->employee_id,
-            'leave_type' => $leave->leaveType?->name,
-            'leave_type_color' => $leave->leaveType?->color,
-            'code' => $leave->leaveType?->code,
-            'from_date' => $leave->from_date?->toDateString(),
-            'to_date' => $leave->to_date?->toDateString(),
-            'days' => $leave->days,
-            'is_half_day' => $leave->is_half_day,
-            'status' => $leave->status,
-            'created_at' => $leave->created_at?->toIso8601String(),
-        ]);
+        $rows = $page->through(fn (LeaveRequest $leave): array => $this->workspace->requestRow($leave));
 
-        return Inertia::render('HRM::LeaveRequests/Index', [
-            'leaves' => PaginatedResource::from($mapped),
-            'canApprove' => (bool) (auth()->user()?->can('hrm.leaves.approve')),
-            'filterDefs' => [
-                [
-                    'key' => 'department_id',
-                    'label' => 'Department',
-                    'kind' => 'endpoint',
-                    'endpoint' => '/hrm/api/options/departments',
-                    'placeholder' => 'Filter department',
-                ],
-                [
-                    'key' => 'designation_id',
-                    'label' => 'Designation',
-                    'kind' => 'endpoint',
-                    'endpoint' => '/hrm/api/options/designations',
-                    'placeholder' => 'Filter designation',
-                ],
-                [
-                    'key' => 'employee_id',
-                    'label' => 'Employee',
-                    'kind' => 'endpoint',
-                    'endpoint' => '/hrm/api/options/employees',
-                    'placeholder' => 'Search employee…',
-                ],
-                [
-                    'key' => 'status',
-                    'label' => 'Status',
-                    'kind' => 'select',
-                    'options' => [
-                        ['value' => 'Pending', 'label' => 'Pending'],
-                        ['value' => 'Approved', 'label' => 'Approved'],
-                        ['value' => 'Rejected', 'label' => 'Rejected'],
-                    ],
-                    'placeholder' => 'All statuses',
-                ],
-            ],
+        return Inertia::render('HRM::Leave/Requests', [
+            'leaves' => PaginatedResource::from($rows),
+            'canApprove' => (bool) auth()->user()?->can('hrm.leaves.approve'),
+            'filterDefs' => $this->filterDefs(),
         ]);
     }
 
-    public function create(): Response
+    /** Leave liability and usage — the numbers the HR annual report is written from. */
+    public function reports(Request $r): Response
     {
-        return Inertia::render('HRM::LeaveRequests/Create', ['employeeOptions' => $this->employees->options(null, 200), 'leaveTypeOptions' => $this->types->options()]);
+        $year = (int) ($r->integer('year') ?: now()->format('Y'));
+
+        return Inertia::render('HRM::Leave/Reports', [
+            'report' => $this->workspace->report($year),
+            'canExport' => (bool) auth()->user()?->can('hrm.leaves.view'),
+        ]);
     }
 
+    /** The approval desk: every pending application, oldest first. */
+    public function approvals(Request $r): Response
+    {
+        return Inertia::render('HRM::Leave/Approvals', [
+            'queue' => $this->workspace->approvalQueue(),
+            'canApprove' => (bool) auth()->user()?->can('hrm.leaves.approve'),
+        ]);
+    }
+
+    public function create(Request $r): Response
+    {
+        return Inertia::render('HRM::Leave/Apply', [
+            'employeeOptions' => $this->employees->options(null, 200),
+            'leaveTypeOptions' => $this->types->options(),
+            'presetEmployee' => $r->string('employee_id')->toString() ?: null,
+        ]);
+    }
+
+    /**
+     * The balance register.
+     *
+     * The old page was an empty state until you picked one employee. This one opens on everybody —
+     * that is the question an HR desk actually arrives with — and narrows to one person's card.
+     */
     public function balances(Request $r): Response
     {
-        $data = $r->validate(['employee_id' => ['nullable', 'exists:employees,employee_id'], 'year' => ['nullable', 'integer', 'min:2000', 'max:2100']]);
-        $employeeId = $data['employee_id'] ?? null;
+        $data = $r->validate([
+            'employee_id' => ['nullable', 'exists:employees,employee_id'],
+            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            'search' => ['nullable', 'string', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
+        ]);
         $year = (int) ($data['year'] ?? now()->format('Y'));
-        $rows = $employeeId ? LeaveType::where('is_active', true)->orderBy('name')->get()->map(fn ($t) => $this->svc->balance($employeeId, $t->id, $year))->values() : collect();
+        $employeeId = $data['employee_id'] ?? null;
 
-        return Inertia::render('HRM::LeaveRequests/Balances', ['employeeOptions' => $this->employees->options(null, 200), 'employeeId' => $employeeId, 'year' => $year, 'balances' => $rows]);
+        $focused = null;
+        if ($employeeId !== null) {
+            $employee = \Modules\HRM\Models\Employee\Employee::query()
+                ->with(['department:id,name', 'designation:id,name'])
+                ->where('employee_id', $employeeId)
+                ->first();
+
+            $focused = [
+                'employee_id' => $employeeId,
+                'employee' => $employee?->full_name ?: $employeeId,
+                'department' => $employee?->department?->name,
+                'designation' => $employee?->designation?->name,
+                'balances' => $this->balances->balanceForAllTypes($employeeId, $year),
+                'history' => LeaveRequest::query()
+                    ->with('leaveType:id,name,code,color')
+                    ->where('employee_id', $employeeId)
+                    ->whereYear('from_date', $year)
+                    ->orderByDesc('from_date')
+                    ->limit(40)
+                    ->get()
+                    ->map(fn (LeaveRequest $l): array => $this->workspace->requestRow($l))
+                    ->all(),
+            ];
+        }
+
+        return Inertia::render('HRM::Leave/Balances', [
+            'register' => $this->balances->register(
+                $year,
+                $data['search'] ?? null,
+                null,
+                (int) ($data['per_page'] ?? 25),
+                (int) ($data['page'] ?? 1),
+            ),
+            'focused' => $focused,
+            'employeeOptions' => $this->employees->options(null, 200),
+            'year' => $year,
+            'longLeaveThreshold' => LeaveBalanceService::LONG_LEAVE_DAYS,
+        ]);
     }
 
-    public function store(StoreLeaveRequestRequest $req): RedirectResponse
-    {
-        $leave = $this->svc->create($req->validated());
-
-        return redirect()->route('hrm.leaves.show', $leave->id)->with('success', 'Leave application submitted — approval pending. Application slip generated below.');
-    }
-
+    /** Live balance quote for the application form (JSON, called as the dates change). */
     public function balance(Request $r): JsonResponse
     {
-        $data = $r->validate(['employee_id' => ['required', 'exists:employees,employee_id'], 'leave_type_id' => ['required', 'exists:leave_types,id'], 'year' => ['nullable', 'integer', 'min:2000', 'max:2100'], 'from_date' => ['nullable', 'date'], 'to_date' => ['nullable', 'date'], 'is_half_day' => ['nullable', 'boolean'], 'ignore_leave_id' => ['nullable', 'integer', 'exists:leave_requests,id']]);
-        $year = isset($data['year']) ? (int) $data['year'] : (! empty($data['from_date']) ? (int) Carbon::parse($data['from_date'])->year : null);
-        $balance = $this->svc->balance($data['employee_id'], (int) $data['leave_type_id'], $year);
+        $data = $r->validate([
+            'employee_id' => ['required', 'exists:employees,employee_id'],
+            'leave_type_id' => ['required', 'exists:leave_types,id'],
+            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            'from_date' => ['nullable', 'date'],
+            'to_date' => ['nullable', 'date'],
+            'is_half_day' => ['nullable', 'boolean'],
+            'ignore_leave_id' => ['nullable', 'integer', 'exists:leave_requests,id'],
+        ]);
+
+        $year = isset($data['year'])
+            ? (int) $data['year']
+            : (! empty($data['from_date']) ? (int) Carbon::parse($data['from_date'])->year : null);
+
+        $balance = $this->balances->balance($data['employee_id'], (int) $data['leave_type_id'], $year);
+
         if (! empty($data['ignore_leave_id'])) {
-            $old = LeaveRequest::whereKey($data['ignore_leave_id'])->where('employee_id', $data['employee_id'])->where('leave_type_id', $data['leave_type_id'])->where('status', 'Pending')->first();
-            if ($old) {
+            $old = LeaveRequest::query()
+                ->whereKey($data['ignore_leave_id'])
+                ->where('employee_id', $data['employee_id'])
+                ->where('leave_type_id', $data['leave_type_id'])
+                ->where('status', 'Pending')
+                ->first();
+            if ($old !== null) {
                 $balance['available'] += (float) $old->days;
                 $balance['pending'] = max(0, (float) $balance['pending'] - (float) $old->days);
             }
-        } if (! empty($data['from_date']) && ! empty($data['to_date'])) {
+        }
+
+        if (! empty($data['from_date']) && ! empty($data['to_date'])) {
             try {
-                $days = $this->svc->estimateDays($data['employee_id'], (int) $data['leave_type_id'], $data['from_date'], $data['to_date'], (bool) ($data['is_half_day'] ?? false));
-                $balance['requested_days'] = $days;
-                $balance['available_after_request'] = round(max(0, $balance['available'] - $days), 2);
+                $preview = $this->balances->previewDays(
+                    $data['employee_id'],
+                    (int) $data['leave_type_id'],
+                    $data['from_date'],
+                    $data['to_date'],
+                    (bool) ($data['is_half_day'] ?? false),
+                );
+                $balance['requested_days'] = $preview['days'];
+                $balance['chargeable'] = $preview['chargeable'];
+                $balance['excluded'] = $preview['excluded'];
+                $balance['dates'] = $preview['dates'];
+                $balance['available_after_request'] = round($balance['available'] - $preview['days'], 2);
             } catch (\Throwable $e) {
                 $balance['quote_error'] = $e->getMessage();
             }
@@ -131,37 +209,22 @@ class LeaveRequestController extends Controller
         return response()->json($balance);
     }
 
+    public function store(StoreLeaveRequestRequest $req): RedirectResponse
+    {
+        $leave = $this->svc->create($req->validated());
+
+        return redirect()->route('hrm.leaves.show', $leave->id)
+            ->with('success', "Leave application #{$leave->id} submitted for {$leave->days} day(s). It is pending approval.");
+    }
+
     public function show(LeaveRequest $leave): Response
     {
         $request = $this->svc->findOrFail($leave->id);
 
-        return Inertia::render('HRM::LeaveRequests/Show', [
-            'canApprove' => (bool) (auth()->user()?->can('hrm.leaves.approve')),
-            'leave' => [
-                'id' => $request->id,
-                'employee_id' => $request->employee_id,
-                'employee' => $request->employee?->full_name,
-                'leave_type' => $request->leaveType?->name,
-                'leave_type_id' => $request->leave_type_id,
-                'from_date' => $request->from_date?->toDateString(),
-                'to_date' => $request->to_date?->toDateString(),
-                'days' => $request->days,
-                'is_half_day' => $request->is_half_day,
-                'reason' => $request->reason,
-                'status' => $request->status,
-                'approver' => $request->approver?->name,
-                'approved_at' => $request->approved_at?->toIso8601String(),
-                'created_at' => $request->created_at?->toIso8601String(),
-                'approval_history' => $this->svc->approvalHistory($request->id),
-                'next_approval_stage' => $request->status === 'Pending'
-                    ? $this->svc->nextApprovalStage($request)
-                    : null,
-                'leave_balance' => $this->svc->balance(
-                    $request->employee_id,
-                    (int) $request->leave_type_id,
-                    (int) $request->from_date->format('Y'),
-                ),
-            ],
+        return Inertia::render('HRM::Leave/Show', [
+            'detail' => $this->workspace->requestDetail($request),
+            'canApprove' => (bool) auth()->user()?->can('hrm.leaves.approve'),
+            'canManage' => (bool) auth()->user()?->can('hrm.leaves.manage'),
         ]);
     }
 
@@ -169,10 +232,10 @@ class LeaveRequestController extends Controller
     {
         $request = $this->svc->findOrFail($leave->id);
 
-        return Inertia::render('HRM::LeaveRequests/Create', [
+        return Inertia::render('HRM::Leave/Apply', [
             'employeeOptions' => $this->employees->options(null, 200),
             'leaveTypeOptions' => $this->types->options(),
-            'canApprove' => (bool) (auth()->user()?->can('hrm.leaves.approve')),
+            'presetEmployee' => $request->employee_id,
             'leave' => [
                 'id' => $request->id,
                 'employee_id' => $request->employee_id,
@@ -190,38 +253,59 @@ class LeaveRequestController extends Controller
     {
         $this->svc->update($leave, $req->validated());
 
-        return redirect()->route('hrm.leaves.index')->with('success', 'Leave updated');
+        return redirect()->route('hrm.leaves.show', $leave->id)->with('success', 'Leave application updated. It is still pending approval.');
     }
 
-    public function approve(LeaveRequest $leave): RedirectResponse
+    public function approve(Request $r, LeaveRequest $leave): RedirectResponse
     {
         abort_unless(auth()->user()?->can('hrm.leaves.approve'), 403);
+        $data = $r->validate(['comments' => ['nullable', 'string', 'max:1000']]);
+
         try {
             $result = $this->svc->approve($leave);
-
-            return back()->with('success', $result->status === 'Approved' ? 'Leave fully approved' : 'Approval stage completed; request remains pending for the next stage.');
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
+
+        return back()->with('success', $result->status === 'Approved'
+            ? "Approved: {$result->days} day(s) for {$result->employee_id}. The attendance calendar now shows the leave."
+            : 'Approval stage recorded. The application is still pending the next stage.');
     }
 
     public function reject(Request $r, LeaveRequest $leave): RedirectResponse
     {
         abort_unless(auth()->user()?->can('hrm.leaves.approve'), 403);
-        $data = $r->validate(['comments' => ['nullable', 'string', 'max:1000']]);
-        try {
-            $this->svc->reject($leave, $data['comments'] ?? null);
+        // A rejection without a reason is not an auditable HR decision.
+        $data = $r->validate(['comments' => ['required', 'string', 'min:3', 'max:1000']]);
 
-            return back()->with('success', 'Leave rejected');
+        try {
+            $this->svc->reject($leave, $data['comments']);
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
+
+        return back()->with('success', 'Application rejected and the reason is recorded on its trail. Any attendance days it had marked were released.');
     }
 
     public function destroy(LeaveRequest $leave): RedirectResponse
     {
         $this->svc->delete($leave);
 
-        return back()->with('success', 'Leave removed');
+        return back()->with('success', 'Leave application removed. Any attendance days it had marked were released.');
+    }
+
+    private function filterDefs(): array
+    {
+        return [
+            ['key' => 'department_id', 'label' => 'Department', 'kind' => 'endpoint', 'endpoint' => '/hrm/api/options/departments', 'placeholder' => 'Filter department'],
+            ['key' => 'designation_id', 'label' => 'Designation', 'kind' => 'endpoint', 'endpoint' => '/hrm/api/options/designations', 'placeholder' => 'Filter designation'],
+            ['key' => 'employee_id', 'label' => 'Employee', 'kind' => 'endpoint', 'endpoint' => '/hrm/api/options/employees', 'placeholder' => 'Search employee…'],
+            ['key' => 'leave_type_id', 'label' => 'Leave type', 'kind' => 'select', 'placeholder' => 'All types', 'options' => LeaveType::query()->orderBy('name')->get()->map(fn (LeaveType $t): array => ['value' => (string) $t->id, 'label' => $t->name])->all()],
+            ['key' => 'status', 'label' => 'Status', 'kind' => 'select', 'placeholder' => 'All statuses', 'options' => [
+                ['value' => 'Pending', 'label' => 'Pending'],
+                ['value' => 'Approved', 'label' => 'Approved'],
+                ['value' => 'Rejected', 'label' => 'Rejected'],
+            ]],
+        ];
     }
 }

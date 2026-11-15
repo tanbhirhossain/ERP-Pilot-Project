@@ -230,6 +230,11 @@ test('the model scan recurses into subdirectories and finds the models it should
     // columns below; the two that do not (`PurchaseRfq`, `PurchaseRfqLine`) store no money at all — a
     // round has one total per vendor, not one total, and its lines only ask for a quantity. Every decimal
     // on those seven tables is `decimal:2` cast regardless, quantities included.
+    // 181 since P18: `AttendanceDailyLeaveMark` joins the scan. It owns no money column at all — a
+    // mark row is `duty_date`, `half_day` and the status it replaced — and it is counted here only
+    // because this census counts models that own a live table. That is the point of the census: the
+    // day it *does* grow a money column, the cast rule already applies to it. `half_day` is a boolean
+    // and `previous_status` is a word, so nothing on the row needs a decimal cast.
     // 180 since P12: `PfWithdrawal` joins the scan. It owns four money columns — requested and
     // approved amount, plus the two account balances it reports on — so unlike the SSO identity it
     // *must* be poisha-canonical, which is why the census moves with it.
@@ -237,7 +242,7 @@ test('the model scan recurses into subdirectories and finds the models it should
     // records which external subject may sign in as whom, and a "quota" or "credit limit" column added to
     // it later would be the kind of thing that silently stops being poisha-canonical because nobody wrote a
     // cast for a model nobody thought about.
-    expect($models)->toHaveCount(180)
+    expect($models)->toHaveCount(181)
         ->and($models)->toHaveKey('sales_invoices')
         ->and($models)->toHaveKey('acc_journals')
         ->and($models['sales_invoices']['class'])->toBe('Invoice');
