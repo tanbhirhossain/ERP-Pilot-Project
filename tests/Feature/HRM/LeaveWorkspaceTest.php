@@ -104,6 +104,16 @@ beforeEach(function (): void {
     \Illuminate\Support\Facades\Gate::before(fn () => true);
 });
 
+/*
+ * The suite runs against the application database, and `lvEmployee()` writes real rows into
+ * `employees`. Two of them (first_name "x", no department, no joining date) were sitting in the
+ * employee directory months after the test that made them, because nothing removed them and the
+ * test's own employee ids did not collide with the seeded ones. Clean up by the probe prefix.
+ */
+afterEach(function (): void {
+    Employee::query()->where('employee_id', 'like', 'E-%')->forceDelete();
+});
+
 /* ------------------------------- B1: carry forward -------------------------------- */
 
 it('adds the days a closed previous year carried into this year', function (): void {

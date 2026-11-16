@@ -31,9 +31,22 @@ class EmployeeController extends Controller
         return Inertia::render('HRM::Employees/Index', [
             'employees' => PaginatedResource::from($this->svc->paginate($dt)->through(fn (Employee $e) => [
                 'id' => $e->id, 'employee_id' => $e->employee_id, 'biometric_id' => $e->biometric_id, 'full_name' => $e->full_name ?? trim($e->first_name.' '.$e->last_name), 'email' => $e->email, 'phone' => $e->phone, 'department' => $e->department ? ['id' => $e->department->id, 'name' => $e->department->name] : null, 'designation' => $e->designation ? ['id' => $e->designation->id, 'name' => $e->designation->name] : null, 'employment_type' => $e->employment_type, 'status' => $e->status, 'joining_date' => $e->joining_date?->toDateString(), 'created_at' => $e->created_at?->toIso8601String(),
+                // Who can sign in as this person. Self-service (My HR, my payslips, my leave) reads
+                // employees.user_id, so an unlinked employee sees only an "ask HR to link me" card.
+                'user_id' => $e->user_id,
+                'user_name' => $e->user?->name,
             ])),
             'departmentOptions' => $this->dept->options(null, 200),
             'designationOptions' => $this->desig->options(null, 200),
+            /*
+             * Self-service coverage. Without a number here an administrator has no way to learn that
+             * nobody can see their own payslip until somebody complains, one employee at a time.
+             */
+            'selfService' => [
+                'active' => Employee::query()->where('is_active', true)->count(),
+                'linked' => Employee::query()->where('is_active', true)->whereNotNull('user_id')->count(),
+                'accounts' => \Modules\CORE\Models\User::count(),
+            ],
         ]);
     }
 

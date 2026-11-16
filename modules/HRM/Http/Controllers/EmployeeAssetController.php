@@ -176,6 +176,20 @@ class EmployeeAssetController extends Controller
             'assigned' => $employeeId === null ? HrmAsset::where('status', 'Assigned')->count() : $open->count(),
             'damaged' => $employeeId === null ? HrmAsset::where('status', 'Damaged')->count() : $assignments()->where('return_condition', 'Damaged')->count(),
             'lost' => $employeeId === null ? HrmAsset::where('status', 'Lost')->count() : $assignments()->where('return_condition', 'Lost')->count(),
+            /*
+             * The page prints stats.overdue as a KPI value. It was never returned, so the tile rendered
+             * its own label ("Overdue (expected)") in the number slot — a defect nobody could report
+             * because there was no number to notice.
+             *
+             * Overdue means an assignment still open past its expected return date, which is a different
+             * question from "lost" or "damaged": the company is owed the item, not the cost.
+             */
+            'overdue' => EmployeeAsset::query()
+                ->when($employeeId, fn ($q, $id) => $q->where('employee_id', $id))
+                ->whereNull('returned_date')
+                ->whereNotNull('expected_return_date')
+                ->where('expected_return_date', '<', now()->toDateString())
+                ->count(),
             'unreturned_value' => round($unreturnedValue, 2),
             'recovery_total' => round($recoveryTotal, 2),
         ];

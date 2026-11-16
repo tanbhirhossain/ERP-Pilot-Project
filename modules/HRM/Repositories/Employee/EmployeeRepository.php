@@ -300,7 +300,9 @@ class EmployeeRepository implements EmployeeRepositoryInterface
 
     private function baseQuery(): Builder
     {
-        return Employee::query()->with(['department:id,name', 'designation:id,name', 'organization:id,name']);
+        // `user` is eager-loaded because the list prints the sign-in account: without it a page of
+        // 25 employees costs 25 extra queries just to say "—" most of the time.
+        return Employee::query()->with(['department:id,name', 'designation:id,name', 'organization:id,name', 'user:id,name']);
     }
 
     private function searchColumns(): array

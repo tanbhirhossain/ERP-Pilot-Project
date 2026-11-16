@@ -24,7 +24,7 @@ class EmployeeProbationController extends Controller
     public function index(Request $r): Response
     {
         $q = EmployeeProbation::query()
-            ->with(['employee:id,employee_id,full_name,department_id,designation_id'])
+            ->with(['employee:id,employee_id,full_name,department_id,designation_id', 'employee.department:id,name'])
             ->latest('probation_start');
 
         if ($status = $r->input('status')) {
@@ -35,8 +35,23 @@ class EmployeeProbationController extends Controller
         }
 
         return Inertia::render('HRM::Probations/Index', [
-            'probations' => $q->paginate(20)->withQueryString(),
-            'stats' => $this->svc->stats(),
+            'probations' => $q->paginate(20)->withQueryString()->through(fn (EmployeeProbation $p): array => [
+                'id' => $p->id,
+                'employee_id' => $p->employee_id,
+                'probation_start' => $p->probation_start?->toDateString(),
+                'probation_end' => $p->probation_end?->toDateString(),
+                'extended_till' => $p->extended_till?->toDateString(),
+                'status' => $p->status,
+                'remarks' => $p->remarks,
+                'employee' => $p->employee ? [
+                    'id' => $p->employee->id,
+                    'employee_id' => $p->employee->employee_id,
+                    'full_name' => $p->employee->full_name,
+                    'department' => $p->employee->department?->name,
+                ] : null,
+            ]),
+            // The service calls it dueCounts(); the page asked for stats() and answered HTTP 500.
+            'stats' => $this->svc->dueCounts(),
             'filters' => $r->only(['status', 'employee_id']),
         ]);
     }
@@ -51,7 +66,9 @@ class EmployeeProbationController extends Controller
         ]);
 
         try {
-            $probation = $this->svc->create($data);
+            // create() takes the employee code and the payload separately. Handing it the whole array
+            // was a TypeError on every submission, hidden until now behind the page never rendering.
+            $probation = $this->svc->create($data['employee_id'], $data);
         } catch (\DomainException $e) {
             return back()->withErrors(['employee_id' => $e->getMessage()])->withInput();
         }

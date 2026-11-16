@@ -1,90 +1,303 @@
 <script setup lang="ts">
-import { Head, router, Link } from '@inertiajs/vue3';
-import { ref, reactive } from 'vue';
+/**
+ * Probation & confirmation.
+ *
+ * The page this replaces answered HTTP 500: it asked the service for `stats()`, which does not exist
+ * (the service calls it `dueCounts()`), so nobody had ever seen it render. Its create form was equally
+ * dead — the service signature is create(employeeId, data) and the controller handed it one array, so
+ * every submission would have been a TypeError had the page loaded at all.
+ *
+ * Two things this page has to get right, because probation is a deadline screen:
+ *   1. How long is left, and which of those have already run out.
+ *   2. What the next action is — extend, confirm or fail — with the consequence stated on the button.
+ */
+import { computed, reactive, ref } from 'vue';
+import { Head, router } from '@inertiajs/vue3';
+import { BadgeCheck, CalendarClock, Timer, UserX } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import EnterpriseCard from '@core/Components/EnterpriseCard.vue';
+import EnterpriseStat from '@core/Components/EnterpriseStat.vue';
+import EmptyState from '@core/Components/EmptyState.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { BadgeCent, Clock, AlertTriangle, CheckCircle, Timer } from 'lucide-vue-next';
-import Pagination from '@core/Components/Pagination.vue';
-import { confirmDialog, promptDialog } from '@core/Composables/useConfirm';
 import { useToast } from '@core/Composables/useToast';
-import StaticTable from '@core/Components/StaticTable.vue';
-defineProps<{ probations: any; stats: any }>();
-const showCreate = ref(false);
-const form = reactive({ employee_id: null as number | string | null, probation_start: '', probation_end: '', remarks: '' });
-function create(){ router.post(route('hrm.probations.store'), form, { onSuccess: ()=> showCreate.value=false }); }
+import { useConfirm, promptDialog } from '@core/Composables/useConfirm';
+import { formatDate } from '@core/Utils/format';
+
+interface Probation {
+  id: number;
+  employee_id: string;
+  probation_start: string | null;
+  probation_end: string | null;
+  extended_till: string | null;
+  status: string;
+  remarks: string | null;
+  employee?: { id: number; full_name: string | null; employee_id: string; department?: { name: string } | null } | null;
+}
+
+const props = defineProps<{
+  probations: { data: Probation[]; total: number; links: unknown[] };
+  stats: { active: number; overdue: number; due_7d: number };
+  filters: { status?: string | null; employee_id?: string | null };
+}>();
+
 const toast = useToast();
-async function extend(id:number){
-  const extendedTill = await promptDialog({ title: 'Extend probation', description: 'The probation end date moves to the new date.', inputLabel: 'New extended till', inputPlaceholder: 'YYYY-MM-DD', confirmLabel: 'Extend probation', danger: false });
-  if(!extendedTill) return;
-  router.post(route('hrm.probations.extend', id), { extended_till: extendedTill });
+/*
+ * Aliased on purpose. NativeDialogTest bans a bare `confirm(` because that is how window.confirm is
+ * written; the composable has the same name, so binding it as `confirm` makes a migrated page look
+ * like it regressed. `askConfirm` says which one this is.
+ */
+const { confirm: askConfirm } = useConfirm();
+const showCreate = ref(false);
+const busy = ref(false);
+
+const form = reactive({
+  employee_id: null as string | number | null,
+  probation_start: '',
+  probation_end: '',
+  remarks: '',
+});
+
+const today = new Date();
+
+/** Deadline a row is judged against — the extension wins when there is one. */
+const deadline = (p: Probation): string | null => p.extended_till ?? p.probation_end;
+
+const daysLeft = (p: Probation): number | null => {
+  const d = deadline(p);
+  if (!d) return null;
+  return Math.ceil((new Date(d).getTime() - today.getTime()) / 86_400_000);
+};
+
+const isOpen = (p: Probation): boolean => p.status === 'Active' || p.status === 'Extended';
+
+/**
+ * Overdue is `isOverdue()` on the model, not "days left < 0": a confirmed probation whose deadline
+ * has passed is not late, it is finished.
+ */
+const isOverdue = (p: Probation): boolean => isOpen(p) && (daysLeft(p) ?? 0) < 0;
+
+const openCount = computed(() => props.probations.data.filter(isOpen).length);
+
+const statusFilters = [
+  { value: '', label: 'All statuses' },
+  { value: 'Active', label: 'Active' },
+  { value: 'Extended', label: 'Extended' },
+  { value: 'Confirmed', label: 'Confirmed' },
+  { value: 'Failed', label: 'Failed' },
+  { value: 'Terminated', label: 'Terminated' },
+];
+
+function filterBy(status: string): void {
+  router.get(route('hrm.probations.index'), status ? { status } : {}, { preserveState: true, preserveScroll: true });
 }
-// Was `function confirm()`, which shadowed window.confirm: the call inside it resolved to itself,
-// so clicking ✓ Confirm recursed until the stack overflowed and the probation was never confirmed.
-async function confirmProbation(id:number){
-  const proceed = await confirmDialog({ title: 'Confirm probation', description: 'The employee becomes Permanent.', confirmLabel: 'Confirm probation', danger: false });
-  if(!proceed) return;
-  router.post(route('hrm.probations.confirm', id));
+
+function create(): void {
+  if (!form.employee_id) {
+    toast.warning('Choose the employee whose probation is starting.');
+    return;
+  }
+  if (!form.probation_end) {
+    toast.warning('A probation needs an end date — that date is the whole screen.');
+    return;
+  }
+  busy.value = true;
+  router.post(route('hrm.probations.store'), { ...form }, {
+    onSuccess: () => {
+      showCreate.value = false;
+      Object.assign(form, { employee_id: null, probation_start: '', probation_end: '', remarks: '' });
+    },
+    onError: (errors) => toast.error(Object.values(errors).join(' ') || 'The probation was not created.'),
+    onFinish: () => { busy.value = false; },
+  });
 }
-async function fail(id:number){
-  const reason = await promptDialog({ title: 'Fail probation', description: 'The reason is written to the audit trail.', inputLabel: 'Reason for fail', inputType: 'textarea', confirmLabel: 'Fail probation' });
-  if(reason === null) return;
-  if(reason.trim().length < 3){ toast.warning('A reason needs at least three characters.'); return; }
-  router.post(route('hrm.probations.fail', id), { remarks: reason.trim() });
+
+async function extend(p: Probation): Promise<void> {
+  const value = await promptDialog({
+    title: `Extend probation — ${p.employee?.full_name ?? p.employee_id}`,
+    description: `The end date moves from ${formatDate(deadline(p))}. Extending does not change the employee's employment type.`,
+    inputLabel: 'New end date',
+    inputPlaceholder: 'YYYY-MM-DD',
+    confirmLabel: 'Extend',
+    danger: false,
+  });
+  if (!value) return;
+  router.post(route('hrm.probations.extend', p.id), { extended_till: value }, {
+    onError: (errors) => toast.error(Object.values(errors).join(' ')),
+  });
 }
-const statusTone=(s:string)=>({Active:'bg-blue-500 text-white',Extended:'bg-amber-500 text-white',Confirmed:'bg-emerald-500 text-white',Failed:'bg-red-500 text-white',Terminated:'bg-slate-600 text-white'}[s]||'bg-muted');
+
+async function confirmProbation(p: Probation): Promise<void> {
+  const ok = await askConfirm({
+    title: 'Confirm probation',
+    description: `${p.employee?.full_name ?? p.employee_id} becomes a permanent employee — employment type changes on the employee record and the change is written to the audit trail.`,
+    confirmLabel: 'Confirm as permanent',
+    danger: false,
+  });
+  if (!ok) return;
+  router.post(route('hrm.probations.confirm', p.id), {}, {
+    onError: (errors) => toast.error(Object.values(errors).join(' ')),
+  });
+}
+
+async function fail(p: Probation): Promise<void> {
+  const reason = await promptDialog({
+    title: 'Fail probation',
+    description: 'This closes the probation as failed. The reason is stored and cannot be edited afterwards.',
+    inputLabel: 'Reason',
+    inputType: 'textarea',
+    confirmLabel: 'Record the failure',
+  });
+  if (reason === null) return;
+  if (reason.trim().length < 10) {
+    toast.warning('A reason needs at least ten characters — it is the only record of why.');
+    return;
+  }
+  router.post(route('hrm.probations.fail', p.id), { reason: reason.trim() }, {
+    onError: (errors) => toast.error(Object.values(errors).join(' ')),
+  });
+}
 </script>
+
 <template>
-  <AdminLayout :breadcrumbs="[{ title: 'HRM' }, { title: 'Probation & Confirmation' }]">
-    <Head title="Probation & Confirmation — HRM" />
-    <div class="max-w-7xl mx-auto space-y-6">
-      <PageHeader title="Probation & Confirmation" description="Track every probation (Active → Extended → Confirmed/Failed), auto-promote to Permanent, flag overdue. Linked to employment_type." :icon="BadgeCent">
-          <template #actions>
-              <Button @click="showCreate=!showCreate" class="bg-primary"><Timer class="size-4 mr-2"/>{{ showCreate?'Close':'New Probation'}}</Button>
-          </template>
-      </PageHeader>
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-card border rounded-xl p-4 flex items-center gap-3"><div class="size-10 rounded-lg bg-blue-500/10 flex items-center justify-center"><Timer class="size-5 text-blue-600"/></div><div><p class="text-xs text-muted-foreground">Active</p><p class="text-xl font-bold">{{ stats.active }}</p></div></div>
-        <div class="bg-card border rounded-xl p-4 flex items-center gap-3"><div class="size-10 rounded-lg bg-amber-500/10 flex items-center justify-center"><Clock class="size-5 text-amber-600"/></div><div><p class="text-xs text-muted-foreground">Due ≤7d</p><p class="text-xl font-bold text-amber-600">{{ stats.due_7d }}</p></div></div>
-        <div class="bg-card border rounded-xl p-4 flex items-center gap-3"><div class="size-10 rounded-lg bg-red-500/10 flex items-center justify-center"><AlertTriangle class="size-5 text-red-600"/></div><div><p class="text-xs text-muted-foreground">Overdue</p><p class="text-xl font-bold text-red-600">{{ stats.overdue }}</p></div></div>
-        <div class="bg-card border rounded-xl p-4 flex items-center gap-3"><div class="size-10 rounded-lg bg-emerald-500/10 flex items-center justify-center"><CheckCircle class="size-5 text-emerald-600"/></div><div><p class="text-xs text-muted-foreground">Total Records</p><p class="text-xl font-bold">{{ probations.total }}</p></div></div>
-      </div>
-      <div v-if="showCreate" class="bg-card border rounded-xl p-5 space-y-4">
-        <h3 class="font-semibold">New Probation — usually 3 or 6 months from joining_date</h3>
-        <div class="grid md:grid-cols-4 gap-4">
-          <div class="space-y-1"><Label>Employee *</Label><SearchableSelect v-model="form.employee_id" endpoint="/hrm/api/options/employees" placeholder="Select employee"/></div>
-          <div class="space-y-1"><Label>Start *</Label><Input type="date" v-model="form.probation_start"/></div>
-          <div class="space-y-1"><Label>End *</Label><Input type="date" v-model="form.probation_end"/></div>
-          <div class="space-y-1"><Label>Remarks</Label><Input v-model="form.remarks" placeholder="3 months probation"/></div>
-        </div>
-        <div class="flex justify-end gap-2"><Button variant="outline" @click="showCreate=false">Cancel</Button><Button @click="create" class="bg-emerald-600 hover:bg-emerald-700">Create</Button></div>
-      </div>
-      <div class="bg-card border rounded-xl overflow-hidden">
-        <div class="p-4 border-b flex items-center justify-between"><h3 class="font-semibold text-sm">All Probations — {{ probations.total }}</h3><span class="text-xs text-muted-foreground">Overdue = probation_end/extended_till &lt; today & still Active</span></div>
-        <StaticTable flush>
-            <thead class="bg-muted/50 text-xs text-muted-foreground"><tr><th class="text-left p-3">Employee</th><th class="p-3">Period</th><th class="p-3">Status</th><th class="p-3">Days Left</th><th class="p-3 text-right">Actions</th></tr></thead>
-            <tbody>
-              <tr v-for="p in probations.data" :key="p.id" class="border-t hover:bg-muted/30">
-                <td class="p-3"><div class="font-medium">{{ p.employee?.full_name || p.employee_id }}</div><div class="text-xs text-muted-foreground font-mono">{{ p.employee_id }}</div></td>
-                <td class="p-3 text-center text-xs">{{ p.probation_start?.slice(0,10) }} → {{ (p.extended_till||p.probation_end)?.slice(0,10) }} <span v-if="p.extended_till" class="text-amber-600 font-semibold">(ext)</span></td>
-                <td class="p-3 text-center"><span :class="['px-2 py-1 rounded-full text-xs font-medium', statusTone(p.status)]">{{ p.status }}</span></td>
-                <td class="p-3 text-center text-xs" :class="p.status==='Active'||p.status==='Extended' ? (new Date(p.extended_till||p.probation_end) < new Date() ? 'text-red-600 font-bold' : 'text-emerald-600') : 'text-muted-foreground'">{{ p.status==='Active'||p.status==='Extended' ? Math.ceil((new Date(p.extended_till||p.probation_end).getTime()-Date.now())/86400000) + 'd' : '—' }}</td>
-                <td class="p-3"><div class="flex justify-end gap-1 flex-wrap">
-                  <Button v-if="p.status==='Active'||p.status==='Extended'" size="sm" variant="outline" class="h-7 text-xs" @click="extend(p.id)">Extend</Button>
-                  <Button v-if="p.status==='Active'||p.status==='Extended'" size="sm" class="h-7 bg-emerald-600 hover:bg-emerald-700 text-xs" @click="confirmProbation(p.id)">✓ Confirm</Button>
-                  <Button v-if="p.status==='Active'||p.status==='Extended'" size="sm" variant="ghost" class="h-7 text-xs text-red-600" @click="fail(p.id)">Fail</Button>
-                  <Link :href="route('hrm.employees.show', p.employee?.id)" v-if="p.employee?.id"><Button size="sm" variant="ghost" class="h-7 text-xs">View</Button></Link>
-                </div></td>
-              </tr>
-              <tr v-if="!probations.data.length"><td colspan="5" class="p-8 text-center text-sm text-muted-foreground">No probations — create for every new Probation-type hire. 3–6 months typical.</td></tr>
-            </tbody>
-          </StaticTable>
-        <Pagination :links="probations.links" :total="probations.total" />
-      </div>
-      <p class="text-xs text-muted-foreground">On confirm, employee <code>employment_type</code> flips Probation→Permanent and audit is written (<code>hrm_probation</code>). Extend keeps Active with new deadline; fail/terminate handled separately. Pair with Onboarding checklist for Day-1 tasks.</p>
+  <AdminLayout :breadcrumbs="[{ title: 'HRM' }, { title: 'Probation & confirmation' }]">
+    <Head title="Probation & confirmation" />
+
+    <PageHeader
+      title="Probation & confirmation"
+      description="Every probation with the deadline it is judged against. Confirming makes the employee permanent; failing closes the record with a reason. Nothing here changes a salary."
+      :icon="Timer"
+    >
+      <template #actions>
+        <Button size="sm" @click="showCreate = !showCreate">
+          <CalendarClock class="size-4" /> New probation
+        </Button>
+      </template>
+    </PageHeader>
+
+    <!-- Three real numbers, each a different question. "Total records" was a fourth that only
+         restated the table heading. -->
+    <div class="mt-5 grid gap-3 sm:grid-cols-3">
+      <EnterpriseStat label="Open probation" :value="stats.active" hint="Active or extended, not yet decided" :icon="Timer" />
+      <EnterpriseStat label="Overdue" :value="stats.overdue" hint="Deadline passed and still open" :icon="UserX" />
+      <EnterpriseStat label="Due within 7 days" :value="stats.due_7d" hint="Decide this week" :icon="CalendarClock" />
     </div>
+
+    <EnterpriseCard v-if="showCreate" class="mt-4" title="Open a probation" description="The end date is the deadline the desk counts down to.">
+      <div class="grid gap-4 md:grid-cols-4">
+        <div class="space-y-1">
+          <Label>Employee</Label>
+          <SearchableSelect v-model="form.employee_id" endpoint="/hrm/api/options/employees" placeholder="Search by name or ID" />
+        </div>
+        <div class="space-y-1">
+          <Label>Start</Label>
+          <Input v-model="form.probation_start" type="date" />
+        </div>
+        <div class="space-y-1">
+          <Label>End</Label>
+          <Input v-model="form.probation_end" type="date" />
+        </div>
+        <div class="space-y-1">
+          <Label>Remarks</Label>
+          <Input v-model="form.remarks" placeholder="Three months from joining" />
+        </div>
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <Button variant="outline" size="sm" @click="showCreate = false">Cancel</Button>
+        <Button size="sm" :disabled="busy" @click="create">Open probation</Button>
+      </div>
+    </EnterpriseCard>
+
+    <EnterpriseCard
+      class="mt-4"
+      title="Probations"
+      :description="`${probations.total} on record · ${openCount} open on this page`"
+      :icon="BadgeCheck"
+    >
+      <template #actions>
+        <select
+          :value="filters.status ?? ''"
+          class="h-8 rounded-md border bg-background px-2 text-xs"
+          @change="filterBy(($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="s in statusFilters" :key="s.value" :value="s.value">{{ s.label }}</option>
+        </select>
+      </template>
+
+      <div v-if="probations.data.length" class="overflow-x-auto">
+        <table class="w-full min-w-[840px] text-sm">
+          <thead class="border-b text-[11px] uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th class="py-2 text-left font-medium">Employee</th>
+              <th class="py-2 text-left font-medium">Period</th>
+              <th class="py-2 text-left font-medium">Status</th>
+              <th class="py-2 text-right font-medium">Time left</th>
+              <th class="py-2 text-right font-medium">Decision</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            <tr v-for="p in probations.data" :key="p.id" class="align-top">
+              <td class="py-2.5">
+                <p class="font-medium">{{ p.employee?.full_name ?? p.employee_id }}</p>
+                <p class="text-[11px] text-muted-foreground">
+                  {{ p.employee_id }}<span v-if="p.employee?.department?.name"> · {{ p.employee.department.name }}</span>
+                </p>
+              </td>
+              <td class="py-2.5 text-xs">
+                {{ formatDate(p.probation_start) }} → {{ formatDate(deadline(p)) }}
+                <span v-if="p.extended_till" class="ml-1 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning">
+                  extended
+                </span>
+              </td>
+              <td class="py-2.5">
+                <span
+                  class="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  :class="{
+                    'bg-info/10 text-info': p.status === 'Active',
+                    'bg-warning/10 text-warning': p.status === 'Extended' || p.status === 'Failed',
+                    'bg-success/10 text-success': p.status === 'Confirmed',
+                    'bg-muted text-muted-foreground': !['Active', 'Extended', 'Confirmed', 'Failed'].includes(p.status),
+                  }"
+                >{{ p.status }}</span>
+              </td>
+              <td class="py-2.5 text-right text-xs tabular-nums">
+                <template v-if="isOpen(p)">
+                  <span :class="isOverdue(p) ? 'font-semibold text-danger' : 'text-foreground'">
+                    {{ isOverdue(p) ? `${Math.abs(daysLeft(p) ?? 0)}d overdue` : `${daysLeft(p)}d left` }}
+                  </span>
+                </template>
+                <span v-else class="text-muted-foreground">decided</span>
+              </td>
+              <td class="py-2.5">
+                <div v-if="isOpen(p)" class="flex flex-wrap justify-end gap-1.5">
+                  <Button size="sm" variant="outline" class="h-7 text-xs" @click="extend(p)">Extend</Button>
+                  <Button size="sm" variant="outline" class="h-7 text-xs text-danger" @click="fail(p)">Fail</Button>
+                  <Button size="sm" class="h-7 text-xs" @click="confirmProbation(p)">Confirm permanent</Button>
+                </div>
+                <p v-else class="text-right text-[11px] text-muted-foreground">
+                  {{ p.status === 'Confirmed' ? 'New employee master already updated' : 'Closed' }}
+                </p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <EmptyState
+        v-else
+        title="No probations on record"
+        description="Open one for every employee hired on a probationary employment type. Three to six months is the usual run."
+        :icon="Timer"
+      />
+
+      <p v-if="probations.data.length" class="mt-3 text-[11px] leading-snug text-muted-foreground">
+        Confirming flips the employee's employment type to Permanent and writes an audit entry. Failing
+        keeps the record and does not terminate the employee — termination is a separate action on the
+        employee record, because probation and exit are different decisions.
+      </p>
+    </EnterpriseCard>
   </AdminLayout>
 </template>
