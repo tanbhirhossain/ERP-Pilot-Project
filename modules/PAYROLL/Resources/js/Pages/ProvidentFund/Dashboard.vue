@@ -95,6 +95,7 @@ const props = defineProps<{
   recent_withdrawals: WithdrawalRow[];
   periods: Period[];
   drift_count: number;
+  integrity?: { entries: number; orphan_entries: number; orphan_amount: number; future_entries: number; future_amount: number; duplicate_groups: number; duplicate_amount: number };
   composition: { employee: number; employer: number; paid_out: number; outstanding: number };
   canManage: boolean;
 }>();
@@ -123,6 +124,23 @@ const awaitingRelease = computed(() => props.periods.filter((p) => !p.can_accrue
 const alerts = computed(() => {
   const list: Array<{ tone: 'warn' | 'info' | 'ok' | 'error'; text: string; to?: string; label?: string }> = [];
 
+  // A balance can agree with the ledger and both can still be wrong, which is exactly what happened.
+  if ((props.integrity?.orphan_entries ?? 0) > 0) {
+    list.push({
+      tone: 'error',
+      text: `${props.integrity!.orphan_entries} ledger entr(ies) worth ${money(props.integrity!.orphan_amount)} name a salary slip that no longer exists — the payroll behind them was deleted and the accrual stayed.`,
+      to: route('payroll.pf.members'),
+      label: 'Review',
+    });
+  }
+  if ((props.integrity?.future_entries ?? 0) > 0) {
+    list.push({
+      tone: 'warn',
+      text: `${props.integrity!.future_entries} entr(ies) worth ${money(props.integrity!.future_amount)} are dated in the future.`,
+      to: route('payroll.pf.members'),
+      label: 'Review',
+    });
+  }
   if (props.drift_count > 0) {
     list.push({ tone: 'error', text: `${props.drift_count} account(s) disagree with the ledger.`, to: route('payroll.pf.members'), label: 'Review' });
   }
@@ -397,9 +415,9 @@ const typeLabel = (type: string): string => ({
             <h2 class="flex items-center gap-2 text-sm font-semibold"><CircleAlert class="size-4 text-muted-foreground" />Fund health</h2>
             <p class="mt-0.5 text-xs text-muted-foreground">What the books say, and what needs a decision.</p>
           </div>
-          <span class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium" :class="drift_count > 0 ? toneClass('error') : toneClass('ok')">
-            <component :is="drift_count > 0 ? CircleAlert : CircleCheck" class="size-3" />
-            {{ drift_count > 0 ? 'Does not reconcile' : 'Reconciled' }}
+          <span class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium" :class="(drift_count > 0 || (integrity?.orphan_entries ?? 0) > 0 || (integrity?.future_entries ?? 0) > 0) ? toneClass('error') : toneClass('ok')">
+            <component :is="(drift_count > 0 || (integrity?.orphan_entries ?? 0) > 0 || (integrity?.future_entries ?? 0) > 0) ? CircleAlert : CircleCheck" class="size-3" />
+            {{ (drift_count > 0 || (integrity?.orphan_entries ?? 0) > 0 || (integrity?.future_entries ?? 0) > 0) ? 'Does not reconcile' : 'Reconciled' }}
           </span>
         </div>
 

@@ -31,11 +31,19 @@ class PayrollFinanceController extends Controller
         $accrualPost = $posts->firstWhere('posting_type', 'salary_accrual');
         $banks = Bank::where('is_active', true)->get(['id', 'name', 'bank_name', 'branch_name', 'account_no']);
 
+        // Whether each advice still agrees with the payroll it was drawn from. The screen could not
+        // have noticed otherwise: the advice total agrees with the advice's own frozen line items,
+        // and both were correct on the morning they were written. Only the slips can say.
+        $adviceChecks = $bankAdvices->mapWithKeys(fn ($advice) => [
+            $advice->id => app(\Modules\PAYROLL\Services\PayrollBankAdviceService::class)->reconciliation($advice),
+        ]);
+
         return Inertia::render('PAYROLL::Finance/SheetFinance', [
             'sheet' => $sheet,
             'posts' => $posts,
             'accrualPost' => $accrualPost,
             'bankAdvices' => $bankAdvices,
+            'adviceChecks' => $adviceChecks,
             'banks' => $banks,
             'accountsReady' => $this->accountsReady(),
         ]);

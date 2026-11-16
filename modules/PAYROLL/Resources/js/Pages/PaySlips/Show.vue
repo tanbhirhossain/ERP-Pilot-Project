@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import type { PayrollSlip } from '../../types';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
@@ -12,6 +13,39 @@ function setStatus(status: string) {
 function printSlip() { printDocument({ portrait: true }); }
 const money = (value: unknown) => `${p.slip.breakdown_json.currency || 'BDT'} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const hours = (value: unknown) => Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/*
+ * The earnings block has to add up to the gross it prints. In this database it does not: every
+ * employee's salary row carries `gross = basic x 5/3` with house rent, medical and conveyance all
+ * zero, so the four lines summed to 6,541.20 against a printed gross of 10,902.00. A payslip whose
+ * own column does not add up is worse than one with a long line item, so the difference is named.
+ */
+const periodBase = (): Record<string, number> => {
+  const s = p.slip.breakdown_json as Record<string, any>;
+
+  return s.period_base_components ?? s.base_components ?? {};
+};
+
+const componentLines = (): Array<{ label: string; amount: number }> => {
+  const b = periodBase();
+
+  return [
+    { label: 'Basic salary', amount: Number(b.basic ?? p.slip.basic_salary ?? 0) },
+    { label: 'House rent', amount: Number(b.house_rent ?? 0) },
+    { label: 'Medical allowance', amount: Number(b.medical ?? 0) },
+    { label: 'Conveyance', amount: Number(b.conveyance ?? 0) },
+    { label: 'Other allowance', amount: Number(b.other_allowance ?? 0) },
+  ];
+};
+
+/** The part of the gross that no named component accounts for. */
+const unallocated = computed(() => {
+  const s = p.slip.breakdown_json as Record<string, any>;
+  const items = (s.benefits ?? []).reduce((sum: number, i: any) => sum + Number(i.amount ?? 0), 0);
+  const components = componentLines().reduce((sum, l) => sum + l.amount, 0);
+
+  return Math.round((Number(p.slip.gross_salary ?? 0) - components - items) * 100) / 100;
+});
 </script>
 
 <template>
@@ -35,10 +69,9 @@ const hours = (value: unknown) => Number(value || 0).toLocaleString(undefined, {
       <div class="my-6 grid grid-cols-1 gap-5 border-y py-5 md:grid-cols-2">
         <div>
           <h2 class="mb-3 font-semibold">Earnings</h2>
-          <div class="flex justify-between py-1 text-sm"><span>Basic salary</span><span>{{ money(slip.basic_salary) }}</span></div>
-          <div class="flex justify-between py-1 text-sm"><span>House rent</span><span>{{ money(slip.breakdown_json.period_base_components?.house_rent ?? slip.breakdown_json.base_components.house_rent) }}</span></div>
-          <div class="flex justify-between py-1 text-sm"><span>Medical allowance</span><span>{{ money(slip.breakdown_json.period_base_components?.medical ?? slip.breakdown_json.base_components.medical) }}</span></div>
-          <div class="flex justify-between py-1 text-sm"><span>Other allowance</span><span>{{ money(slip.breakdown_json.period_base_components?.other_allowance ?? slip.breakdown_json.base_components.other_allowance) }}</span></div>
+          <div v-for="line in componentLines()" :key="line.label" class="flex justify-between py-1 text-sm">
+            <span>{{ line.label }}</span><span>{{ money(line.amount) }}</span>
+          </div>
           <div v-for="(item, index) in slip.breakdown_json.benefits" :key="`${item.code}-${index}`" class="flex justify-between gap-3 py-1 text-sm">
             <span>
               {{ item.name }}
@@ -46,6 +79,20 @@ const hours = (value: unknown) => Number(value || 0).toLocaleString(undefined, {
               <small v-else-if="item.code === 'approved-extra-duty'" class="block text-xs text-muted-foreground">{{ hours(slip.breakdown_json.cutlist.extra_duty_hours) }} approved hours</small>
             </span>
             <span class="shrink-0">{{ money(item.amount) }}</span>
+          </div>
+          <!--
+            Salary rows in this database store gross = basic x 5/3 with every allowance column at
+            zero. Rather than print a column that does not add up, the difference is shown as its own
+            line with the reason it exists.
+          -->
+          <div v-if="unallocated > 0.009" class="flex justify-between gap-3 py-1 text-sm">
+            <span>
+              Unallocated salary
+              <small class="block text-xs text-muted-foreground">
+                Gross exceeds the named components — the salary record carries gross without splitting it.
+              </small>
+            </span>
+            <span class="shrink-0">{{ money(unallocated) }}</span>
           </div>
           <div class="mt-2 flex justify-between border-t pt-2 font-semibold"><span>Gross</span><span>{{ money(slip.gross_salary) }}</span></div>
         </div>

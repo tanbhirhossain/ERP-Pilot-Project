@@ -132,8 +132,22 @@ final class PayrollCutlistWorkspaceService
                 COALESCE(SUM(unpaid_leave_deduction),0) + COALESCE(SUM(late_penalty_deduction),0) + COALESCE(SUM(missing_punch_deduction),0) as deductions,
                 COALESCE(SUM(overtime_pay),0) + COALESCE(SUM(extra_duty_pay),0) as earnings,
                 COALESCE(SUM(late_penalty_deduction),0) as penalty,
+                -- `chargeable` is the count of employees the policy makes punishable; it is *not* a
+                -- subset of `punishment_days > 0`, which only counts people who actually had late days.
+                -- The page printed "4 of 0 with attendance days recorded" because it used the
+                -- punishable count as the numerator over the late-day count.
                 SUM(CASE WHEN punishable = 1 THEN 1 ELSE 0 END) as chargeable,
                 SUM(CASE WHEN punishment_days > 0 THEN 1 ELSE 0 END) as flagged,
+                -- "With attendance days recorded" is any row that carries at least one piece of
+                -- attendance evidence; the table has no attendance_days column, so the count is built
+                -- from the counters that do exist rather than from a column that does not.
+                SUM(CASE WHEN COALESCE(late_count,0) > 0
+                          OR COALESCE(early_out_count,0) > 0
+                          OR COALESCE(missing_punch_count,0) > 0
+                          OR COALESCE(unpaid_leave_days,0) > 0
+                          OR COALESCE(approved_overtime_minutes,0) > 0
+                          OR COALESCE(approved_extra_duty_minutes,0) > 0
+                     THEN 1 ELSE 0 END) as with_attendance,
                 SUM(CASE WHEN approved_overtime_minutes > 0 OR approved_extra_duty_minutes > 0 THEN 1 ELSE 0 END) as with_ot
             ')
             ->first();
@@ -150,6 +164,7 @@ final class PayrollCutlistWorkspaceService
             'penalty' => round((float) ($row->penalty ?? 0), 2),
             'chargeable' => (int) ($row->chargeable ?? 0),
             'flagged' => (int) ($row->flagged ?? 0),
+            'with_attendance' => (int) ($row->with_attendance ?? 0),
             'with_ot' => (int) ($row->with_ot ?? 0),
             'adjustments' => $adjustments,
         ];

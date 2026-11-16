@@ -267,8 +267,26 @@ const anyEarning = (row: Row): number => Number(row.overtime_pay ?? 0) + Number(
         <div class="rounded-xl border bg-card p-5 shadow-sm">
           <span class="grid size-11 place-items-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400"><Users class="size-5" /></span>
           <p class="mt-3 text-2xl font-bold tabular-nums tracking-tight">{{ formatNumber(agg.chargeable) }}</p>
-          <p class="text-[13px] font-medium text-muted-foreground">Chargeable employees</p>
-          <p class="mt-1 text-xs text-muted-foreground">of {{ formatNumber(agg.flagged) }} with attendance days recorded</p>
+          <!--
+            This counted `punishable`, which is the *attendance policy's* flag — "this employee's
+            policy allows punishment" — not a finding about the month. Four employees had it set while
+            every counter on their row was zero, so the card read "4 Chargeable employees" above a
+            table in which all four say "Not charged". It also printed "4 of 0": the denominator
+            counted rows with late days, a different population again.
+          -->
+          <p class="text-[13px] font-medium text-muted-foreground">Employees whose policy allows punishment</p>
+          <p v-if="agg.with_attendance > 0" class="mt-1 text-xs text-muted-foreground">
+            {{ formatNumber(agg.with_attendance) }} with attendance evidence ·
+            {{ formatNumber(agg.flagged) }} with days to punish
+          </p>
+          <!--
+            A generated cutlist for a month nobody has attendance for is not a review with nothing to
+            review; it is a cutlist computed from an empty month. Saying "0 of 0" hid that.
+          -->
+          <p v-else class="mt-1 text-xs text-muted-foreground">
+            No attendance evidence in this month — the cutlist was generated before any was recorded,
+            so every row is zero for absence of data, not for good conduct.
+          </p>
         </div>
         <div class="rounded-xl border bg-card p-5 shadow-sm">
           <span class="grid size-11 place-items-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400"><Pencil class="size-5" /></span>

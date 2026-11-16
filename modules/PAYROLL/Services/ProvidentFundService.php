@@ -767,8 +767,19 @@ final class ProvidentFundService
             'employer_side' => round((float) $credits->employer_side, 2),
             'net' => round((float) $accounts->employee_balance + (float) $accounts->employer_balance, 2),
             'pending_withdrawals' => (int) PfWithdrawal::query()->where('status', 'pending')->count(),
+            // `last_period` is the last month the fund has activity *for*, and it must never be a
+            // future month. It once reported 2026-12 while today was 2026-11-16, because a deleted
+            // payroll run had left its accrual behind; a treasurer reading "last period: December"
+            // in November has no way to tell that from a fund that is a month ahead of the calendar.
             'last_period' => PfLedger::query()->whereNotNull('contribution_month')
+                ->where('contribution_month', '<=', now()->format('Y-m'))
                 ->max('contribution_month'),
+            'future_periods' => PfLedger::query()->whereNotNull('contribution_month')
+                ->where('contribution_month', '>', now()->format('Y-m'))
+                ->distinct()
+                ->pluck('contribution_month')
+                ->values()
+                ->all(),
         ];
     }
 
@@ -820,6 +831,11 @@ final class ProvidentFundService
             'recent_withdrawals' => $this->recentWithdrawals(5),
             'periods' => $this->accrualCandidates(6),
             'drift_count' => count($this->reconcile()),
+            // `reconcile()` compares the stored balance with the ledger, and both were built from the
+            // same rows — so the fund showed a green "Reconciled" badge while carrying 33.8 lakh of
+            // contributions to payroll that had been deleted. A ledger cannot audit itself; every
+            // entry has to be traceable to something that still exists.
+            'integrity' => app(\Modules\PAYROLL\Services\PfLedgerIntegrityService::class)->audit(),
             'composition' => [
                 'employee' => $summary['employee_side'],
                 'employer' => $summary['employer_side'],

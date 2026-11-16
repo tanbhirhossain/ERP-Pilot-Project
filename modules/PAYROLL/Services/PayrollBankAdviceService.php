@@ -121,6 +121,96 @@ final class PayrollBankAdviceService
         return $path;
     }
 
+    /**
+     * Does this advice still describe the payroll it was drawn from?
+     *
+     * A bank advice is a snapshot: it freezes what each employee is to be paid at the moment it is
+     * generated. Nothing stopped the sheet from being recalculated afterwards, and on 2026-11-15 it
+     * was — 112 slips had their income tax applied at 14:58, three and a half hours after this
+     * advice was frozen at 11:30, and the sheet was released at 16:21. The advice was never
+     * regenerated, so it instructed the bank to pay 88,722.98 more than the payroll recorded: exactly
+     * the income tax that the recalculation had newly withheld. It pays `net + tax` for every one of
+     * the 981 employees, and every difference runs upwards, which is what overpaying always looks
+     * like.
+     *
+     * Prevention, because a stale advice is otherwise indistinguishable from a correct one — the
+     * stored total agrees with its own frozen line items, and those items agree with each other.
+     * Only a comparison against the live slips can tell.
+     *
+     * @return array{stale: bool, differences: int, advice_total: float, slips_total: float, drift: float, since: ?string, details: list<array<string, mixed>>}
+     */
+    public function reconciliation(PayrollBankAdvice $advice): array
+    {
+        $slipNets = PayrollSlip::query()
+            ->where('salary_sheet_id', $advice->salary_sheet_id)
+            ->where('net_salary', '>', 0)
+            ->pluck('net_salary', 'employee_id');
+
+        $differences = [];
+        $adviceTotal = 0.0;
+
+        foreach ($advice->items()->get(['employee_id', 'net_amount']) as $item) {
+            $adviceTotal += (float) $item->net_amount;
+            $slipNet = $slipNets[$item->employee_id] ?? null;
+
+            if ($slipNet === null || abs((float) $slipNet - (float) $item->net_amount) > 0.009) {
+                $differences[] = [
+                    'employee_id' => $item->employee_id,
+                    'on_advice' => round((float) $item->net_amount, 2),
+                    'on_slip' => $slipNet === null ? null : round((float) $slipNet, 2),
+                ];
+            }
+        }
+
+        $slipsTotal = round((float) $slipNets->sum(), 2);
+
+        // When the payroll moved after the advice was frozen — the useful half of the diagnosis.
+        $since = PayrollSlip::query()
+            ->where('salary_sheet_id', $advice->salary_sheet_id)
+            ->where('updated_at', '>', $advice->created_at)
+            ->max('updated_at');
+
+        return [
+            'stale' => $differences !== [] || $slipNets->count() !== $advice->items()->count(),
+            'differences' => count($differences),
+            'advice_total' => round($adviceTotal, 2),
+            'slips_total' => $slipsTotal,
+            'drift' => round($adviceTotal - $slipsTotal, 2),
+            'since' => $since,
+            'details' => array_slice($differences, 0, 25),
+        ];
+    }
+
+    /**
+     * Refuse to let a stale advice reach the bank.
+     *
+     * @throws ValidationException
+     */
+    public function assertCurrent(PayrollBankAdvice $advice): void
+    {
+        $check = $this->reconciliation($advice);
+
+        if (! $check['stale']) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'advice' => sprintf(
+                'This advice was generated on %s and no longer matches the payroll: %d of %d employees differ, '
+                .'and the advice total is %s against %s on the slips (%s %s). Payroll changed%s. '
+                .'Regenerate the advice before confirming it — an advice that pays a different amount than the slip is an over- or under-payment waiting to happen.',
+                $advice->created_at?->format('d M Y H:i') ?? 'an unknown date',
+                $check['differences'],
+                $advice->items()->count(),
+                number_format($check['advice_total'], 2),
+                number_format($check['slips_total'], 2),
+                $check['drift'] >= 0 ? 'overpaid' : 'underpaid',
+                number_format(abs($check['drift']), 2),
+                $check['since'] ? ' at '.$check['since'] : '',
+            ),
+        ]);
+    }
+
     public function confirm(PayrollBankAdvice $advice): PayrollBankAdvice
     {
         return DB::transaction(function () use ($advice) {
@@ -128,6 +218,8 @@ final class PayrollBankAdviceService
             if ($locked->status !== 'draft') {
                 throw new \DomainException('Only draft can be confirmed');
             }
+            // A frozen advice that no longer matches the payroll must not become spendable.
+            $this->assertCurrent($locked);
             $invalid = $locked->items()->where(function ($q) {
                 $q->whereNull('bank_account_no')->orWhere('bank_account_no', '')->orWhereRaw('LENGTH(bank_account_no) < 10');
             })->count();
@@ -147,6 +239,8 @@ final class PayrollBankAdviceService
             if ($locked->status !== 'confirmed') {
                 throw new \DomainException('Only confirmed can be marked paid');
             }
+            // Confirmation is not a licence to pay a number the payroll has since contradicted.
+            $this->assertCurrent($locked);
             $locked->update(['status' => 'paid']);
             foreach ($locked->items as $item) {
                 $slip = PayrollSlip::where('salary_sheet_id', $locked->salary_sheet_id)->where('employee_id', $item->employee_id)->first();

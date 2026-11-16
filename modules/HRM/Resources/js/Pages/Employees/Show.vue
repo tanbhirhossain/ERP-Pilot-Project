@@ -29,6 +29,24 @@ import FormSection from '@core/Components/FormSection.vue';
 import DetailItem from '@core/Components/DetailItem.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 
+/**
+ * Gross minus the sum of the named components. The salary table stores gross = basic x 5/3 and
+ * leaves house rent, medical, conveyance and other at zero on every row, so this is not zero in
+ * practice — it is 40% of total gross. Printing the components without it would make the card
+ * contradict its own Gross figure.
+ */
+const unallocatedFor = (sal: Record<string, number | string | null | undefined>): number => {
+    const num = (v: unknown): number => Number(v ?? 0) || 0;
+    const components =
+        num(sal.basic_salary) +
+        num(sal.house_rent) +
+        num(sal.medical_allowance) +
+        num(sal.conveyance_allowance) +
+        num(sal.other_allowance);
+
+    return Math.round((num(sal.gross_salary) - components) * 100) / 100;
+};
+
 const props = defineProps<{ employee: Employee; subordinates?: any[] }>();
 
 const emp = computed(() => props.employee ?? {});
@@ -356,6 +374,19 @@ const links = [
                                 <DetailItem label="Medical" :value="money(sal.medical_allowance)" prefix="৳ " mono />
                                 <DetailItem label="Conveyance" :value="money(sal.conveyance_allowance)" prefix="৳ " mono />
                                 <DetailItem label="Other" :value="money(sal.other_allowance)" prefix="৳ " mono />
+                                <!--
+                                    Six cards sit in a row and five of them are zero, while Gross is a
+                                    third larger than Basic. Without this line the row reads as though
+                                    the total were wrong; it is the split that is missing.
+                                -->
+                                <DetailItem
+                                    v-if="unallocatedFor(sal) > 0.009"
+                                    label="Unallocated"
+                                    :value="money(unallocatedFor(sal))"
+                                    prefix="৳ "
+                                    mono
+                                    tone="muted"
+                                />
                                 <DetailItem label="Bank" :value="sal.bank_name" />
                                 <DetailItem label="Account no" :value="sal.bank_account_no" mono span="2" />
                                 <DetailItem v-if="sal.remarks" label="Remarks" :value="sal.remarks" tone="muted" span="full" />

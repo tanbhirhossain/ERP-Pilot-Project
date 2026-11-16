@@ -6,7 +6,7 @@ import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { confirmDialog, promptDialog } from '@core/Composables/useConfirm';
 import { Button } from '@/components/ui/button';
 import StaticTable from '@core/Components/StaticTable.vue';
-const p = defineProps<{ sheet:SalarySheet; posts:any[]; accrualPost:any; bankAdvices:any[]; banks:any[]; accountsReady:Record<string,boolean> }>();
+const p = defineProps<{ sheet:SalarySheet; posts:any[]; accrualPost:any; bankAdvices:any[]; adviceChecks?:Record<string,any>; banks:any[]; accountsReady:Record<string,boolean> }>();
 function money(v:any){ return Number(v||0).toLocaleString('en-BD',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 async function postAccrual(){
   const proceed = await confirmDialog({ title: 'Post accrual journal', description: `Post accrual JV for ${p.sheet.pay_year}-${String(p.sheet.pay_month).padStart(2,'0')}? Dr Expense by dept → Cr Payables. This creates the official accounting entry.`, confirmLabel: 'Post accrual', danger: false });
@@ -144,9 +144,25 @@ const isReady = p.sheet.status==='ready';
           <div class="flex flex-wrap gap-2">
             <Link :href="route('payroll.bank-advices.show', adv.id)"><Button variant="outline" size="sm">View</Button></Link>
             <a :href="route('payroll.bank-advices.download', adv.id)" class="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground"><Download class="size-4"/> Excel/CSV</a>
-            <Button v-if="adv.status==='draft'" size="sm" variant="outline" @click="confirmAdvice(adv)">Confirm</Button>
-            <Button v-if="adv.status==='confirmed'" size="sm" @click="markPaid(adv)">Mark Paid</Button>
+            <Button v-if="adv.status==='draft'" size="sm" variant="outline" :disabled="adviceChecks?.[adv.id]?.stale" @click="confirmAdvice(adv)">Confirm</Button>
+            <Button v-if="adv.status==='confirmed'" size="sm" :disabled="adviceChecks?.[adv.id]?.stale" @click="markPaid(adv)">Mark Paid</Button>
           </div>
+        </div>
+        <!--
+          A stale advice is not a cosmetic warning. This one instructed the bank to pay 88,722.98 more
+          than the payroll recorded, because 112 slips were recalculated after it was frozen and it was
+          never regenerated. The stored total agreed with its own line items the whole time, so nothing
+          on the screen could have shown it without comparing back to the slips.
+        -->
+        <div v-if="adviceChecks?.[adv.id]?.stale" class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+          <p class="font-semibold">This advice no longer matches the payroll.</p>
+          <p>
+            {{adviceChecks[adv.id].differences}} of {{adv.employee_count}} employees differ ·
+            advice {{money(adviceChecks[adv.id].advice_total)}} vs slips {{money(adviceChecks[adv.id].slips_total)}} ·
+            {{adviceChecks[adv.id].drift >= 0 ? 'over by' : 'under by'}} {{money(Math.abs(adviceChecks[adv.id].drift))}} BDT
+            <span v-if="adviceChecks[adv.id].since">· payroll changed at {{adviceChecks[adv.id].since}}</span>
+          </p>
+          <p class="mt-1">Regenerate the advice before confirming it. Confirming or marking paid is blocked until it matches.</p>
         </div>
         <p v-if="adv.file_path" class="mt-1 text-xs text-muted-foreground">File: {{adv.file_path}} · {{adv.file_format.toUpperCase()}}</p>
       </div>
