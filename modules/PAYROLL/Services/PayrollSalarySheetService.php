@@ -142,7 +142,7 @@ final class PayrollSalarySheetService
 
     public function release(PayrollSalarySheet $sheet, ?int $actorId): PayrollSalarySheet
     {
-        return DB::transaction(function () use ($sheet, $actorId): PayrollSalarySheet {
+        $released = DB::transaction(function () use ($sheet, $actorId): PayrollSalarySheet {
             $locked = PayrollSalarySheet::query()->lockForUpdate()->findOrFail($sheet->id);
             if ($locked->status !== 'ready') {
                 throw ValidationException::withMessages(['salary_sheet' => 'Only a completed, ready salary sheet can be released.']);
@@ -154,30 +154,19 @@ final class PayrollSalarySheetService
             $locked->update(['status' => 'released']);
             PayrollWorkflowAudit::query()->create(['subject_type' => 'salary_sheet', 'subject_id' => $locked->id, 'event' => 'released', 'actor_id' => $actorId, 'occurred_at' => now()]);
 
-            // Release and the accrual journal are two halves of one event: the moment a month stops
-            // being recalculable and becomes a liability. Leaving the second half to a button meant
-            // sheet 4 was released on 2026-11-15 and still had no accrual a day later — the payroll
-            // and its 88,722.98 of withholding existed on the slips and nowhere in the ledger.
-            //
-            // A failure here must not un-release the month the business just signed off: the sheet is
-            // released, the payable is real, and refusing to release over a chart-of-accounts problem
-            // would leave payroll blocked by bookkeeping. The exception is logged loudly and the
-            // thread on the finance screen reports the missing journal until somebody posts it.
-            if (! PayrollJournalPost::query()->where('salary_sheet_id', $locked->id)->where('posting_type', 'salary_accrual')->where('status', 'posted')->exists()) {
-                try {
-                    $this->journals()->postSalaryAccrual($locked);
-                } catch (\Throwable $e) {
-                    Log::error('Salary sheet released but the accrual journal could not be posted', [
-                        'sheet_id' => $locked->id,
-                        'pay_year' => $locked->pay_year,
-                        'pay_month' => $locked->pay_month,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
-
             return $locked->refresh();
         });
+
+        // Release and the accrual journal are two halves of one event: the moment a month stops being
+        // recalculable is the moment the liability becomes real. Leaving the second half to a button
+        // meant sheet 4 was released on 2026-11-15 and still had no accrual a day later — the payroll
+        // and its 88,722.98 of withholding existed on the slips and nowhere in the ledger.
+        //
+        // It runs after the commit, not inside it: posting needs an open fiscal year, and refusing to
+        // release a month because the accountants have not opened the next year would block payroll on
+        // bookkeeping. `postAccrualOnRelease()` retries, and carries the real reason out to the screen
+        // when it cannot — the release stands either way.
+        return $this->journals()->postAccrualOnRelease($released->id, $actorId) ?? $released;
     }
 
     public function setSlipPaymentStatus(PayrollSlip $slip, string $status, ?int $actorId): PayrollSlip

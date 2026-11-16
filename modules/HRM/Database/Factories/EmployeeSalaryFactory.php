@@ -21,6 +21,11 @@ class EmployeeSalaryFactory extends Factory
             'net_salary' => $basic * 1.4,
             'is_current' => true,
             'effective_from' => now()->toDateString(),
+            // A salary record without these cannot be paid by bank — the advice refuses to be
+            // generated for it. Seeded employees should be payable, so the factory supplies them.
+            'payment_method' => 'bank',
+            'bank_name' => 'Sonali Bank Ltd',
+            'bank_account_no' => $this->faker->numerify('###############'),
         ];
     }
 }

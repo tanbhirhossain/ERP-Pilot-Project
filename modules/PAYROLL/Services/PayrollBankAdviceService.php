@@ -10,6 +10,7 @@ use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Facades\Excel;
 use Modules\ACCOUNTS\Models\Bank;
 use Modules\HRM\Models\Employee\Employee;
+use Modules\HRM\Models\Employee\EmployeeSalary;
 use Modules\PAYROLL\Actions\MarkPayrollSlipPaymentAction;
 use Modules\PAYROLL\Models\PayrollBankAdvice;
 use Modules\PAYROLL\Models\PayrollBankAdviceItem;
@@ -35,6 +36,24 @@ final class PayrollBankAdviceService
                 $key = $bankId ? (string) $bankId : ($empBankKey['bank_name'] ?? 'Default');
                 $grouped[$key][] = ['slip' => $slip, 'bankInfo' => $empBankKey];
             }
+            // An advice generated from slips with no account numbers is a file that cannot be paid and
+            // will be rejected at confirmation — after the operator has already saved, printed and
+            // circulated it. Say so at generation instead, and name the people, because "some
+            // employees" is not something anyone can act on.
+            $missingAccounts = collect($grouped)
+                ->flatMap(fn ($items) => collect($items)->filter(fn ($r) => ! preg_match('/^\d{10,16}$/', (string) ($r['bankInfo']['account_no'] ?? ''))))
+                ->map(fn ($r) => $r['slip']->employee_id)
+                ->unique()->values();
+
+            if ($missingAccounts->isNotEmpty()) {
+                throw new \DomainException(sprintf(
+                    'Cannot generate a bank advice: %d of %d employees have no valid bank account on their salary record (%s). Add the account numbers in HRM → Employee → Salary, or pay them outside the bank file.',
+                    $missingAccounts->count(),
+                    collect($grouped)->flatten(1)->count(),
+                    $missingAccounts->take(10)->implode(', ').($missingAccounts->count() > 10 ? ', …' : ''),
+                ));
+            }
+
             $advices = [];
             foreach ($grouped as $bankKey => $items) {
                 $disburseBank = $bankId ? Bank::find($bankId) : Bank::first();
@@ -224,7 +243,7 @@ final class PayrollBankAdviceService
                 $q->whereNull('bank_account_no')->orWhere('bank_account_no', '')->orWhereRaw('LENGTH(bank_account_no) < 10');
             })->count();
             if ($invalid > 0) {
-                throw ValidationException::withMessages(['bank_account_no' => "$invalid employees have invalid bank A/C (10-16 digits required). Fix in HRM Employee bank fields before confirming."]);
+                throw ValidationException::withMessages(['bank_account_no' => "$invalid employees have invalid bank A/C (10-16 digits required). Fix the bank account on the employee's salary record (HRM → Employee → Salary → Bank A/C) before confirming."]);
             }
             $locked->update(['status' => 'confirmed', 'confirmed_by' => auth()->id(), 'confirmed_at' => now()]);
 
@@ -261,14 +280,42 @@ final class PayrollBankAdviceService
         });
     }
 
+    /**
+     * Where an employee's bank details actually live.
+     *
+     * This used to read `employees.bank_account_no`, a column that has never existed on that table —
+     * the fields are on `employee_salaries`, which is where the HRM employee form writes them. The
+     * read never threw, because `isset()` on a missing attribute is simply false, so every advice was
+     * generated with a null account number and no explanation anywhere.
+     *
+     * Order: the salary record (the source of truth the form writes), then the employee row (in case
+     * this is ever moved there), then whatever the slip captured at calculation time.
+     */
     private function resolveEmployeeBank(PayrollSlip $slip): array
     {
         $empId = $slip->employee_id;
         try {
+            $salary = EmployeeSalary::query()
+                ->where('employee_id', $empId)
+                ->where('is_current', true)
+                ->orderByDesc('effective_from')
+                ->first()
+                ?? EmployeeSalary::query()->where('employee_id', $empId)->orderByDesc('effective_from')->first();
+
+            if ($salary && filled($salary->bank_account_no)) {
+                return [
+                    'account_no' => $salary->bank_account_no,
+                    'bank_name' => $salary->bank_name ?? '',
+                    'branch_name' => '',
+                    'routing_no' => '',
+                ];
+            }
+
             $emp = Employee::where('employee_id', $empId)->first();
             if ($emp && isset($emp->bank_account_no) && $emp->bank_account_no) {
                 return ['account_no' => $emp->bank_account_no, 'bank_name' => $emp->bank_name ?? '', 'branch_name' => $emp->branch_name ?? '', 'routing_no' => $emp->routing_no ?? ''];
             }
+
             $break = $slip->breakdown_json ?? [];
             if (! empty($break['employee']['bank_account_no'])) {
                 return ['account_no' => $break['employee']['bank_account_no'], 'bank_name' => $break['employee']['bank_name'] ?? '', 'branch_name' => $break['employee']['branch_name'] ?? '', 'routing_no' => $break['employee']['routing_no'] ?? ''];

@@ -14,6 +14,7 @@ use Modules\ACCOUNTS\Services\BankService;
 use Modules\ACCOUNTS\Services\JournalService;
 use Modules\CORE\Models\User;
 use Modules\HRM\Models\Employee\Employee;
+use Modules\HRM\Models\Employee\EmployeeSalary;
 use Modules\HRM\Models\Leave\LeaveType;
 use Modules\HRM\Models\Roster\RosterOvertime;
 use Modules\HRM\Services\Attendance\AttendanceProcessingService;
@@ -1048,6 +1049,23 @@ class DemoDataSeeder extends Seeder
     private function payrollRun(): void
     {
         $employeeIds = $this->employees->pluck('employee_id')->all();
+
+        // A demo hospital pays its staff by bank, and a bank advice cannot be generated for anyone
+        // without an account number. The real import carries no bank details (the source spreadsheet
+        // has none), so the sampled cohort is given account numbers here — only where they are blank,
+        // so re-running the seeder changes nothing.
+        $account = 1000000000001;
+        foreach ($this->employees as $employee) {
+            $salary = EmployeeSalary::query()->where('employee_id', $employee->employee_id)->where('is_current', true)->first();
+            if ($salary === null || filled($salary->bank_account_no)) {
+                continue;
+            }
+            $salary->update([
+                'payment_method' => 'bank',
+                'bank_name' => 'Sonali Bank Ltd',
+                'bank_account_no' => (string) $account++,
+            ]);
+        }
 
         $pf = app(ProvidentFundService::class);
         $policy = $pf->savePolicy([

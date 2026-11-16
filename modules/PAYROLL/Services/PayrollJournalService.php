@@ -180,6 +180,77 @@ final class PayrollJournalService
         });
     }
 
+    /**
+     * The accrual half of releasing a month.
+     *
+     * Release and the accrual are one business event: the moment a sheet stops being recalculable is
+     * the moment the liability becomes real. Leaving the journal to a separate button meant sheet 4
+     * was released on 2026-11-15 and still had no accrual a day later — the payroll and its 88,722.98
+     * of withholding existed on the slips and nowhere in the ledger.
+     *
+     * Why this is not inside release()'s transaction: posting a journal needs an open fiscal year, and
+     * refusing to release a month because the accountants have not opened next year would block
+     * payroll on bookkeeping. So the release commits first, and this runs after it. If posting then
+     * fails for a *transient* reason it is retried; if it fails because of configuration (no fiscal
+     * year, no chart of accounts) the released sheet keeps `accrual_journal_id = null` and the finance
+     * screen reports the missing journal.
+     *
+     * What it must never do is fail quietly. The earlier version caught the exception and only wrote
+     * to the log, which is how a tax posting silently went missing; the reason is now carried out to
+     * the caller and flashed to whoever released the sheet.
+     */
+    public function postAccrualOnRelease(int $sheetId, ?int $actorId = null): ?PayrollSalarySheet
+    {
+        $sheet = PayrollSalarySheet::query()->find($sheetId);
+        if ($sheet === null || $sheet->status !== 'released') {
+            return $sheet;
+        }
+
+        if (PayrollJournalPost::query()->where('salary_sheet_id', $sheetId)->where('posting_type', 'salary_accrual')->where('status', 'posted')->exists()) {
+            return $sheet;
+        }
+
+        $attempts = 2;
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                $post = $this->postSalaryAccrual($sheet);
+
+                Log::info('Payroll accrual posted on release', [
+                    'sheet_id' => $sheetId,
+                    'journal_id' => $post->journal_id,
+                    'total' => $post->total_debit,
+                    'actor_id' => $actorId,
+                    'attempt' => $attempt,
+                ]);
+
+                session()->flash('success', sprintf(
+                    'Sheet released and accrual %s posted (journal #%s, %s BDT).',
+                    $post->reference_no,
+                    $post->journal_id,
+                    number_format((float) $post->total_debit, 2),
+                ));
+
+                return $sheet->refresh();
+            } catch (\Throwable $e) {
+                Log::warning('Payroll accrual could not be posted during release', [
+                    'sheet_id' => $sheetId,
+                    'attempt' => $attempt,
+                    'error' => $e->getMessage(),
+                ]);
+
+                if ($attempt === $attempts) {
+                    // Say it on the screen, in the words of the thing that actually failed.
+                    session()->flash('error', sprintf(
+                        'Sheet released, but the accrual journal could not be posted: %s Post it from the finance screen once that is resolved — every slip remains payable meanwhile.',
+                        $e->getMessage(),
+                    ));
+                }
+            }
+        }
+
+        return $sheet->refresh();
+    }
+
     public function postSalaryPayment(PayrollSlip $slip, int $bankAccountId, string $payDate): PayrollJournalPost
     {
         return DB::transaction(function () use ($slip, $bankAccountId, $payDate) {
