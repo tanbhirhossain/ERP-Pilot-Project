@@ -81,6 +81,9 @@ class LeaveTypeController extends Controller
                 'is_encashable' => (bool) $setting->is_encashable,
                 'encash_max_days' => $setting->encash_max_days === null ? null : (float) $setting->encash_max_days,
                 'encash_salary_component' => $setting->encash_salary_component ?? 'basic',
+                // null = the type is for everyone. Sending it back as-is (rather than to a string like
+                // 'all') keeps "no restriction" and "explicitly everyone" telling the same story.
+                'gender_eligibility' => $setting->gender_eligibility ?: null,
                 'live_requests' => (int) LeaveRequest::query()->where('leave_type_id', $leave_type->id)->whereIn('status', ['Pending', 'Approved'])->count(),
             ],
             'preview' => $this->policyPreview($leave_type, $setting),
@@ -145,6 +148,7 @@ class LeaveTypeController extends Controller
             'working_days.*' => ['integer', 'between:0,6'],
             'approval_steps' => ['nullable', 'array'],
             'approval_steps.*' => ['string', 'max:50'],
+            'gender_eligibility' => ['nullable', 'in:Male,Female,Other,All'],
             'is_carry_forward' => ['required', 'boolean'],
             'max_carry_days' => ['nullable', 'numeric', 'min:0', 'max:365'],
             'carry_expiry_months' => ['nullable', 'integer', 'min:1', 'max:24'],
@@ -179,6 +183,7 @@ class LeaveTypeController extends Controller
             'proration_mode' => $data['proration_mode'],
             'working_days' => $workingDays === [] ? LeaveBalanceService::DEFAULT_WORKING_DAYS : $workingDays,
             'approval_steps' => $steps === [] ? ['HR'] : $steps,
+            'gender_eligibility' => ($data['gender_eligibility'] ?? null) === 'All' ? null : ($data['gender_eligibility'] ?? null),
             'is_carry_forward' => (bool) $data['is_carry_forward'],
             'max_carry_days' => $data['is_carry_forward'] ? ($data['max_carry_days'] ?? null) : null,
             'carry_expiry_months' => $data['carry_expiry_months'] ?? 3,

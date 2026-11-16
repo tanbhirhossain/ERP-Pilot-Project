@@ -38,6 +38,7 @@ interface TypeShape {
   is_encashable: boolean;
   encash_max_days: number | null;
   encash_salary_component: string;
+  gender_eligibility?: string | null;
   live_requests: number;
 }
 
@@ -62,6 +63,7 @@ const form = useForm({
   working_days: props.type?.working_days ?? [0, 1, 2, 3, 4],
   approval_steps_text: (props.type?.approval_steps ?? ['HR']).join(', '),
   is_carry_forward: props.type?.is_carry_forward ?? false,
+  gender_eligibility: (props.type as any)?.gender_eligibility ?? null,
   max_carry_days: props.type?.max_carry_days ?? null,
   carry_expiry_months: props.type?.carry_expiry_months ?? 3,
   is_encashable: props.type?.is_encashable ?? false,
@@ -207,6 +209,26 @@ const summary = computed(() => {
                 <p class="text-[11px] text-muted-foreground">
                   With no pro-rating, somebody who joins in December receives the same entitlement as somebody
                   who worked the whole year.
+                </p>
+              </div>
+
+              <!--
+                Maternity (180 days) and paternity (7 days) were being granted to every employee, because
+                nothing here could say who a type was for. Restricting a type now subtracts it from the
+                balance of everyone it does not apply to — which is the difference between a register of
+                what people may book and a list of numbers.
+              -->
+              <div class="space-y-1.5 sm:col-span-2">
+                <Label>Who may take this leave</Label>
+                <select v-model="form.gender_eligibility" class="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                  <option :value="null">Everyone</option>
+                  <option value="Female">Female employees only</option>
+                  <option value="Male">Male employees only</option>
+                </select>
+                <p class="text-[11px] text-muted-foreground">
+                  Only matters for types that are reserved for one group, such as maternity or paternity.
+                  Employees whose gender is not recorded keep their existing entitlement rather than
+                  losing leave to a blank field.
                 </p>
               </div>
             </div>

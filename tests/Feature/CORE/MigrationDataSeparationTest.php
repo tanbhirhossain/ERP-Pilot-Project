@@ -64,6 +64,13 @@ const MDS_UP_ALLOWLIST = [
     // be exercised at all. A seeder cannot do it: seeders do not run on a deployed database, and these
     // are exactly the rows a deployed database has.
     '2026_11_07_000003_merge_lot_keyed_stock_cache_rows.php' => 'merges the lot-keyed stock cache rows that already exist into the aggregate key the same item introduces',
+    // Creates a TRIGGER, not content. `DB::unprepared()` is the only way to issue CREATE TRIGGER, and
+    // the scanner cannot tell DDL-in-a-raw-statement from DML-in-a-raw-statement, so this one has to be
+    // named. The statement adds no row and changes no row: it makes a future DELETE on payroll_slips
+    // also remove that slip's provident-fund accrual, which is the only place the guarantee can live —
+    // pf_ledgers reaches a slip through a polymorphic pair the schema cannot police, and a model event
+    // would miss the mass deletes that caused the 3,433 orphans this repairs the cause of.
+    '2026_11_16_100000_cascade_pf_accrual_on_slip_delete.php' => 'issues CREATE TRIGGER (DDL in a raw statement), which provisions no content',
 ];
 
 /**
@@ -86,6 +93,8 @@ const MDS_DOWN_ALLOWLIST = [
     // Rolling back restores the enum without 'approved'. Approved rows must be demoted to
     // 'generated' first, or the enum change itself would fail on rows it can no longer represent.
     '2026_11_10_000001_payroll_cutlist_review_stage.php' => 'demotes approved cutlists back to generated before narrowing the status enum',
+    // Drops the same trigger. DDL again, named for the same reason as its up().
+    '2026_11_16_100000_cascade_pf_accrual_on_slip_delete.php' => 'drops the trigger it created — DDL in a raw statement, no rows touched',
 ];
 
 /** Every migration file in the project, from both locations. */

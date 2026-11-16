@@ -61,6 +61,7 @@ final class LeaveBalanceService
             'is_encashable' => (bool) $setting->is_encashable,
             'encash_max_days' => $setting->encash_max_days === null ? null : (float) $setting->encash_max_days,
             'encash_salary_component' => $setting->encash_salary_component ?: 'basic',
+            'gender_eligibility' => $setting->gender_eligibility ?: null,
         ];
     }
 
@@ -158,11 +159,27 @@ final class LeaveBalanceService
         $settings = $this->settings($type);
         $annual = (float) $type->days_per_year;
 
+        $employee = Employee::query()->where('employee_id', $employeeId)->first(['employee_id', 'joining_date', 'gender']);
+
+        // A type reserved for one gender is nobody else's entitlement. Maternity (180 days) and
+        // paternity (7 days) were granted to all 998 employees, so the register reported 187 days of
+        // leave that most of the payroll could never take — arithmetically right, practically useless.
+        //
+        // An unset restriction means everyone, and so does an employee whose gender is not recorded:
+        // the register must not invent a restriction out of missing data. The consequence is that a
+        // gender-restricted type still credits employees with no gender on file, which is why the
+        // screen has to say how many of those there are rather than quietly resolving it.
+        $restriction = $settings['gender_eligibility'] ?? null;
+        if ($restriction !== null && $restriction !== 'All') {
+            $gender = $employee?->gender;
+            if ($gender !== null && $gender !== '' && strcasecmp((string) $gender, (string) $restriction) !== 0) {
+                return 0.0;
+            }
+        }
+
         if ($settings['accrual_mode'] !== 'monthly' && $settings['proration_mode'] === 'none') {
             return round($annual, 2);
         }
-
-        $employee = Employee::query()->where('employee_id', $employeeId)->first(['employee_id', 'joining_date']);
         $yearStart = Carbon::create($year, 1, 1)->startOfDay();
         $yearEnd = Carbon::create($year, 12, 31)->startOfDay();
 

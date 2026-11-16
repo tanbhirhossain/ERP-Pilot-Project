@@ -333,15 +333,61 @@ final class PayrollSalarySheetWorkspaceService
             blocking: false,
         );
 
+        // This used to pass on `generated` as well as `approved`, which made a check called "reviewed"
+        // report success for a cutlist nobody had reviewed. Cutlist 1 for 2026-10 was generated and
+        // never signed off, and the sheet it fed was released anyway.
+        $cutlistReviewed = $ctx['cutlist'] !== null && $ctx['cutlist']['status'] === 'approved';
         $checks[] = $this->check(
             'cutlist',
             'Attendance cutlist reviewed',
-            $ctx['cutlist'] !== null && in_array($ctx['cutlist']['status'], ['approved', 'generated'], true),
+            $cutlistReviewed,
             $ctx['cutlist'] === null
                 ? 'No attendance cutlist is linked to this sheet, so punishment and overtime cannot be traced to an approved source'
-                : sprintf('Cutlist %s · %s item(s) · %s', $ctx['cutlist']['status'], number_format($ctx['cutlist']['items']), $ctx['cutlist']['approved_at'] ? 'approved' : 'awaiting approval'),
+                : sprintf(
+                    'Cutlist is %s · %s item(s) · %s',
+                    $ctx['cutlist']['status'],
+                    number_format($ctx['cutlist']['items']),
+                    $cutlistReviewed ? 'signed off' : 'not signed off — the rows have not been reviewed',
+                ),
             blocking: false,
         );
+
+        // Who the run walked past. Every other check on this screen describes the slips that exist;
+        // none of them can see an employee who never got one, so the 14 doctors who had 31 days of
+        // attendance and no salary row vanished from a released payroll without a single warning.
+        $skipped = $this->skippedEmployees($sheetId);
+        $checks[] = $this->check(
+            'skipped',
+            'Nobody was skipped',
+            $skipped['count'] === 0,
+            $skipped['count'] === 0
+                ? 'Every active employee who joined before this period is on the sheet'
+                : sprintf(
+                    '%d active employee(s) worked this period but have no salary record, so payroll could not pay them: %s',
+                    $skipped['count'],
+                    $skipped['names'],
+                ),
+            blocking: false,
+        );
+
+        // Employees whose salary would only start in the future, but who are on the clock today.
+        // Both of these were marked Active, joined 2029-02-01, carry a salary effective from that same
+        // future date — and have October attendance. One of those three facts is a typo, and payroll
+        // cannot pay any of them until somebody decides which.
+        $futureDated = $this->futureDatedEmployees($sheetId);
+        if ($futureDated['count'] > 0) {
+            $checks[] = $this->check(
+                'future_dated',
+                'No employee is dated into the future',
+                false,
+                sprintf(
+                    '%d active employee(s) have a joining date or salary that starts after this period but already have attendance: %s',
+                    $futureDated['count'],
+                    $futureDated['names'],
+                ),
+                blocking: false,
+            );
+        }
 
         $checks[] = $this->check(
             'ledger',
@@ -363,6 +409,111 @@ final class PayrollSalarySheetWorkspaceService
             'can_release_data' => $blocking === 0 && (string) $sheet->status === 'ready',
             'status' => (string) $sheet->status,
         ];
+    }
+
+    /**
+     * Active employees who were on the payroll clock but did not make it onto this sheet.
+     *
+     * The test is deliberately narrow, because a warning nobody trusts is worse than no warning:
+     *   - the employee is active and undeleted,
+     *   - they joined on or before the end of the period (a future joining date is not a skip, it is
+     *     somebody scheduled to start),
+     *   - they have no current salary row — which is the actual reason payroll drops them, and
+     *   - they appear in that month's attendance, so they were really here.
+     *
+     * Exclusions the user recorded deliberately are honoured: an employee somebody excluded, with a
+     * reason, is a decision, not an omission.
+     *
+     * @return array{count: int, names: string, employee_ids: list<string>}
+     */
+    private function skippedEmployees(int $sheetId): array
+    {
+        $sheet = DB::table('payroll_salary_sheets')->where('id', $sheetId)->first(['pay_year', 'pay_month']);
+        if ($sheet === null) {
+            return ['count' => 0, 'names' => '', 'employee_ids' => []];
+        }
+
+        $periodEnd = \Illuminate\Support\Carbon::create((int) $sheet->pay_year, (int) $sheet->pay_month, 1)->endOfMonth()->toDateString();
+        $excluded = DB::table('payroll_period_exclusions')
+            ->where('pay_year', $sheet->pay_year)
+            ->where('pay_month', $sheet->pay_month)
+            ->pluck('employee_id')
+            ->all();
+
+        $paid = DB::table('payroll_slips')->where('salary_sheet_id', $sheetId)->pluck('employee_id')->all();
+        $withSalary = DB::table('employee_salaries')->where('is_current', 1)->pluck('employee_id')->all();
+
+        $candidates = DB::table('employees')
+            ->whereNull('deleted_at')
+            ->where('status', 'Active')
+            ->where('joining_date', '<=', $periodEnd)
+            ->whereNotIn('employee_id', $paid)
+            ->whereNotIn('employee_id', $withSalary)
+            ->whereNotIn('employee_id', $excluded)
+            ->whereIn('employee_id', function ($q) use ($sheet): void {
+                $q->select('employee_id')
+                    ->from('attendance_dailies')
+                    ->whereYear('duty_date', (int) $sheet->pay_year)
+                    ->whereMonth('duty_date', (int) $sheet->pay_month);
+            })
+            ->orderBy('employee_id')
+            ->get(['employee_id', 'first_name', 'last_name', 'full_name']);
+
+        $names = $candidates->take(6)->map(function ($e): string {
+            $name = trim((string) ($e->full_name ?? '')) ?: trim(((string) ($e->first_name ?? '')).' '.((string) ($e->last_name ?? '')));
+
+            return $name !== '' ? $name : (string) $e->employee_id;
+        })->implode(', ');
+
+        if ($candidates->count() > 6) {
+            $names .= sprintf(' and %d more', $candidates->count() - 6);
+        }
+
+        return [
+            'count' => $candidates->count(),
+            'names' => $names,
+            'employee_ids' => $candidates->pluck('employee_id')->all(),
+        ];
+    }
+
+    /**
+     * Active employees who worked this month while being dated into the future.
+     *
+     * @return array{count: int, names: string}
+     */
+    private function futureDatedEmployees(int $sheetId): array
+    {
+        $sheet = DB::table('payroll_salary_sheets')->where('id', $sheetId)->first(['pay_year', 'pay_month']);
+        if ($sheet === null) {
+            return ['count' => 0, 'names' => ''];
+        }
+
+        $periodEnd = \Illuminate\Support\Carbon::create((int) $sheet->pay_year, (int) $sheet->pay_month, 1)->endOfMonth()->toDateString();
+
+        $rows = DB::table('employees')
+            ->whereNull('deleted_at')
+            ->where('status', 'Active')
+            ->where('joining_date', '>', $periodEnd)
+            ->whereIn('employee_id', function ($q) use ($sheet): void {
+                $q->select('employee_id')
+                    ->from('attendance_dailies')
+                    ->whereYear('duty_date', (int) $sheet->pay_year)
+                    ->whereMonth('duty_date', (int) $sheet->pay_month);
+            })
+            ->orderBy('employee_id')
+            ->get(['employee_id', 'first_name', 'last_name', 'full_name', 'joining_date']);
+
+        $names = $rows->take(6)->map(function ($e): string {
+            $name = trim((string) ($e->full_name ?? '')) ?: trim(((string) ($e->first_name ?? '')).' '.((string) ($e->last_name ?? '')));
+
+            return sprintf('%s (joined %s)', $name !== '' ? $name : $e->employee_id, substr((string) $e->joining_date, 0, 10));
+        })->implode(', ');
+
+        if ($rows->count() > 6) {
+            $names .= sprintf(' and %d more', $rows->count() - 6);
+        }
+
+        return ['count' => $rows->count(), 'names' => $names];
     }
 
     /** Slips whose snapshot says nothing was withheld. */

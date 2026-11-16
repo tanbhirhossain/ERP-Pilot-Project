@@ -56,6 +56,8 @@ final class GenerateSalaryCutlistAction
         // signed off by a reviewer who had never seen the rows now on screen.
         DB::transaction(function () use ($cutlist): void {
             $cutlist->items()->delete();
+            // The invariant, stated once: an approval is only meaningful while the rows it attested to
+            // are the rows on screen. Every stamp that records a sign-off goes with the rows.
             $cutlist->update([
                 'status' => 'draft',
                 'generated_at' => null,
@@ -111,6 +113,15 @@ final class GenerateSalaryCutlistAction
             }, 3);
         }
         $cutlist->update(['status' => 'generated', 'generated_at' => now()]);
+
+        // The transaction above clears the stamps, but a rebuild is the one operation that can put a
+        // cutlist back into `generated` holding a stale sign-off: cutlist 1 was approved at 11:28:25 and
+        // rebuilt at 11:29:18, and its header still read "approved" over rows the reviewer never saw.
+        // Clearing twice is cheap; trusting that every path clears it once is what failed.
+        $cutlist->refresh();
+        if ($cutlist->status !== 'approved' && ($cutlist->approved_at !== null || $cutlist->approved_by !== null)) {
+            $cutlist->update(['approved_at' => null, 'approved_by' => null, 'approval_note' => null]);
+        }
 
         return $cutlist->refresh();
     }

@@ -257,6 +257,24 @@ const reopenYear = async (): Promise<void> => {
           Employees counts every active employee × type. A row is only written if the employee is active now;
           a closed row from a previous run is skipped, never overwritten.
         </p>
+
+        <!--
+          The table shows a lapse figure per row, which is correct and easy to read straight past: no
+          leave type here carries anything, so the "would carry" column is a column of dashes and the
+          total reads as a number rather than as a decision. Closing the year with this configuration
+          destroys every unused day in the company, and nothing said so in a sentence.
+        -->
+        <div v-if="preview.totals.lapsed > 0 && preview.totals.carry === 0"
+             class="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          <p class="font-semibold">Closing this year would lapse every unused day — {{ days(preview.totals.lapsed) }} of them.</p>
+          <p class="mt-1">
+            No leave type currently carries forward, so {{ year + 1 }} would open at zero for all {{ formatNumber(preview.totals.employees) }} employees
+            and the rest would cease to exist. That is a legitimate policy, and it is also the kind of
+            policy that should be chosen on purpose. If any type should carry, turn on
+            <span class="font-medium">carry forward</span> (with an optional cap) for it under
+            <span class="font-medium">Leave → Types &amp; policy</span> before closing.
+          </p>
+        </div>
       </EnterpriseCard>
 
       <!-- Already-closed snapshot -->

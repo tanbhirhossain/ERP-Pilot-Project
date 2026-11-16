@@ -10,15 +10,32 @@ use Modules\PAYROLL\Interfaces\Repositories\PayrollSalarySheetRepositoryInterfac
 use Modules\PAYROLL\Jobs\ProcessSalarySheetJob;
 use Modules\PAYROLL\Models\PayrollCalculationSnapshot;
 use Modules\PAYROLL\Models\PayrollCutlist;
+use Modules\PAYROLL\Models\PayrollJournalPost;
 use Modules\PAYROLL\Models\PayrollLoanMonthlyBatch;
 use Modules\PAYROLL\Models\PayrollSalarySheet;
 use Modules\PAYROLL\Models\PayrollSetting;
 use Modules\PAYROLL\Models\PayrollSlip;
 use Modules\PAYROLL\Models\PayrollWorkflowAudit;
+use Illuminate\Support\Facades\Log;
 
 final class PayrollSalarySheetService
 {
-    public function __construct(private readonly PayrollSalarySheetRepositoryInterface $sheets, private readonly MarkPayrollSlipPaymentAction $payment) {}
+    public function __construct(
+        private readonly PayrollSalarySheetRepositoryInterface $sheets,
+        private readonly MarkPayrollSlipPaymentAction $payment,
+    ) {}
+
+    /**
+     * The journal service, resolved lazily.
+     *
+     * Release now posts the accrual itself. Injecting the journal service through the constructor
+     * would have re-bound this class in every place that builds it by hand with the two arguments it
+     * has always taken, for no benefit: the dependency is only needed on the release path.
+     */
+    private function journals(): PayrollJournalService
+    {
+        return app(PayrollJournalService::class);
+    }
 
     public function paginate(array $filters = [], int $perPage = 25): LengthAwarePaginator
     {
@@ -136,6 +153,28 @@ final class PayrollSalarySheetService
             }
             $locked->update(['status' => 'released']);
             PayrollWorkflowAudit::query()->create(['subject_type' => 'salary_sheet', 'subject_id' => $locked->id, 'event' => 'released', 'actor_id' => $actorId, 'occurred_at' => now()]);
+
+            // Release and the accrual journal are two halves of one event: the moment a month stops
+            // being recalculable and becomes a liability. Leaving the second half to a button meant
+            // sheet 4 was released on 2026-11-15 and still had no accrual a day later — the payroll
+            // and its 88,722.98 of withholding existed on the slips and nowhere in the ledger.
+            //
+            // A failure here must not un-release the month the business just signed off: the sheet is
+            // released, the payable is real, and refusing to release over a chart-of-accounts problem
+            // would leave payroll blocked by bookkeeping. The exception is logged loudly and the
+            // thread on the finance screen reports the missing journal until somebody posts it.
+            if (! PayrollJournalPost::query()->where('salary_sheet_id', $locked->id)->where('posting_type', 'salary_accrual')->where('status', 'posted')->exists()) {
+                try {
+                    $this->journals()->postSalaryAccrual($locked);
+                } catch (\Throwable $e) {
+                    Log::error('Salary sheet released but the accrual journal could not be posted', [
+                        'sheet_id' => $locked->id,
+                        'pay_year' => $locked->pay_year,
+                        'pay_month' => $locked->pay_month,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
 
             return $locked->refresh();
         });
