@@ -74,7 +74,16 @@ interface Overview {
   totals: { entitlement_pool: number; approved: number; pending: number; utilisation: number | null; active_employees: number };
   series: Array<{ month: number; label: string; days: number; requests: number }>;
   year_state: { previous_closed: boolean; current_closed: boolean; previous_rows: number; current_rows: number };
-  lapse_preview: { days: number; carry: number; types: Array<{ name: string; lapsed: number; is_carry_forward: boolean }>; already_closed: number };
+  lapse_preview: {
+    days: number;
+    days_long: number;
+    days_spendable: number;
+    carry: number;
+    types: Array<{ name: string; lapsed: number; is_carry_forward: boolean; is_long_leave: boolean }>;
+    already_closed: number;
+  };
+  spendable_pool: number;
+  long_leave_pool: number;
 }
 
 interface Decision {
@@ -97,6 +106,9 @@ const years = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 3 +
 const changeYear = (year: number): void => {
   router.get(route('hrm.leaves.index'), { year }, { preserveState: true, preserveScroll: true });
 };
+
+const perEmployee = (value: number): number =>
+  props.overview.totals.active_employees ? value / props.overview.totals.active_employees : 0;
 
 const days = (value: number): string => `${formatNumber(Math.round(value * 10) / 10)}d`;
 
@@ -193,7 +205,7 @@ const todayLabel = new Date().toLocaleDateString(undefined, { day: '2-digit', mo
 
       <div class="grid items-start gap-4 lg:grid-cols-3">
         <!-- Away today -->
-        <EnterpriseCard title="Away today" :description="`Approved leave that covers ${todayLabel}`" :icon="UserMinus" class="lg:col-span-2">
+        <EnterpriseCard title="Away today" :description="`Approved leave that covers ${todayLabel}`" :icon="UserMinus" :class="overview.on_leave_today === 0 ? 'lg:col-span-1' : 'lg:col-span-2'">
           <template #actions>
             <span class="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium tabular-nums">
               {{ formatNumber(overview.on_leave_today) }} {{ overview.on_leave_today === 1 ? 'person' : 'people' }}
@@ -243,7 +255,7 @@ const todayLabel = new Date().toLocaleDateString(undefined, { day: '2-digit', mo
         </EnterpriseCard>
 
         <!-- The year in days -->
-        <EnterpriseCard title="Leave taken, by month" :description="`Approved days in ${overview.year}`" :icon="CalendarDays">
+        <EnterpriseCard title="Leave taken, by month" :description="`Approved days in ${overview.year}`" :icon="CalendarDays" :class="overview.on_leave_today === 0 ? 'lg:col-span-2' : ''">
           <div class="flex items-end justify-between gap-1" role="img" :aria-label="`Approved leave days per month in ${overview.year}`">
             <div v-for="point in overview.series" :key="point.month" class="flex min-w-0 flex-1 flex-col items-center gap-1.5">
               <span class="text-[10px] tabular-nums text-muted-foreground">{{ point.days > 0 ? point.days : '' }}</span>
@@ -266,11 +278,12 @@ const todayLabel = new Date().toLocaleDateString(undefined, { day: '2-digit', mo
             </p>
             <p class="flex items-center justify-between">
               <span>Granted across {{ formatNumber(overview.totals.active_employees) }} staff</span>
-              <span class="tabular-nums">{{ days(overview.totals.entitlement_pool) }}</span>
+              <span class="tabular-nums">{{ days(overview.spendable_pool) }}</span>
             </p>
             <p class="pt-1 text-[11px] leading-snug">
-              The grant total pools every type for every employee, so it is dominated by long leave — it is the
-              size of the entitlement, not what anybody can spend.
+              Ordinary leave only. A further {{ days(overview.long_leave_pool) }} is long-leave entitlement
+              (maternity and the like), which most staff never touch — adding it to this figure would report
+              a pool nobody can spend, and the report page says the same two numbers.
             </p>
           </div>
         </EnterpriseCard>
@@ -312,11 +325,17 @@ const todayLabel = new Date().toLocaleDateString(undefined, { day: '2-digit', mo
                     can compare between types.
                   -->
                   <span class="text-xs tabular-nums">
-                    <template v-if="type.requests > 0 && overview.totals.active_employees > 0">
-                      {{ formatNumber(Math.round((type.approved / overview.totals.active_employees) * 100) / 100) }}d
+                    <template v-if="type.approved <= 0">
+                      <span class="text-muted-foreground">—</span>
+                    </template>
+                    <template v-else-if="perEmployee(type.approved) >= 0.1">
+                      {{ formatNumber(perEmployee(type.approved)) }}d
                       <span class="text-muted-foreground">per employee</span>
                     </template>
-                    <span v-else class="text-muted-foreground">not used</span>
+                    <!-- A type used by two people in a thousand reads 0.00 — say the takers instead. -->
+                    <span v-else class="text-muted-foreground">
+                      {{ formatNumber(type.requests) }} {{ type.requests === 1 ? 'taker' : 'takers' }}
+                    </span>
                   </span>
                 </td>
               </tr>
@@ -370,12 +389,17 @@ const todayLabel = new Date().toLocaleDateString(undefined, { day: '2-digit', mo
             <div v-if="overview.lapse_preview.days > 0" class="rounded-lg border border-warning/30 bg-warning/[0.06] p-3">
               <p class="flex items-start gap-1.5 text-[13px] font-semibold text-warning">
                 <TriangleAlert class="mt-0.5 size-3.5 shrink-0" />
-                {{ days(overview.lapse_preview.days) }} would lapse
+                {{ days(overview.lapse_preview.days_spendable) }} of ordinary leave would lapse
               </p>
               <p class="mt-1 text-xs text-muted-foreground">
-                No leave type carries forward, so closing {{ overview.year }} throws every unused day away.
+                Unused days on a type without carry-forward are lost when {{ overview.year }} closes.
                 {{ overview.lapse_preview.types.slice(0, 3).map((t) => t.name).join(', ') }} alone account for
                 {{ days(overview.lapse_preview.types.slice(0, 3).reduce((sum, t) => sum + t.lapsed, 0)) }}.
+              </p>
+              <p v-if="overview.lapse_preview.days_long > 0" class="mt-1 text-xs text-muted-foreground">
+                A further {{ days(overview.lapse_preview.days_long) }} is long-leave entitlement (maternity and
+                the like) — the size of the benefit map, not leave anybody was about to take. Total
+                {{ days(overview.lapse_preview.days) }}.
               </p>
               <Button size="sm" variant="outline" class="mt-2 w-full" @click="router.visit(route('hrm.leave-types.index'))">
                 Review carry-forward policy

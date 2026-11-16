@@ -45,6 +45,9 @@ final class LeaveYearEndService
             $row = [
                 'leave_type_id' => $type->id,
                 'leave_type' => $type->name,
+                // Carried so a caller can tell a long-leave entitlement from ordinary leave without
+                // joining back to leave_types, and so the desk can label the lapse figure honestly.
+                'days_per_year' => (float) $type->days_per_year,
                 'code' => $type->code,
                 'color' => $type->color,
                 'is_carry_forward' => (bool) $setting->is_carry_forward,

@@ -546,10 +546,45 @@ it('warns on the desk about the days closing the year would lapse', function ():
     // `types` carries the lapsing types with their own figures — the desk names the three biggest and
     // says how much of the total they account for, so a bare list of names would not be enough.
     expect($preview['days'])->toBe(14.0)
+        ->and($preview['days_spendable'])->toBe(14.0)
+        ->and($preview['days_long'])->toBe(0.0)
         ->and($preview['carry'])->toBe(0.0)
         ->and($preview['types'])->toHaveCount(1)
         ->and($preview['types'][0]['name'])->toBe('Earned Leave')
         ->and($preview['types'][0]['lapsed'])->toBe(14.0)
         ->and($preview['types'][0]['is_carry_forward'])->toBeFalse()
         ->and($preview['already_closed'])->toBe(0);
+});
+
+it('quotes the same spendable pool on the desk as on the report', function (): void {
+    lvEmployee('E-34');
+    lvPolicy(lvType('Casual Leave', 10));
+    lvPolicy(lvType('Maternity Leave', 180));
+
+    $service = new LeaveWorkspaceService(new LeaveBalanceService);
+    $desk = $service->overview(2026);
+    $report = $service->report(2026)['totals'];
+
+    // The desk used to print 190 days "granted across 1 staff" — the pooled total, which is the size
+    // of the benefit map rather than anything the employee can spend. Both pages now say 10.
+    expect($desk['spendable_pool'])->toBe(10.0)
+        ->and($desk['long_leave_pool'])->toBe(180.0)
+        ->and($desk['totals']['entitlement_pool'])->toBe(190.0)
+        ->and($report['entitlement_pool_spendable'])->toBe($desk['spendable_pool'])
+        ->and($report['entitlement_pool_long'])->toBe($desk['long_leave_pool']);
+});
+
+it('marks a lapsed long-leave entitlement as long leave, not as leave somebody lost', function (): void {
+    lvEmployee('E-35', ['joining_date' => '2020-01-01']);
+    lvPolicy(lvType('Maternity Leave', 180));
+
+    $preview = (new LeaveWorkspaceService(new LeaveBalanceService))->overview(2026)['lapse_preview'];
+
+    expect($preview['days'])->toBe(180.0)
+        ->and($preview['days_long'])->toBe(180.0)
+        // Nothing of that 180 is ordinary leave, so the heading the desk leads with reads zero rather
+        // than announcing a 180-day emergency for an entitlement almost nobody draws on.
+        ->and($preview['days_spendable'])->toBe(0.0)
+        ->and($preview['types'])->toHaveCount(1)
+        ->and($preview['types'][0]['is_long_leave'])->toBeTrue();
 });

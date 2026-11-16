@@ -50,6 +50,7 @@ final class LeaveWorkspaceService
         $typeRows = [];
         $totalEntitlement = 0.0;
         $totalApproved = 0.0;
+        $longPool = 0.0;
         $totalPending = 0.0;
         foreach (LeaveType::query()->where('is_active', true)->orderBy('name')->get() as $type) {
             $approved = (float) LeaveRequest::query()
@@ -79,6 +80,13 @@ final class LeaveWorkspaceService
             $totalEntitlement += $entitlement;
             $totalApproved += $approved;
             $totalPending += $pendingDays;
+
+            // Long-leave entitlements (maternity and the like) are most of the pool and almost none of
+            // the spend. Held apart so the desk and the report quote the same two numbers instead of
+            // one that silently pools a benefit map with ordinary leave.
+            if ((float) $type->days_per_year >= LeaveBalanceService::LONG_LEAVE_DAYS) {
+                $longPool += $entitlement;
+            }
         }
 
         $monthly = LeaveRequest::query()
@@ -111,6 +119,8 @@ final class LeaveWorkspaceService
             'on_leave_now' => $onLeaveNow->map(fn (LeaveRequest $l): array => $this->requestRow($l))->all(),
             'on_leave_today' => $onLeaveNow->count(),
             'types' => $typeRows,
+            'spendable_pool' => round($totalEntitlement - $longPool, 2),
+            'long_leave_pool' => round($longPool, 2),
             'totals' => [
                 'entitlement_pool' => round($totalEntitlement, 2),
                 'approved' => round($totalApproved, 2),
@@ -145,13 +155,25 @@ final class LeaveWorkspaceService
         $preview = app(LeaveYearEndService::class)->preview($year);
         $lapsing = array_values(array_filter($preview['types'], fn (array $t): bool => ($t['lapsed'] ?? 0) > 0));
 
+        // Split the same way the granted pool is split: maternity alone is most of this and it is not
+        // leave anybody was about to take, so a single 226,771d heading reads as an emergency.
+        $longDays = array_sum(array_map(
+            fn (array $t): float => (float) ($t['days_per_year'] ?? 0) >= LeaveBalanceService::LONG_LEAVE_DAYS ? (float) $t['lapsed'] : 0.0,
+            $lapsing,
+        ));
+
         return [
             'days' => round((float) $preview['totals']['lapsed'], 2),
+            'days_long' => round($longDays, 2),
+            'days_spendable' => round((float) $preview['totals']['lapsed'] - $longDays, 2),
             'carry' => round((float) $preview['totals']['carry'], 2),
             'types' => array_map(fn (array $t): array => [
                 'name' => $t['leave_type'],
                 'lapsed' => $t['lapsed'],
                 'is_carry_forward' => $t['is_carry_forward'],
+                // Named so the desk can say when the whole figure is a benefit map rather than leave
+                // somebody was about to take. Maternity is most of this hospital's granted days.
+                'is_long_leave' => (float) ($t['days_per_year'] ?? 0) >= LeaveBalanceService::LONG_LEAVE_DAYS,
             ], $lapsing),
             'already_closed' => (int) $preview['closed'],
         ];
