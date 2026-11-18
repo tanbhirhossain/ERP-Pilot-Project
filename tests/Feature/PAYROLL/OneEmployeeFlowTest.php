@@ -641,3 +641,137 @@ test('absence is not deducted from payroll, and this test is where that changes'
         ->and(round((float) $slip->total_deductions, 2))->toBe(0.0)
         ->and(round((float) $slip->net_salary, 2))->toBe(30000.0);
 });
+
+/**
+ * Two employees, two ways of being paid — the way a hospital actually runs.
+ *
+ * The bank advice used to refuse the whole month if a single employee had no account number. That is
+ * backwards: the attendants, the cleaners and the drivers are paid in hand, and one of them must not
+ * be able to stop a thousand people being paid. So the payroll splits — account numbers to the BEFTN
+ * file, everyone else to a cash sheet — and the ledger credits the till for the cash half instead of
+ * a bank that never paid anything.
+ */
+test('the payroll splits into a bank advice and a cash sheet, and neither pays the other\'s people', function (): void {
+    @set_time_limit(0);
+    $this->travelTo(Carbon::parse('2026-11-01 12:00:00'));
+
+    $department = Department::factory()->create();
+    $designation = Designation::factory()->create(['department_id' => $department->id]);
+    $admin = User::factory()->create();
+    $admin->assignRole(Role::findOrCreate('Administrator', 'web'));
+    $this->actingAs($admin);
+
+    $now = now()->toDateTimeString();
+
+    $cashAccount = \Modules\ACCOUNTS\Models\Account::query()->create([
+        'code' => '1001', 'name' => 'Cash in Hand', 'account_type' => 'asset',
+        'nature' => 'debit', 'is_active' => true,
+    ]);
+    $bankLedger = \Modules\ACCOUNTS\Models\Account::query()->create([
+        'code' => '100201', 'name' => 'Cash at Bank — Flow', 'account_type' => 'asset',
+        'nature' => 'debit', 'is_active' => true,
+    ]);
+    \Modules\ACCOUNTS\Models\Bank::query()->create([
+        'name' => 'Flow disbursement bank', 'code' => 'FLOW-BANK2',
+        'bank_name' => 'Prime Bank Ltd', 'branch_name' => 'Agrabad', 'account_no' => '1234567890124',
+        'account_holder' => 'ERP Pilot Hospital', 'currency' => 'BDT', 'is_default' => true,
+        'is_active' => true, 'account_id' => $bankLedger->id, 'created_by' => $admin->id,
+    ]);
+    \Modules\ACCOUNTS\Models\FiscalYear::query()->create([
+        'name' => 'FY 2026-2027', 'code' => 'FY26-27', 'start_date' => '2026-07-01',
+        'end_date' => '2027-06-30', 'status' => 'open', 'created_by' => $admin->id,
+    ]);
+
+    // The senior one is paid through the bank; the attendant is paid in hand. Neither record says
+    // which — the presence of an account number is what decides it.
+    $cohort = [
+        ['FLOW-BANK', 'Bank Paid', '1000123456788', null],
+        ['FLOW-CASH', 'Cash Paid', null, 'cash'],
+    ];
+
+    foreach ($cohort as [$employeeId, $name, $accountNo, $method]) {
+        DB::table('employees')->insert([[
+            'employee_id' => $employeeId, 'first_name' => 'Flow', 'last_name' => $name,
+            'full_name' => $name, 'email' => strtolower(str_replace(' ', '.', $name)).'@example.test',
+            'gender' => 'Male', 'joining_date' => '2019-01-01', 'employment_type' => 'Permanent',
+            'status' => 'Active', 'department_id' => $department->id, 'designation_id' => $designation->id,
+            'is_active' => true, 'duty_hours' => 8, 'allow_overtime' => true, 'allow_bonus' => true,
+            'created_at' => $now, 'updated_at' => $now,
+        ]]);
+        DB::table('employee_salaries')->insert([[
+            'employee_id' => $employeeId, 'basic_salary' => 20000, 'gross_salary' => 30000,
+            'house_rent' => 6000, 'medical_allowance' => 1500, 'other_allowance' => 2500,
+            'net_salary' => 30000, 'effective_from' => '2019-01-01', 'is_current' => true,
+            'bank_account_no' => $accountNo, 'bank_name' => $accountNo ? 'Prime Bank Ltd' : null,
+            'payment_method' => $method,
+            'created_at' => $now, 'updated_at' => $now,
+        ]]);
+        DB::table('employee_policies')->insert([[
+            'employee_id' => $employeeId, 'grace_time_in' => 15, 'grace_time_out' => 15,
+            'shift_type' => 'Fixed', 'is_punishable' => false, 'duty_hours' => 8, 'auto_shift' => false,
+            'created_at' => $now, 'updated_at' => $now,
+        ]]);
+    }
+
+    DB::table('payroll_settings')->updateOrInsert(['id' => 1], [
+        'currency' => 'BDT', 'unpaid_leave_day_divisor' => 30, 'punishment_days_per_salary_day' => 3,
+        'overtime_multiplier' => 1, 'extra_duty_multiplier' => 1, 'missing_punch_penalty_amount' => 0,
+        'cutlist_review_required' => false, 'created_at' => $now, 'updated_at' => $now,
+    ]);
+
+    Bus::fake();
+    $sheet = PayrollSalarySheet::query()->create([
+        'pay_year' => 2026, 'pay_month' => 11, 'status' => 'queued', 'include_punishments' => false,
+        'employee_count' => 2, 'processed_count' => 0, 'gross_total' => 0, 'deduction_total' => 0,
+        'net_total' => 0, 'created_by' => $admin->id,
+    ]);
+    app(ProcessMonthlyPayrollBatchAction::class)->execute($sheet->id);
+    app(PayrollSalarySheetService::class)->release(PayrollSalarySheet::query()->findOrFail($sheet->id), $admin->id);
+    $sheet = PayrollSalarySheet::query()->findOrFail($sheet->id);
+
+    $result = app(PayrollBankAdviceService::class)->generateForSheet($sheet);
+
+    // One advice, holding only the bank-paid employee.
+    $advices = collect($result)->filter(fn ($r) => $r instanceof \Modules\PAYROLL\Models\PayrollBankAdvice);
+    expect($advices)->toHaveCount(1);
+
+    $advice = $advices->first();
+    $bankPaid = $advice->items()->pluck('employee_id')->all();
+    expect($bankPaid)->toBe(['FLOW-BANK'])
+        ->and(round((float) $advice->total_amount, 2))->toBe(30000.0);
+
+    // And a cash sheet for the other one, not a refusal and not a silent omission.
+    $cashSheet = collect($result)->first(fn ($r) => is_array($r) && isset($r['cash_sheet']));
+    expect($cashSheet)->not->toBeNull()
+        ->and($cashSheet['employee_count'])->toBe(1)
+        ->and(round((float) $cashSheet['total_amount'], 2))->toBe(30000.0);
+
+    // Nobody is on both lists, and the two together cover the whole payroll.
+    $paidByBank = $advice->items()->sum('net_amount');
+    expect(round((float) $paidByBank + (float) $cashSheet['total_amount'], 2))
+        ->toBe(round((float) $sheet->net_total, 2));
+
+    // Paying the cash employee posts against the till, not against a bank that never paid them.
+    app(MarkPayrollSlipPaymentAction::class)->execute(
+        PayrollSlip::query()->where('salary_sheet_id', $sheet->id)->where('employee_id', 'FLOW-CASH')->firstOrFail(),
+        'paid',
+        $admin->id,
+    );
+
+    $cashSlip = PayrollSlip::query()->where('salary_sheet_id', $sheet->id)->where('employee_id', 'FLOW-CASH')->firstOrFail();
+    expect($cashSlip->payment_method)->toBe('cash')
+        ->and($cashSlip->payment_journal_id)->not->toBeNull();
+
+    $cashCredited = (float) DB::table('acc_journal_lines')
+        ->where('journal_id', $cashSlip->payment_journal_id)
+        ->where('account_id', $cashAccount->id)
+        ->sum('credit');
+
+    $bankCredited = (float) DB::table('acc_journal_lines')
+        ->where('journal_id', $cashSlip->payment_journal_id)
+        ->where('account_id', $bankLedger->id)
+        ->sum('credit');
+
+    expect(round($cashCredited, 2))->toBe(30000.0)
+        ->and(round($bankCredited, 2))->toBe(0.0);
+});

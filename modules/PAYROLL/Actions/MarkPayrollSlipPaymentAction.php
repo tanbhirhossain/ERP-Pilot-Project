@@ -2,6 +2,7 @@
 
 namespace Modules\PAYROLL\Actions;
 
+use Modules\HRM\Models\Employee\EmployeeSalary;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -54,8 +55,14 @@ final class MarkPayrollSlipPaymentAction
                 }
             }
 
+            // How this slip was actually paid, captured at the moment it was paid. The salary record's
+            // payment_method is the intent and can be edited afterwards; this is the fact, and the
+            // ledger posting below reads it so that a cash payment can never be booked as a bank one.
+            $method = $status === 'paid' ? $this->paymentMethodFor($locked) : null;
+
             $locked->update([
                 'payment_status' => $status,
+                'payment_method' => $method,
                 'paid_at' => $status === 'paid' ? now() : null,
                 'paid_by' => $status === 'paid' ? $actorId : null,
             ]);
@@ -87,6 +94,34 @@ final class MarkPayrollSlipPaymentAction
 
             return $result->refresh();
         });
+    }
+
+    /**
+     * 'cash' or 'bank' for this employee, taken from the salary record they are paid under.
+     *
+     * Deliberately a small, readable rule: the salary record says how this person is paid, and an
+     * employee with no account number is a cash employee whether or not anyone remembered to set the
+     * flag. That inference matters — it is the difference between a ledger that matches the till and
+     * one that quietly credits a bank for money handed over in an envelope.
+     */
+    private function paymentMethodFor(PayrollSlip $slip): string
+    {
+        $salary = EmployeeSalary::query()
+            ->where('employee_id', $slip->employee_id)
+            ->orderByDesc('is_current')
+            ->orderByDesc('effective_from')
+            ->first();
+
+        if ($salary === null) {
+            return 'bank';
+        }
+
+        if ($salary->payment_method === 'cash' || $salary->payment_method === 'bank') {
+            return $salary->payment_method;
+        }
+
+        // No flag set: an account number means the bank, its absence means the counter.
+        return filled($salary->bank_account_no) ? 'bank' : 'cash';
     }
 
     private function postProvidentFund(PayrollSlip $slip, ?int $actorId): void

@@ -26,32 +26,31 @@ final class PayrollBankAdviceService
             if (! in_array($sheet->status, ['ready', 'released'], true)) {
                 throw new \DomainException('Bank advice can only be generated for ready/released sheets.');
             }
-            $slips = PayrollSlip::where('salary_sheet_id', $sheet->id)->where('net_salary', '>', 0)->get();
+            // A slip already paid is not payable again — leaving it in would put money on the cash
+            // sheet that has already left the building, and pay it twice if anyone works from the sheet.
+            $slips = PayrollSlip::where('salary_sheet_id', $sheet->id)
+                ->where('net_salary', '>', 0)
+                ->where(fn ($q) => $q->whereNull('payment_status')->orWhere('payment_status', '!=', 'paid'))
+                ->get();
             if ($slips->isEmpty()) {
                 throw new \DomainException('No payable slips.');
             }
+            // A hospital does not pay everyone the same way. Doctors, senior staff and anyone with a
+            // bank account go into the BEFTN file; attendants, cleaners and anyone paid in hand get a
+            // cash sheet at the counter. The old behaviour was to refuse the whole month when a single
+            // employee had no account number, which meant one unbanked sweeper could stop 981 people
+            // being paid — so the advice is now split rather than blocked.
             $grouped = [];
+            $cash = [];
             foreach ($slips as $slip) {
                 $empBankKey = $this->resolveEmployeeBank($slip);
+                if (! preg_match('/^\d{10,16}$/', (string) ($empBankKey['account_no'] ?? ''))) {
+                    $cash[] = ['slip' => $slip, 'bankInfo' => $empBankKey];
+
+                    continue;
+                }
                 $key = $bankId ? (string) $bankId : ($empBankKey['bank_name'] ?? 'Default');
                 $grouped[$key][] = ['slip' => $slip, 'bankInfo' => $empBankKey];
-            }
-            // An advice generated from slips with no account numbers is a file that cannot be paid and
-            // will be rejected at confirmation — after the operator has already saved, printed and
-            // circulated it. Say so at generation instead, and name the people, because "some
-            // employees" is not something anyone can act on.
-            $missingAccounts = collect($grouped)
-                ->flatMap(fn ($items) => collect($items)->filter(fn ($r) => ! preg_match('/^\d{10,16}$/', (string) ($r['bankInfo']['account_no'] ?? ''))))
-                ->map(fn ($r) => $r['slip']->employee_id)
-                ->unique()->values();
-
-            if ($missingAccounts->isNotEmpty()) {
-                throw new \DomainException(sprintf(
-                    'Cannot generate a bank advice: %d of %d employees have no valid bank account on their salary record (%s). Add the account numbers in HRM → Employee → Salary, or pay them outside the bank file.',
-                    $missingAccounts->count(),
-                    collect($grouped)->flatten(1)->count(),
-                    $missingAccounts->take(10)->implode(', ').($missingAccounts->count() > 10 ? ', …' : ''),
-                ));
             }
 
             $advices = [];
@@ -61,6 +60,16 @@ final class PayrollBankAdviceService
                     throw new \DomainException('No company bank account configured (acc_banks).');
                 }
                 $existing = PayrollBankAdvice::where('salary_sheet_id', $sheet->id)->where('bank_id', $disburseBank->id)->first();
+
+                // A draft can be regenerated: the split may have changed since it was built, and a
+                // draft is not a bank instruction yet. A confirmed advice is frozen — regenerating it
+                // would mean the bank holds a file that differs from the system.
+                if ($existing && $existing->status === 'draft') {
+                    $existing->items()->delete();
+                    $existing->delete();
+                    $existing = null;
+                }
+
                 if ($existing) {
                     $advices[] = $existing;
 
@@ -91,8 +100,75 @@ final class PayrollBankAdviceService
                 $advices[] = $advice->fresh('items');
             }
 
+            if ($cash !== []) {
+                $this->exportCashSheet($sheet, $cash, $advices);
+            }
+
             return $advices;
         });
+    }
+
+    /**
+     * The people who are not paid by bank, as a sheet the cashier can sign against.
+     *
+     * This is not a failure list — it is how those employees are actually paid. The sheet carries a
+     * signature column and a running total so it can be handed over at the counter, and the same
+     * employee can never appear on both a bank advice and this sheet, because the split happened
+     * before either was built.
+     *
+     * @param  list<array{slip: PayrollSlip, bankInfo: array<string, mixed>}>  $cash
+     */
+    private function exportCashSheet(PayrollSalarySheet $sheet, array $cash, array &$advices): void
+    {
+        $period = $sheet->pay_year.'-'.str_pad((string) $sheet->pay_month, 2, '0', STR_PAD_LEFT);
+        $total = array_sum(array_map(fn ($r) => (float) $r['slip']->net_salary, $cash));
+
+        $rows = [];
+        $rows[] = ['Cash Salary Sheet', $period, 'Generated: '.now()->toDateTimeString()];
+        $rows[] = ['Employees without a bank account — pay in hand and collect a signature for each.'];
+        $rows[] = [];
+        $rows[] = ['SL', 'Employee ID', 'Employee Name', 'Department', 'Designation', 'Amount (BDT)', 'Signature'];
+
+        $sl = 1;
+        foreach ($cash as $row) {
+            $rows[] = [
+                $sl++, $row['slip']->employee_id, $row['slip']->employee_name,
+                $row['slip']->department, $row['slip']->designation,
+                number_format((float) $row['slip']->net_salary, 2, '.', ''), '',
+            ];
+        }
+        $rows[] = [];
+        $rows[] = ['Total', '', '', '', '', number_format($total, 2, '.', ''), '', 'Employees: '.count($cash)];
+
+        $fileName = "payroll_cash_sheet_{$period}.xlsx";
+        $path = "payroll_advices/{$sheet->pay_year}/{$sheet->pay_month}/{$fileName}";
+
+        try {
+            @mkdir(dirname(storage_path("app/private/{$path}")), 0777, true);
+            if (class_exists(Excel::class)) {
+                $export = new class($rows) implements FromArray
+                {
+                    public function __construct(private array $rows) {}
+
+                    public function array(): array
+                    {
+                        return $this->rows;
+                    }
+                };
+                Excel::store($export, $path, 'private');
+            } else {
+                $path = str_replace('.xlsx', '.csv', $path);
+                $fp = fopen(storage_path("app/private/{$path}"), 'w');
+                foreach ($rows as $r) {
+                    fputcsv($fp, $r);
+                }
+                fclose($fp);
+            }
+
+            $advices[] = ['cash_sheet' => $path, 'employee_count' => count($cash), 'total_amount' => $total];
+        } catch (\Throwable $e) {
+            Log::warning('Payroll cash sheet export failed', ['sheet_id' => $sheet->id, 'error' => $e->getMessage()]);
+        }
     }
 
     public function exportAdvice(PayrollBankAdvice $advice): string
@@ -239,11 +315,15 @@ final class PayrollBankAdviceService
             }
             // A frozen advice that no longer matches the payroll must not become spendable.
             $this->assertCurrent($locked);
+            // An advice is a bank instruction, so everyone on it needs an account the bank will accept.
+            // Nobody without one can reach this point any more — the split happens at generation — but
+            // a stored draft from before the split could still carry a blank account, and confirming it
+            // would instruct the bank to pay a null beneficiary.
             $invalid = $locked->items()->where(function ($q) {
                 $q->whereNull('bank_account_no')->orWhere('bank_account_no', '')->orWhereRaw('LENGTH(bank_account_no) < 10');
             })->count();
             if ($invalid > 0) {
-                throw ValidationException::withMessages(['bank_account_no' => "$invalid employees have invalid bank A/C (10-16 digits required). Fix the bank account on the employee's salary record (HRM → Employee → Salary → Bank A/C) before confirming."]);
+                throw ValidationException::withMessages(['bank_account_no' => "$invalid of {$locked->employee_count} employees on this advice have no valid bank A/C (10-16 digits required). Regenerate the advice so they are moved to the cash sheet, or add their account in HRM → Employee → Salary."]);
             }
             $locked->update(['status' => 'confirmed', 'confirmed_by' => auth()->id(), 'confirmed_at' => now()]);
 

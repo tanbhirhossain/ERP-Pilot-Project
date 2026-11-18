@@ -81,10 +81,36 @@ class PayrollFinanceController extends Controller
     {
         $r->validate(['bank_id' => ['nullable', 'exists:acc_banks,id']]);
         try {
-            $advices = $this->advices->generateForSheet($salarySheet, $r->input('bank_id') ? (int) $r->input('bank_id') : null);
-            $count = count($advices);
+            $result = $this->advices->generateForSheet($salarySheet, $r->input('bank_id') ? (int) $r->input('bank_id') : null);
 
-            return back()->with('success', "{$count} bank advice(s) generated. Files ready for download (BEFTN Excel/CSV).");
+            // Say what was actually produced, in both halves. An officer who is told "1 advice
+            // generated" and nothing else will assume the whole payroll is in it, upload it, and leave
+            // the cash-paid employees unpaid.
+            $advices = collect($result)->filter(fn ($r) => $r instanceof \Modules\PAYROLL\Models\PayrollBankAdvice);
+            $cash = collect($result)->first(fn ($r) => is_array($r) && isset($r['cash_sheet']));
+
+            $parts = [];
+            if ($advices->isNotEmpty()) {
+                $parts[] = sprintf(
+                    '%d bank advice(s) covering %d employee(s), %s BDT — ready for download (BEFTN)',
+                    $advices->count(),
+                    $advices->sum('employee_count'),
+                    number_format((float) $advices->sum('total_amount'), 2),
+                );
+            }
+            if ($cash !== null) {
+                $parts[] = sprintf(
+                    '%d employee(s) have no bank account and are on a cash sheet for %s BDT — pay them in hand and collect signatures',
+                    $cash['employee_count'],
+                    number_format((float) $cash['total_amount'], 2),
+                );
+            }
+
+            if ($parts === []) {
+                return back()->with('error', 'Nothing was generated: every slip on this sheet is already paid.');
+            }
+
+            return back()->with('success', implode('. ', $parts).'.');
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
