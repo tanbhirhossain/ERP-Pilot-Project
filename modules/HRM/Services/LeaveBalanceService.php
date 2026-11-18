@@ -112,6 +112,24 @@ final class LeaveBalanceService
             throw ValidationException::withMessages(['is_half_day' => 'Half-day leave must be for a single date.']);
         }
 
+        // Who the leave is for, checked before a single day is counted.
+        //
+        // `entitlement()` enforced this and `days()` did not, which is the wrong way round: the
+        // register said a man had no maternity entitlement while the *booking* path happily deducted
+        // 180 days from him, because granting leave only ever asked "how many days is that range".
+        // A restricted type now credits nobody outside it, on the path that actually grants it.
+        //
+        // An employee with no gender on file is still treated as eligible: inventing a restriction out
+        // of missing data would block a real request over an HR data-entry gap. That is why the leave
+        // screen reports how many employees have no gender rather than quietly resolving it.
+        $restriction = $settings['gender_eligibility'] ?? null;
+        if ($restriction !== null && $restriction !== 'All') {
+            $gender = $employee?->gender ?? $loadedEmployee?->gender;
+            if ($gender !== null && $gender !== '' && strcasecmp((string) $gender, (string) $restriction) !== 0) {
+                return 0.0;
+            }
+        }
+
         if ($settings['day_count_mode'] === 'calendar_days') {
             return $half ? 0.5 : (float) ($start->diffInDays($end) + 1);
         }

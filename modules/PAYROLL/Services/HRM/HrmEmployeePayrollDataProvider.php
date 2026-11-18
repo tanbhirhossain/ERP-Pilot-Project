@@ -262,7 +262,11 @@ final class HrmEmployeePayrollDataProvider implements EmployeePayrollDataProvide
         // the hard stop — the throw is the enforcement mechanism and silently guessing a rate would
         // under- or over-pay an employee whose records must be exact. No salary rows at all is always
         // fatal: there is no rate to fall back to.
-        $punishablePolicy = (bool) ($employee->policy?->is_punishable ?? false);
+        // Absent a policy row, the employee is punishable — that is what the column's own default
+        // says, and it is what HR means: everyone is disciplined unless somebody deliberately opts
+        // out. Reading a *missing* row as "not punishable" quietly exempted 994 of 998 employees
+        // from every attendance rule the moment nobody opened their Edit page.
+        $punishablePolicy = (bool) ($employee->policy?->is_punishable ?? true);
         $rateFallbackAllowed = ! $punishablePolicy && $allSalaryRows->isNotEmpty();
         $fallbackDays = 0;
         $segments = [];

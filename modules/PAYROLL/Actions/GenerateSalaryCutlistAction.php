@@ -93,6 +93,9 @@ final class GenerateSalaryCutlistAction
                             'approved_overtime_minutes' => (int) round($summary->approvedOvertimeHours * 60),
                             'approved_extra_duty_minutes' => (int) round($summary->approvedExtraDutyHours * 60),
                             'missing_punch_count' => $summary->missingPunchCount,
+                            // The deduction is one number, but its reasons are two: days off without
+                            // leave paperwork, and days on unpaid leave. An employee who asks "why did
+                            // I lose nine days" deserves the split, not a total.
                             'unpaid_leave_deduction' => round($dailyRate * $summary->unpaidLeaveDays, 2),
                             'late_penalty_deduction' => round($punishmentDeduction, 2),
                             // A missing punch is attendance discipline, so a non-punishable HRM policy zeroes it
@@ -105,6 +108,17 @@ final class GenerateSalaryCutlistAction
                                     'punishment' => ['eligible' => $summary->punishable, 'affected_days' => $summary->punishmentDays, 'days_per_salary_day' => $punishmentThreshold, 'salary_day_rate' => round($punishmentDayRate, 2), 'deduction' => round($punishmentDeduction, 2)],
                                     'overtime' => ['approved_hours' => $summary->approvedOvertimeHours, 'duty_hours' => $summary->dutyHours, 'hourly_basic' => round($hourlyBasic, 4), 'multiplier' => $otMultiplier, 'pay' => round($overtimePay, 2)],
                                     'extra_duty' => ['approved_hours' => $summary->approvedExtraDutyHours, 'duty_hours' => $summary->dutyHours, 'hourly_basic' => round($hourlyBasic, 4), 'multiplier' => $extraMultiplier, 'pay' => round($extraDutyPay, 2)],
+                                    'absence' => [
+                                        'daily_rate' => round($dailyRate, 2),
+                                        'divisor' => $divisor,
+                                        'absent_days' => (float) ($summary->sourceBreakdown['absent_days'] ?? 0),
+                                        'unpaid_leave_days' => round($summary->unpaidLeaveDays - (float) ($summary->sourceBreakdown['absent_days'] ?? 0), 2),
+                                        'deducted_days' => (float) $summary->unpaidLeaveDays,
+                                        'deduction' => round($dailyRate * $summary->unpaidLeaveDays, 2),
+                                        'absent_dates' => $summary->sourceBreakdown['absent_dates'] ?? [],
+                                        'unpaid_leave_dates' => $summary->sourceBreakdown['unpaid_leave_dates'] ?? [],
+                                        'gated_by_punch_evidence' => (bool) ($summary->sourceBreakdown['absence_gated_by_punch'] ?? false),
+                                    ],
                                 ],
                             ]),
                         ],

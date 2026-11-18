@@ -580,7 +580,7 @@ test('punishment is the only difference between two employees in the same sheet'
  * or a hole in payroll; the point of this test is that nobody can close it, or claim it is closed,
  * without this failing first.
  */
-test('absence is not deducted from payroll, and this test is where that changes', function (): void {
+test('a day the employee was expected in and did not attend is deducted, and a missing export is not', function (): void {
     @set_time_limit(0);
     $this->travelTo(Carbon::parse('2026-11-01 12:00:00'));
 
@@ -591,32 +591,74 @@ test('absence is not deducted from payroll, and this test is where that changes'
     $this->actingAs($admin);
 
     $now = now()->toDateTimeString();
-    $employeeId = 'FLOW-ABSENT';
 
-    DB::table('employees')->insert([[
-        'employee_id' => $employeeId, 'first_name' => 'Never', 'last_name' => 'Came',
-        'full_name' => 'Never Came', 'email' => 'never.came@example.test', 'gender' => 'Male',
-        'joining_date' => '2019-01-01', 'employment_type' => 'Permanent', 'status' => 'Active',
-        'department_id' => $department->id, 'designation_id' => $designation->id,
-        'is_active' => true, 'duty_hours' => 8, 'allow_overtime' => false, 'allow_bonus' => false,
-        'created_at' => $now, 'updated_at' => $now,
-    ]]);
-    DB::table('employee_salaries')->insert([[
-        'employee_id' => $employeeId, 'basic_salary' => 20000, 'gross_salary' => 30000,
-        'house_rent' => 6000, 'medical_allowance' => 1500, 'other_allowance' => 2500,
-        'net_salary' => 30000, 'effective_from' => '2019-01-01', 'is_current' => true,
-        'created_at' => $now, 'updated_at' => $now,
-    ]]);
-    DB::table('employee_policies')->insert([[
-        'employee_id' => $employeeId, 'grace_time_in' => 15, 'grace_time_out' => 15,
-        'shift_type' => 'Fixed', 'is_punishable' => true, 'duty_hours' => 8, 'auto_shift' => false,
-        'created_at' => $now, 'updated_at' => $now,
-    ]]);
+    /*
+     * Three employees, one October, three different truths:
+     *
+     *   PRESENT-SOMETIMES  turned up on some days and not others — those misses are absence.
+     *   NEVER-PUNCHED      has no device record anywhere in the month. That is a missing export,
+     *                      not evidence of absence, and docking them would be a payroll error.
+     *   OFF-DAY-ONLY       works Mon–Thu and is contracted off on Friday; Friday is not absence.
+     *
+     * The rule this replaces deducted nothing at all: 17,195 absent days in October 2026 and not a
+     * taka withheld, because only *unpaid leave* was ever counted and nobody had filed any.
+     */
+    $cohort = [
+        'FLOW-SOME' => 'Turned Up Sometimes',
+        'FLOW-NEVER' => 'Never Punched',
+        'FLOW-OFFDAY' => 'Contracted Friday Off',
+    ];
 
-    // The whole of October is marked Absent, with no punches at all.
+    foreach ($cohort as $employeeId => $name) {
+        DB::table('employees')->insert([[
+            'employee_id' => $employeeId, 'first_name' => 'Flow', 'last_name' => $name,
+            'full_name' => $name, 'email' => strtolower(str_replace(' ', '.', $name)).'@example.test',
+            'gender' => 'Male', 'joining_date' => '2019-01-01', 'employment_type' => 'Permanent',
+            'status' => 'Active', 'department_id' => $department->id, 'designation_id' => $designation->id,
+            'is_active' => true, 'duty_hours' => 8, 'allow_overtime' => false, 'allow_bonus' => false,
+            'created_at' => $now, 'updated_at' => $now,
+        ]]);
+        DB::table('employee_salaries')->insert([[
+            'employee_id' => $employeeId, 'basic_salary' => 20000, 'gross_salary' => 30000,
+            'house_rent' => 6000, 'medical_allowance' => 1500, 'other_allowance' => 2500,
+            'net_salary' => 30000, 'effective_from' => '2019-01-01', 'is_current' => true,
+            'created_at' => $now, 'updated_at' => $now,
+        ]]);
+        DB::table('employee_policies')->insert([[
+            'employee_id' => $employeeId, 'grace_time_in' => 15, 'grace_time_out' => 15,
+            'shift_type' => 'Fixed', 'is_punishable' => true, 'duty_hours' => 8, 'auto_shift' => false,
+            'created_at' => $now, 'updated_at' => $now,
+        ]]);
+    }
+
+    // FLOW-OFFDAY is contracted off every Friday (Carbon weekday 5).
+    DB::table('employee_fallback_off_days')->insert([
+        'employee_id' => 'FLOW-OFFDAY', 'day_of_week' => 5, 'created_at' => $now, 'updated_at' => $now,
+    ]);
+
+    // Phones/punches: FLOW-SOME was at work on the 1st and the 2nd only. FLOW-OFFDAY turned up on
+    // three working days. FLOW-NEVER has not one punch in the whole month — the case that matters.
+    $punch = function (string $employeeId, string $at): void {
+        // No device row: this test is about the presence of a punch, not about which terminal
+        // produced it, and inventing a device would add a foreign key to a rule that does not need one.
+        DB::table('attendance_logs')->insert([
+            'employee_id' => $employeeId, 'device_id' => null, 'punch_time' => $at, 'punch_type' => 'IN',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+    };
+    $punch('FLOW-SOME', '2026-10-01 09:02:00');
+    $punch('FLOW-SOME', '2026-10-02 09:03:00');
+    $punch('FLOW-OFFDAY', '2026-10-01 09:00:00');
+    $punch('FLOW-OFFDAY', '2026-10-05 09:00:00');
+    $punch('FLOW-OFFDAY', '2026-10-06 09:00:00');
+
+    // Reconciliation reads the punches, so it must run *after* they are in the table: FLOW-SOME's two
+    // days become Present, FLOW-OFFDAY's Fridays stay off, and FLOW-NEVER ends up with 31 Absent rows
+    // that must not be read as 31 days of misconduct.
     app(AttendanceDayReconciliationService::class)->reconcile('2026-10-01', '2026-10-31');
-    $absentDays = AttendanceDaily::query()->where('employee_id', $employeeId)->where('status', 'Absent')->count();
-    expect($absentDays)->toBe(31);
+
+    expect(AttendanceDaily::query()->where('employee_id', 'FLOW-SOME')->where('status', 'Absent')->count())->toBe(29)
+        ->and(AttendanceDaily::query()->where('employee_id', 'FLOW-NEVER')->where('status', 'Absent')->count())->toBe(31);
 
     DB::table('payroll_settings')->updateOrInsert(['id' => 1], [
         'currency' => 'BDT', 'unpaid_leave_day_divisor' => 30, 'punishment_days_per_salary_day' => 3,
@@ -627,19 +669,34 @@ test('absence is not deducted from payroll, and this test is where that changes'
     Bus::fake();
     $sheet = PayrollSalarySheet::query()->create([
         'pay_year' => 2026, 'pay_month' => 10, 'status' => 'queued',
-        'include_punishments' => true, 'employee_count' => 1, 'processed_count' => 0,
+        'include_punishments' => true, 'employee_count' => 3, 'processed_count' => 0,
         'gross_total' => 0, 'deduction_total' => 0, 'net_total' => 0, 'created_by' => $admin->id,
     ]);
     app(ProcessMonthlyPayrollBatchAction::class)->execute($sheet->id);
     $sheet = PayrollSalarySheet::query()->findOrFail($sheet->id);
-    $slip = PayrollSlip::query()->where('salary_sheet_id', $sheet->id)->where('employee_id', $employeeId)->firstOrFail();
 
-    // 31 days absent, full month paid. No absence deduction exists to assert against, because there
-    // is no absence deduction. When one is added, this expectation is the line that must change.
-    expect($absentDays)->toBe(31)
-        ->and(round((float) $slip->gross_salary, 2))->toBe(30000.0)
-        ->and(round((float) $slip->total_deductions, 2))->toBe(0.0)
-        ->and(round((float) $slip->net_salary, 2))->toBe(30000.0);
+    $slip = fn (string $id): PayrollSlip => PayrollSlip::query()
+        ->where('salary_sheet_id', $sheet->id)->where('employee_id', $id)->firstOrFail();
+
+    // 31 Absent rows, but he was demonstrably on site twice in October — so 29 are his misses.
+    // Daily rate = 30,000 / 30 = 1,000.
+    $some = $slip('FLOW-SOME');
+    fwrite(STDERR, "\n=== DEBUG SOME: cutlist=".json_encode($some->breakdown_json['cutlist']['unpaid_leave_days'] ?? 'x')
+        ." absent_days=".json_encode($some->breakdown_json['cutlist']['source']['absent_days'] ?? 'x')
+        ." gated=".json_encode($some->breakdown_json['cutlist']['source']['absence_gated_by_punch'] ?? 'x')
+        ." dates=".count($some->breakdown_json['cutlist']['source']['absent_dates'] ?? [])
+        ." deductions=".$some->total_deductions."\n");
+    expect(round((float) $some->total_deductions, 2))->toBe(29000.0)
+        ->and(round((float) $some->net_salary, 2))->toBe(1000.0);
+    expect(round((float) $some->breakdown_json['cutlist']['unpaid_leave_days'], 2))->toBe(29.0);
+    expect($some->breakdown_json['cutlist']['source']['absent_dates'])->toHaveCount(29);
+
+    // Zero punches is a missing export, not 31 days of misconduct. He keeps his full month, and the
+    // payslip says why rather than leaving the officer to wonder.
+    $never = $slip('FLOW-NEVER');
+    expect(round((float) $never->total_deductions, 2))->toBe(0.0)
+        ->and(round((float) $never->net_salary, 2))->toBe(30000.0)
+        ->and($never->breakdown_json['cutlist']['source']['absence_gated_by_punch'])->toBeFalse();
 });
 
 /**
