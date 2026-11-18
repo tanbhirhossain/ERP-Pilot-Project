@@ -16,6 +16,7 @@ final class PayrollSettingsService
             'extra_duty_multiplier' => 1.00,
             'missing_punch_penalty_amount' => 0,
             'unpaid_leave_day_divisor' => 30,
+            'missing_attendance_policy' => 'waive',
             'loan_approval_steps' => [['label' => 'Payroll', 'role' => 'Administrator']],
             'cutlist_review_required' => false,
         ]);
@@ -33,6 +34,7 @@ final class PayrollSettingsService
                 'extra_duty_multiplier' => $data['extra_duty_multiplier'],
                 'missing_punch_penalty_amount' => $data['missing_punch_penalty_amount'],
                 'unpaid_leave_day_divisor' => $data['unpaid_leave_day_divisor'],
+                'missing_attendance_policy' => $data['missing_attendance_policy'],
                 'loan_approval_steps' => $steps,
                 'cutlist_review_required' => (bool) ($data['cutlist_review_required'] ?? false),
             ]);

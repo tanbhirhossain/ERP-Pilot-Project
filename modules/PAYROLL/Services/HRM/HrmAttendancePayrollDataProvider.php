@@ -72,6 +72,11 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
             ->distinct()->pluck('employee_id'))
             ->mapWithKeys(fn ($id): array => [(string) $id => true])->all();
 
+        // The HR policy for an employee with no attendance record is a setting, not a constant:
+        // `waive` pays them (the default — a missing export is not misconduct), `apply` deducts their
+        // rostered absences like anyone else's. Changing it changes the next sheet, not the code.
+        $missingAttendancePolicy = (string) (DB::table('payroll_settings')->value('missing_attendance_policy') ?? 'waive');
+
         $fallbackOffDays = DB::table('employee_fallback_off_days')->whereIn('employee_id', $employeeIds)
             ->pluck('day_of_week', 'employee_id')->all();
 
@@ -134,7 +139,17 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
             $holidaysForEmployee = array_values(array_unique(array_merge($globalHolidays, $holidaysByDepartment[$employee?->department_id] ?? [])));
             $fallbackDay = $fallbackOffDays[$employeeId] ?? null;
 
-            if ($employee !== null && isset($punchedEmployeeIds[$employeeId])) {
+            // Only somebody who still works here can be absent. A resigned or terminated employee is
+            // settled by their final settlement, not by docking days from a salary they are no longer
+            // earning — and an employee record created ahead of a joining date has nothing to deduct
+            // for days that predate them.
+            $employmentIsLive = $employee !== null
+                && ($employee->status === null || strcasecmp((string) $employee->status, 'Active') === 0);
+
+            $hasPunchEvidence = isset($punchedEmployeeIds[$employeeId])
+                || $missingAttendancePolicy === 'apply';
+
+            if ($employmentIsLive && $hasPunchEvidence) {
                 $leaveDates = [];
                 foreach ($leaveByEmployee->get($employeeId, collect()) as $leave) {
                     for ($d = Carbon::parse($leave->from_date); $d->lte(Carbon::parse($leave->to_date)); $d->addDay()) {
@@ -200,6 +215,7 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
                     'absent_dates' => $absentDates,
                     'absent_days' => round($absentDays, 2),
                     'absence_gated_by_punch' => isset($punchedEmployeeIds[$employeeId]),
+                    'missing_attendance_policy' => $missingAttendancePolicy,
                     'unpaid_leave_requests' => $unpaidLeaveEntries,
                 ],
             );

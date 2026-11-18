@@ -197,3 +197,108 @@ test('every employee on the real roster now carries a gender, a salary and a pun
         ->and($noPolicy)->toBe(0, "{$noPolicy} employees still have no attendance policy")
         ->and($unpunishable)->toBe(0);
 });
+
+test('the treatment of an employee with no attendance record is a setting, not a constant', function () {
+    p26Setup();
+
+    Employee::factory()->create([
+        'employee_id' => 'P26-SETTING', 'full_name' => 'Setting Case', 'status' => 'Active',
+        'is_active' => true, 'joining_date' => '2019-01-01', 'gender' => 'Male',
+    ]);
+    EmployeeSalary::factory()->create([
+        'employee_id' => 'P26-SETTING', 'basic_salary' => 20000, 'gross_salary' => 30000,
+        'effective_from' => '2019-01-01', 'effective_to' => null, 'is_current' => true,
+    ]);
+    DB::table('employee_policies')->insert([
+        'employee_id' => 'P26-SETTING', 'grace_time_in' => 15, 'grace_time_out' => 15,
+        'shift_type' => 'Fixed', 'is_punishable' => true, 'duty_hours' => 8, 'auto_shift' => false,
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    DB::table('attendance_dailies')->insert(
+        collect(range(1, 31))->map(fn (int $d) => [
+            'employee_id' => 'P26-SETTING', 'duty_date' => sprintf('2026-10-%02d', $d),
+            'status' => 'Absent', 'created_at' => now(), 'updated_at' => now(),
+        ])->all()
+    );
+
+    $service = app(Modules\PAYROLL\Services\HRM\HrmAttendancePayrollDataProvider::class);
+
+    // Default: a missing export is not misconduct, so nothing is docked.
+    DB::table('payroll_settings')->updateOrInsert(['id' => 1], ['missing_attendance_policy' => 'waive']);
+    expect($service->summaryForEmployee('P26-SETTING', '2026-10-01', '2026-10-31')->unpaidLeaveDays)->toBe(0.0);
+
+    // HR flips the policy and the next run docks them like anyone else — no code change.
+    DB::table('payroll_settings')->where('id', 1)->update(['missing_attendance_policy' => 'apply']);
+    $applied = $service->summaryForEmployee('P26-SETTING', '2026-10-01', '2026-10-31');
+    expect($applied->unpaidLeaveDays)->toBe(31.0)
+        ->and($applied->sourceBreakdown['missing_attendance_policy'])->toBe('apply');
+});
+
+test('a resigned or terminated employee is never docked for absence', function () {
+    p26Setup();
+
+    foreach (['P26-ACTIVE' => 'Active', 'P26-RESIGNED' => 'Resigned'] as $id => $status) {
+        Employee::factory()->create([
+            'employee_id' => $id, 'full_name' => $status.' Person', 'status' => $status,
+            'is_active' => $status === 'Active', 'joining_date' => '2019-01-01', 'gender' => 'Male',
+        ]);
+        DB::table('employee_policies')->insert([
+            'employee_id' => $id, 'grace_time_in' => 15, 'grace_time_out' => 15, 'shift_type' => 'Fixed',
+            'is_punishable' => true, 'duty_hours' => 8, 'auto_shift' => false,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('attendance_logs')->insert([
+            'employee_id' => $id, 'device_id' => null, 'punch_time' => '2026-10-02 09:00:00',
+            'punch_type' => 'IN', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('attendance_dailies')->insert(
+            collect(range(1, 31))->map(fn (int $d) => [
+                'employee_id' => $id, 'duty_date' => sprintf('2026-10-%02d', $d),
+                'status' => 'Absent', 'created_at' => now(), 'updated_at' => now(),
+            ])->all()
+        );
+    }
+
+    $service = app(Modules\PAYROLL\Services\HRM\HrmAttendancePayrollDataProvider::class);
+    $active = $service->summaryForEmployee('P26-ACTIVE', '2026-10-01', '2026-10-31');
+    $resigned = $service->summaryForEmployee('P26-RESIGNED', '2026-10-01', '2026-10-31');
+
+    expect($active->unpaidLeaveDays)->toBe(31.0);
+    // A leaver is settled by their final settlement, not by docking a salary they no longer earn.
+    expect($resigned->unpaidLeaveDays)->toBe(0.0);
+});
+
+test('switching the punishable flag off restores a full salary without touching any other employee', function () {
+    p26Setup();
+
+    foreach (['P26-PUN' => true, 'P26-NOPUN' => false] as $id => $punishable) {
+        Employee::factory()->create([
+            'employee_id' => $id, 'full_name' => 'Flag '.($punishable ? 'On' : 'Off'), 'status' => 'Active',
+            'is_active' => true, 'joining_date' => '2019-01-01', 'gender' => 'Male',
+        ]);
+        DB::table('employee_policies')->insert([
+            'employee_id' => $id, 'grace_time_in' => 15, 'grace_time_out' => 15, 'shift_type' => 'Fixed',
+            'is_punishable' => $punishable, 'duty_hours' => 8, 'auto_shift' => false,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('attendance_logs')->insert([
+            'employee_id' => $id, 'device_id' => null, 'punch_time' => '2026-10-02 09:00:00',
+            'punch_type' => 'IN', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('attendance_dailies')->insert([
+            'employee_id' => $id, 'duty_date' => '2026-10-05', 'status' => 'Absent',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+
+    $service = app(Modules\PAYROLL\Services\HRM\HrmAttendancePayrollDataProvider::class);
+    $pun = $service->summaryForEmployee('P26-PUN', '2026-10-01', '2026-10-31');
+    $noPun = $service->summaryForEmployee('P26-NOPUN', '2026-10-01', '2026-10-31');
+
+    expect($pun->punishable)->toBeTrue()
+        ->and($noPun->punishable)->toBeFalse();
+
+    $cutlist = app(Modules\PAYROLL\Actions\GenerateSalaryCutlistAction::class);
+    expect(file_get_contents(base_path('modules/PAYROLL/Actions/GenerateSalaryCutlistAction.php')))
+        ->toContain("'unpaid_leave_deduction' => round(\$dailyRate * \$summary->unpaidLeaveDays, 2)");
+});

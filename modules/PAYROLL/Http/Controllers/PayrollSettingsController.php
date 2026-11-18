@@ -26,6 +26,8 @@ final class PayrollSettingsController extends Controller
             'extra_duty_multiplier' => ['required', 'numeric', 'min:0', 'max:20'],
             'missing_punch_penalty_amount' => ['required', 'numeric', 'min:0'],
             'unpaid_leave_day_divisor' => ['required', 'numeric', 'gt:0', 'lte:31'],
+            // What to do about an employee with no attendance record at all — see the migration.
+            'missing_attendance_policy' => ['required', 'in:waive,apply'],
             'loan_approval_steps_text' => ['nullable', 'string', 'max:300'],
             'cutlist_review_required' => ['sometimes', 'boolean'],
         ]);
