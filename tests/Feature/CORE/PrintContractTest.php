@@ -224,11 +224,13 @@ test('the scanner is looking at the application it claims to describe', function
     // Departments and Release — the old Index and Show were rewritten in place.
     // 445 since P17: the cutlist became three screens (periods, proposal rows, sign-off desk) instead
     // of a list and a sixteen-column table. Two net new files: ModuleNav and SignOff.
+    // 459 since P22: the bank-account import screen (`PAYROLL::Settings/BankAccounts`). It prints
+    // nothing - it is a two-step upload, preview and write - so the print-caller census is unchanged.
     // 453 since P18: leave became seven screens (desk, requests, approvals, apply, balances, types &
     // policy, year-end, reports) instead of ten small pages. Eight net new files under
     // Pages/Leave: ModuleNav, Desk, Requests, Approvals, Apply, Balances, Types, TypeForm, YearEnd,
     // EncashPreview, Reports — eleven written, of which three replace pages kept in place (Show).
-    expect($files)->toHaveCount(458, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
+    expect($files)->toHaveCount(459, 'the .vue census moved; if pages were added or removed, re-measure rather than guess')
         ->and($files)->toContain(PC_LAYOUT);
 
     $withStyle = array_filter($files, static fn (string $path): bool => pcStyleBlocks(pcRead($path)) !== []);

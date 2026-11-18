@@ -5,6 +5,7 @@ use Modules\PAYROLL\Http\Controllers\PayrollAdjustmentController;
 use Modules\PAYROLL\Http\Controllers\PayrollBonusController;
 use Modules\PAYROLL\Http\Controllers\PayrollCutlistController;
 use Modules\PAYROLL\Http\Controllers\PayrollDashboardController;
+use Modules\PAYROLL\Http\Controllers\PayrollBankAccountImportController;
 use Modules\PAYROLL\Http\Controllers\PayrollFinanceController;
 use Modules\PAYROLL\Http\Controllers\PayrollLoanController;
 use Modules\PAYROLL\Http\Controllers\PayrollReopenController;
@@ -109,6 +110,11 @@ Route::middleware(['web', 'auth'])->prefix('payroll')->name('payroll.')->group(f
     Route::get('finance/journals', function () {
         return redirect()->route('payroll.sheets.index');
     })->name('finance.journals'); // placeholder, full journals via ACCOUNTS
+
+    // Bank accounts, imported from the staff spreadsheet that already holds them.
+    Route::get('bank-accounts', [PayrollBankAccountImportController::class, 'index'])->middleware(PermissionMiddleware::class.':payroll.settings.manage')->name('bank-accounts.index');
+    Route::post('bank-accounts/preview', [PayrollBankAccountImportController::class, 'preview'])->middleware(PermissionMiddleware::class.':payroll.settings.manage')->name('bank-accounts.preview');
+    Route::post('bank-accounts/apply', [PayrollBankAccountImportController::class, 'apply'])->middleware(PermissionMiddleware::class.':payroll.settings.manage')->name('bank-accounts.apply');
 
     Route::get('bank-advices', [PayrollFinanceController::class, 'indexAdvices'])->middleware(PermissionMiddleware::class.':payroll.bank-advices.view')->name('bank-advices.index');
     Route::post('bank-advices/generate/{salarySheet}', [PayrollFinanceController::class, 'generateAdvice'])->middleware(PermissionMiddleware::class.':payroll.bank-advices.manage')->name('bank-advices.generate');
