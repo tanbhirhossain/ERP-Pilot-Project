@@ -301,8 +301,16 @@ class EmployeeRepository implements EmployeeRepositoryInterface
     private function baseQuery(): Builder
     {
         // `user` is eager-loaded because the list prints the sign-in account: without it a page of
-        // 25 employees costs 25 extra queries just to say "—" most of the time.
-        return Employee::query()->with(['department:id,name', 'designation:id,name', 'organization:id,name', 'user:id,name']);
+        // 25 employees costs 25 extra queries just to say "—" most of the time. `salaries` is here for
+        // the same reason — the directory now prints how each person is paid, and the salary row is
+        // where that lives.
+        return Employee::query()->with([
+            'department:id,name',
+            'designation:id,name',
+            'organization:id,name',
+            'user:id,name',
+            'salaries' => fn ($q) => $q->where('is_current', true),
+        ]);
     }
 
     private function searchColumns(): array
@@ -317,6 +325,20 @@ class EmployeeRepository implements EmployeeRepositoryInterface
 
     private function filters(): array
     {
-        return ['department_id' => fn (Builder $q, string $v) => $q->where('department_id', $v), 'designation_id' => fn (Builder $q, string $v) => $q->where('designation_id', $v), 'status' => fn (Builder $q, string $v) => $q->where('status', $v)];
+        return [
+            'department_id' => fn (Builder $q, string $v) => $q->where('department_id', $v),
+            'designation_id' => fn (Builder $q, string $v) => $q->where('designation_id', $v),
+            'status' => fn (Builder $q, string $v) => $q->where('status', $v),
+            // "Who is still paid in cash?" is a question somebody asks every month, and it can only be
+            // answered from the salary record — which is where the payment method lives.
+            'payment_method' => function (Builder $q, string $v): void {
+                if ($v === 'none') {
+                    $q->whereDoesntHave('salaries', fn ($s) => $s->where('is_current', true));
+
+                    return;
+                }
+                $q->whereHas('salaries', fn ($s) => $s->where('is_current', true)->where('payment_method', $v));
+            },
+        ];
     }
 }

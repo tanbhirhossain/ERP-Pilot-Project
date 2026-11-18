@@ -7,9 +7,10 @@ import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
 import ConfirmDialog from '@core/Components/ConfirmDialog.vue';
 import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
+import StatusBadge from '@core/Components/StatusBadge.vue';
 import type { Paginator } from '@core/types';
 import { formatDate, formatNumber } from '@core/Utils/format';
-interface Row { id:number; employee_id:string; biometric_id?:string|null; full_name:string; email?:string; phone?:string; department?:{name:string}; designation?:{name:string}; employment_type:string; status:string; joining_date?:string; user_id?:number|null; user_name?:string|null }
+interface Row { id:number; employee_id:string; biometric_id?:string|null; full_name:string; email?:string; phone?:string; department?:{name:string}; designation?:{name:string}; employment_type:string; status:string; joining_date?:string; user_id?:number|null; user_name?:string|null; payment_method?:string|null; bank_name?:string|null; bank_account_no?:string|null }
 const props = defineProps<{ employees: Paginator<Row>; selfService?: { active:number; linked:number; accounts:number } }>();
 
 /**
@@ -28,6 +29,8 @@ const columns: DataTableColumn[] = [
   {key:'full_name',label:'Employee',sortable:true},
   {key:'department',label:'Department'},
   {key:'designation',label:'Designation'},
+  {key:'payment_method',label:'Paid by',align:'center',width:'8rem'},
+  {key:'bank_account_no',label:'Bank account',width:'13rem'},
   {key:'user_id',label:'Sign-in',align:'center',width:'9rem'},
   {key:'status',label:'Status',align:'center'},
   {key:'joining_date',label:'Joining',sortable:true,width:'10rem'},
@@ -47,19 +50,42 @@ function confirmDelete(){ if(!pending.value) return; processing.value=true; rout
     >
       <UserX class="size-4 shrink-0 text-warning" />
       <span>
-        <strong>{{ formatNumber(unlinked) }}</strong> of {{ formatNumber(selfService.active) }} active employees
-        cannot sign in ({{ coveragePct }}% have an account). Their My HR, payslip and leave pages show
-        &ldquo;ask HR to link your account&rdquo; and nothing else.
+        <strong>{{ formatNumber(unlinked) }}</strong> of {{ formatNumber(selfService.active) }} active
+        employees cannot sign in &mdash; {{ coveragePct }}% have an account. Their My HR, payslip and
+        leave pages show &ldquo;ask HR to link your account&rdquo; and nothing else.
       </span>
       <span class="text-muted-foreground">
         Link one from the employee&rsquo;s Edit page, field &ldquo;Linked user account&rdquo;.
       </span>
     </div>
-    <DataTable route-name="hrm.employees.index" title="Employees" :columns="columns" :rows="employees.data" :meta="employees.meta" search-placeholder="Search by ID, name, email...">
+    <DataTable route-name="hrm.employees.index" title="Employees" :columns="columns" :rows="employees.data" :meta="employees.meta" search-placeholder="Search by ID, name, email..."
+      :filter-defs="[
+        { key: 'payment_method', label: 'Paid by', kind: 'select', options: [
+          { value: 'bank', label: 'Bank transfer' },
+          { value: 'cash', label: 'Cash' },
+          { value: 'none', label: 'No salary record' },
+        ] },
+      ]">
       <template #cell-employee_id="{row}"><span class="font-mono text-sm font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded">{{ row.employee_id }}</span></template>
       <template #cell-biometric_id="{row}"><span class="font-mono text-xs px-1.5 py-0.5 rounded" :class="row.biometric_id ? 'bg-emerald-500/10 text-emerald-600 font-semibold' : 'bg-amber-500/10 text-amber-600'">{{ row.biometric_id || '—' }}</span></template>
       <template #cell-full_name="{row}"><div><p class="font-semibold">{{ row.full_name }}</p><p class="text-xs text-muted-foreground">{{ row.email || row.phone || '' }}</p></div></template>
       <template #cell-department="{row}"><span class="text-sm">{{ row.department?.name || '—' }}</span></template>
+      <!--
+        How each person is paid, straight from the salary record the payroll pays from. Before this
+        column existed the only way to answer "who is still not on the bank list?" was to open
+        employees one at a time; 348 of the 998 are paid through DBBL and the rest in cash.
+      -->
+      <template #cell-payment_method="{row}">
+        <StatusBadge v-if="row.payment_method" :label="row.payment_method === 'bank' ? 'Bank' : 'Cash'" :tone="row.payment_method === 'bank' ? 'success' : 'neutral'" />
+        <span v-else class="text-xs text-muted-foreground" title="No salary record, so the payroll has no way to pay this person">No salary</span>
+      </template>
+      <template #cell-bank_account_no="{row}">
+        <span v-if="row.bank_account_no" class="font-mono text-xs">
+          {{ row.bank_account_no }}
+          <span v-if="row.bank_name" class="ml-1 text-muted-foreground">{{ row.bank_name }}</span>
+        </span>
+        <span v-else class="text-xs text-muted-foreground">—</span>
+      </template>
       <template #cell-designation="{row}"><span class="text-sm">{{ row.designation?.name || '—' }}</span></template>
       <!--
         "—" here is not decoration: it means this person cannot sign in at all. It reads as a gap

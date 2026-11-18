@@ -26,7 +26,7 @@ class EmployeeController extends Controller
 
     public function index(Request $r): Response
     {
-        $dt = DataTableQuery::fromRequest($r, ['id', 'employee_id', 'biometric_id', 'full_name', 'created_at', 'joining_date'], ['department_id', 'designation_id', 'status']);
+        $dt = DataTableQuery::fromRequest($r, ['id', 'employee_id', 'biometric_id', 'full_name', 'created_at', 'joining_date'], ['department_id', 'designation_id', 'status', 'payment_method']);
 
         return Inertia::render('HRM::Employees/Index', [
             'employees' => PaginatedResource::from($this->svc->paginate($dt)->through(fn (Employee $e) => [
@@ -35,6 +35,12 @@ class EmployeeController extends Controller
                 // employees.user_id, so an unlinked employee sees only an "ask HR to link me" card.
                 'user_id' => $e->user_id,
                 'user_name' => $e->user?->name,
+                // How this person is paid, taken from their current salary record. The directory is
+                // where somebody checks "is anybody still unpaid by bank?", and until now the only way
+                // to answer that was to open 998 employee pages one at a time.
+                'payment_method' => $this->currentSalary($e)?->payment_method,
+                'bank_name' => $this->currentSalary($e)?->bank_name,
+                'bank_account_no' => $this->currentSalary($e)?->bank_account_no,
             ])),
             'departmentOptions' => $this->dept->options(null, 200),
             'designationOptions' => $this->desig->options(null, 200),
@@ -48,6 +54,12 @@ class EmployeeController extends Controller
                 'accounts' => \Modules\CORE\Models\User::count(),
             ],
         ]);
+    }
+
+    /** The salary row payroll will actually pay from. */
+    private function currentSalary(Employee $e): ?\Modules\HRM\Models\Employee\EmployeeSalary
+    {
+        return $e->salaries->firstWhere('is_current', true) ?? $e->salaries->first();
     }
 
     public function create(): Response
