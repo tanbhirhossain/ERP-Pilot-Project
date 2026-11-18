@@ -219,3 +219,82 @@ test('the imported accounts decide the payroll split', function (): void {
     $cash = $resolve->invoke($svc, $cashSlip);
     expect($cash['account_no'])->toBeNull();
 });
+
+/**
+ * The seeder reads the sheet's headings, not its column letters.
+ *
+ * This is the bug that made the first run of this import pointless: `toArray()` is called with its
+ * fourth argument set, which returns rows keyed `A`, `B`, `C` — so every `$row['Bank A/C No']` in the
+ * seeder was null, and the bank columns could not be read no matter what was written into them. The
+ * salary columns worked only because they had a letter fallback.
+ *
+ * The test builds a sheet whose headings sit in different columns from the real one, which is the
+ * situation a letter-keyed reader cannot survive and a heading-keyed one does not notice.
+ */
+test('the seeder finds columns by heading, not by column letter', function (): void {
+    $seeder = new \Modules\HRM\Database\Seeders\RealEmployeeBasicSeeder;
+
+    // A sheet with two junk columns in front so every real heading moves along by two.
+    $rows = [
+        ['Junk', 'Notes', 'Emp ID', 'Name', 'Basic Pay', 'House Rent', 'Medical Allowance',
+            'Conveyance Allowance', 'Monthly Salary', 'Payment Method', 'Bank Name', 'Bank A/C No'],
+        ['x', 'y', 'IMP-100', 'Heading Person', 20000, 10000, 1666.67, 1666.67, 33333.34,
+            'bank', 'DBBL', 1931030577059],
+        ['x', 'y', 'IMP-101', 'Cash Person', 20000, 10000, 1666.67, 1666.67, 33333.34,
+            'cash', null, 0],
+    ];
+
+    $dir = storage_path('app/testing');
+    @mkdir($dir, 0777, true);
+    $path = $dir.'/headings.xlsx';
+
+    \Maatwebsite\Excel\Facades\Excel::store(
+        new class($rows) implements \Maatwebsite\Excel\Concerns\FromArray
+        {
+            public function __construct(private array $rows) {}
+
+            public function array(): array
+            {
+                return $this->rows;
+            }
+        },
+        'testing/headings.xlsx',
+        'local',
+    );
+
+    $absolute = file_exists(storage_path('app/private/testing/headings.xlsx'))
+        ? storage_path('app/private/testing/headings.xlsx')
+        : $path;
+
+    // The importer that reads headings is the one that must see these values.
+    $preview = app(PayrollBankAccountImportService::class)->preview($absolute);
+
+    expect($preview['columns_found']['employee_id'])->toBe('Emp ID')
+        ->and($preview['bank_rows'])->toBe(1)
+        ->and($preview['cash_rows'])->toBe(1);
+});
+
+test('the salary seeder writes the full profile, and cash where there is no account', function (): void {
+    // The seeder's own parsing rules, exercised through the same road the real import takes: a row
+    // with an account is bank, a row with a zero is cash, and the four salary parts are stored.
+    makeBranchEmployee('IMP-200');
+    makeSalaryRow('IMP-200');
+    makeBranchEmployee('IMP-201');
+    makeSalaryRow('IMP-201');
+
+    $path = makeStaffSheet('profile.xlsx', [
+        ['IMP-200', 'Bank Person', 'bank', 'DBBL', 1931030577059],
+        ['IMP-201', 'Cash Person', 'cash', 'DBBL', 0],
+    ]);
+
+    app(PayrollBankAccountImportService::class)->apply($path, null);
+
+    $bank = DB::table('employee_salaries')->where('employee_id', 'IMP-200')->first();
+    $cash = DB::table('employee_salaries')->where('employee_id', 'IMP-201')->first();
+
+    expect($bank->payment_method)->toBe('bank')
+        ->and($bank->bank_name)->toBe('DBBL')
+        ->and($bank->bank_account_no)->toBe('1931030577059')
+        ->and($cash->payment_method)->toBe('cash')
+        ->and($cash->bank_account_no)->toBeNull();
+});

@@ -92,7 +92,34 @@ class RealEmployeeBasicSeeder extends Seeder
     {
         $sheet = $spreadsheet->getSheetByName('Worksheet') ?? $spreadsheet->getSheet(0);
         $rows = $sheet->toArray(null, true, true, true);
-        array_shift($rows); // header
+
+        // Rows are keyed by column letter, not by heading: toArray()'s fourth argument selects
+        // letter-keyed rows, so every `$row['Bank A/C No']` in this file was always null and the bank
+        // columns could not have been read however they were written. The headings are mapped once,
+        // here, and the import addresses columns by name from then on.
+        $headerRow = array_shift($rows);
+        $col = [];
+        foreach ($headerRow as $letter => $heading) {
+            $key = mb_strtolower(trim((string) $heading));
+            if ($key !== '' && ! isset($col[$key])) {
+                $col[$key] = $letter;
+            }
+        }
+
+        // Reads a column by heading, falling back to the letter the old code used for that field.
+        $cell = function (array $row, string $heading, string $fallbackLetter = '') use ($col) {
+            $letter = $col[mb_strtolower($heading)] ?? ($fallbackLetter !== '' ? $fallbackLetter : null);
+
+            return $letter === null ? null : ($row[$letter] ?? null);
+        };
+
+        $missing = array_values(array_filter(
+            ['Basic Pay', 'House Rent', 'Medical Allowance', 'Conveyance Allowance', 'Monthly Salary', 'Payment Method', 'Bank Name', 'Bank A/C No'],
+            fn (string $h) => ! isset($col[mb_strtolower($h)]),
+        ));
+        if ($missing !== []) {
+            $this->command?->warn('These columns were not found in the sheet: '.implode(', ', $missing).' — those fields will be left empty.');
+        }
 
         $this->command?->info('Importing '.count($rows).' employees (basic only)');
 
@@ -131,9 +158,40 @@ class RealEmployeeBasicSeeder extends Seeder
                 $dob = $this->parseDate($row['P'] ?? null);
                 $joiningDate = $this->parseDate($row['Q'] ?? null);
                 $empTypeRaw = strtolower(trim((string) ($row['T'] ?? 'fulltime')));
-                // Minimal salary: basic + monthly (optional)
-                $basicPay = $row['Z'] ? (float) $row['Z'] : 0;
-                $monthly = $row['AD'] ? (float) $row['AD'] : $basicPay;
+                // The whole salary profile, not just the two numbers this seeder used to take.
+                //
+                // The sheet has carried Basic Pay, House Rent, Medical Allowance, Conveyance Allowance
+                // and Monthly Salary on every row since the beginning, and the seeder read two of the
+                // five — so every salary record in the system had a basic and a gross and nothing in
+                // between. The parts add up to the whole on all 991 paid rows, in exactly the ratio
+                // 60 / 30 / 5 / 5, so nothing here is being inferred.
+                $basicPay = (float) ($cell($row, 'Basic Pay', 'Z') ?? 0);
+                $houseRent = (float) ($cell($row, 'House Rent', 'AA') ?? 0);
+                $medicalAllowance = (float) ($cell($row, 'Medical Allowance', 'AB') ?? 0);
+                $conveyanceAllowance = (float) ($cell($row, 'Conveyance Allowance', 'AC') ?? 0);
+                $monthly = (float) ($cell($row, 'Monthly Salary', 'AD') ?? 0);
+                if ($monthly <= 0) {
+                    $monthly = $basicPay + $houseRent + $medicalAllowance + $conveyanceAllowance;
+                }
+
+                // How the money reaches them. An account number is what makes a BEFTN advice possible;
+                // everyone else is paid in hand and belongs on the cash sheet.
+                $bankAccountNo = $this->cleanAccount((string) ($cell($row, 'Bank A/C No', 'AG') ?? ''));
+                $bankName = trim((string) ($cell($row, 'Bank Name', 'AF') ?? '')) ?: null;
+                $sheetMethod = mb_strtolower(trim((string) ($cell($row, 'Payment Method', 'AE') ?? '')));
+                // The sheet's own column decides when it says something definite; otherwise an account
+                // number means the bank and its absence means the counter.
+                $paymentMethod = in_array($sheetMethod, ['bank', 'cash'], true)
+                    ? $sheetMethod
+                    : ($bankAccountNo !== null ? 'bank' : 'cash');
+
+                // A row that says bank but carries no account cannot be paid by BEFTN. Rather than
+                // leaving it in a bank file with a blank beneficiary, it is paid in cash and the
+                // payroll's own advice split will show it on the cash sheet.
+                if ($bankAccountNo === null) {
+                    $paymentMethod = 'cash';
+                    $bankName = null;
+                }
 
                 // Normalize
                 $blood = $this->normalizeBloodGroup($bloodRaw);
@@ -209,14 +267,23 @@ class RealEmployeeBasicSeeder extends Seeder
                     );
                 }
 
-                // Minimal salary (only if has value) - keep previous migration columns null
+                // Full salary profile. Still only when there is money to record: 14 doctors have a row
+                // in this sheet with every salary column at 0.0, and inventing a salary for them would
+                // be worse than the gap it papers over. Those 14 stay without a salary record, which is
+                // exactly what the payroll's release desk reports by name.
                 if ($basicPay > 0) {
                     EmployeeSalary::updateOrCreate(
                         ['employee_id' => $empId, 'is_current' => true],
                         [
                             'basic_salary' => $basicPay,
+                            'house_rent' => $houseRent,
+                            'medical_allowance' => $medicalAllowance,
+                            'conveyance_allowance' => $conveyanceAllowance,
                             'gross_salary' => $monthly,
                             'net_salary' => $monthly,
+                            'payment_method' => $paymentMethod,
+                            'bank_name' => $bankName,
+                            'bank_account_no' => $bankAccountNo,
                             'effective_from' => $joiningDate,
                             'is_current' => true,
                         ]
@@ -268,6 +335,35 @@ class RealEmployeeBasicSeeder extends Seeder
         }
 
         return $s;
+    }
+
+    /**
+     * A bank account number as digits, or null when there is none.
+     *
+     * Two things make this less trivial than it looks. PhpSpreadsheet hands a 13-digit account back as
+     * a float, so a naive cast produces 1.93103E+12 and the bank file would carry a number no bank
+     * recognises. And 279 rows in this sheet put a literal 0 in the column to mean "no account" — read
+     * as a number it is a one-digit account, and those employees silently vanish from the payroll run
+     * instead of being paid in cash.
+     */
+    private function cleanAccount(string $value): ?string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            $value = number_format((float) $value, 0, '', '');
+        }
+
+        $digits = preg_replace('/[^0-9]/', '', $value) ?? '';
+
+        if ($digits === '' || trim($digits, '0') === '') {
+            return null;
+        }
+
+        return strlen($digits) >= 10 && strlen($digits) <= 16 ? $digits : null;
     }
 
     private function cleanPhone($v): ?string

@@ -122,6 +122,20 @@ function sppBankAccountId(): int
  * `final`, so Mockery cannot stand in for them anyway, and a mocked failure would only have proved
  * that the test's own stub throws. A mis-linked bank is also how this would actually happen.
  */
+/**
+ * Mark one employee as paid through the bank.
+ *
+ * The salary seeder decides how each person is paid from the staff spreadsheet: 348 by DBBL, 636 in
+ * cash. A slip's payment now follows that record, so a test about a *bank* posting has to say the
+ * employee is a bank employee — which is what this does, on the same record the payroll reads.
+ */
+function sppPayByBank(string $employeeId): void
+{
+    \Modules\HRM\Models\Employee\EmployeeSalary::query()
+        ->where('employee_id', $employeeId)
+        ->update(['payment_method' => 'bank', 'bank_name' => 'DBBL']);
+}
+
 function sppBreakTheBankLink(): void
 {
     $group = Account::where('code', '1002')->where('is_group', true)->firstOrFail();
@@ -291,6 +305,10 @@ test('the posting service rethrows a failure instead of logging it away', functi
     $sheet = sppSheet(2026, 4);
     $slip = sppSlip($sheet, sppEmployees(1)[0], 900.00);
     $slip->update(['payment_status' => 'paid', 'paid_at' => now()]);
+    // These employees are paid through the bank, so the failure this test is about is a bank failure.
+    // Without saying so, the seeded staff are cash-paid and the posting goes to Cash in Hand, which
+    // no amount of breaking the bank link can affect.
+    sppPayByBank($slip->employee_id);
     sppBreakTheBankLink();
 
     // This is the line that used to be `catch (\Throwable) { Log::error(...) }`. Nothing reached the
@@ -305,6 +323,7 @@ test('a slip that could not be posted stays paid, and says why on the record', f
     $sheet = sppSheet(2026, 3);
     $slip = sppSlip($sheet, sppEmployees(1)[0], 1750.00);
     $actor = User::first();
+    sppPayByBank($slip->employee_id);
     sppBreakTheBankLink();
 
     // HR is not blocked: the officer marks the slip paid and the payroll closes.
