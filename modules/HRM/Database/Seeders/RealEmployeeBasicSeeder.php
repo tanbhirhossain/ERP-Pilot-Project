@@ -271,23 +271,31 @@ class RealEmployeeBasicSeeder extends Seeder
                 // in this sheet with every salary column at 0.0, and inventing a salary for them would
                 // be worse than the gap it papers over. Those 14 stay without a salary record, which is
                 // exactly what the payroll's release desk reports by name.
-                if ($basicPay > 0) {
-                    EmployeeSalary::updateOrCreate(
-                        ['employee_id' => $empId, 'is_current' => true],
-                        [
-                            'basic_salary' => $basicPay,
-                            'house_rent' => $houseRent,
-                            'medical_allowance' => $medicalAllowance,
-                            'conveyance_allowance' => $conveyanceAllowance,
-                            'gross_salary' => $monthly,
-                            'net_salary' => $monthly,
-                            'payment_method' => $paymentMethod,
-                            'bank_name' => $bankName,
-                            'bank_account_no' => $bankAccountNo,
-                            'effective_from' => $joiningDate,
-                            'is_current' => true,
-                        ]
-                    );
+                // Only ever *create* the first salary row for an employee; never rewrite an existing one.
+                //
+                // This used to be updateOrCreate keyed on is_current, which quietly made the seeder the
+                // last word on pay. Re-running it over live data rewrote a row that an approved salary
+                // increment had created, resetting effective_from to the joining date and closing the
+                // row on 2026-09-29 — so the employee had no salary covering the month being paid, and
+                // his bank account vanished with it. Seed data must never overwrite payroll history:
+                // if a row exists, increments and HRM edits own it, and the seeder leaves it alone.
+                $hasSalary = EmployeeSalary::query()->where('employee_id', $empId)->exists();
+
+                if ($basicPay > 0 && ! $hasSalary) {
+                    EmployeeSalary::create([
+                        'employee_id' => $empId,
+                        'basic_salary' => $basicPay,
+                        'house_rent' => $houseRent,
+                        'medical_allowance' => $medicalAllowance,
+                        'conveyance_allowance' => $conveyanceAllowance,
+                        'gross_salary' => $monthly,
+                        'net_salary' => $monthly,
+                        'payment_method' => $paymentMethod,
+                        'bank_name' => $bankName,
+                        'bank_account_no' => $bankAccountNo,
+                        'effective_from' => $joiningDate,
+                        'is_current' => true,
+                    ]);
                 }
 
                 // Device mapping - the key requirement (global, no device binding)

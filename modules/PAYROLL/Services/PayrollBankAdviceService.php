@@ -236,16 +236,22 @@ final class PayrollBankAdviceService
      */
     public function reconciliation(PayrollBankAdvice $advice): array
     {
-        $slipNets = PayrollSlip::query()
-            ->where('salary_sheet_id', $advice->salary_sheet_id)
-            ->where('net_salary', '>', 0)
-            ->pluck('net_salary', 'employee_id');
+        // Only the slips this advice is entitled to carry: the bank-paid employees, still unpaid.
+        //
+        // The comparison used to be against every slip on the sheet, which stopped being the right
+        // question the moment payroll split into a bank file and a cash sheet. A 348-employee advice
+        // drawn from a 979-employee sheet looked permanently stale — it was compared against 979 slips
+        // and accused of underpaying the difference, which is exactly the money the cashier hands over.
+        $expected = $this->bankPayableSlips($advice->salary_sheet_id);
+        $slipNets = $expected->pluck('net_salary', 'employee_id');
 
         $differences = [];
         $adviceTotal = 0.0;
+        $onAdvice = [];
 
         foreach ($advice->items()->get(['employee_id', 'net_amount']) as $item) {
             $adviceTotal += (float) $item->net_amount;
+            $onAdvice[$item->employee_id] = true;
             $slipNet = $slipNets[$item->employee_id] ?? null;
 
             if ($slipNet === null || abs((float) $slipNet - (float) $item->net_amount) > 0.009) {
@@ -265,8 +271,13 @@ final class PayrollBankAdviceService
             ->where('updated_at', '>', $advice->created_at)
             ->max('updated_at');
 
+        // A bank employee who should be on this advice and is not is just as stale as a wrong amount —
+        // that is somebody the bank file silently forgot to pay.
+        $missing = $expected->pluck('employee_id')->reject(fn ($id) => isset($onAdvice[$id]))->values();
+
         return [
-            'stale' => $differences !== [] || $slipNets->count() !== $advice->items()->count(),
+            'stale' => $differences !== [] || $missing->isNotEmpty(),
+            'missing' => $missing->all(),
             'differences' => count($differences),
             'advice_total' => round($adviceTotal, 2),
             'slips_total' => $slipsTotal,
@@ -274,6 +285,27 @@ final class PayrollBankAdviceService
             'since' => $since,
             'details' => array_slice($differences, 0, 25),
         ];
+    }
+
+    /**
+     * The slips that belong on a bank advice: unpaid, positive, and belonging to someone with an
+     * account the bank will accept.
+     *
+     * This is the single definition of "bank payable", and both the generation split and the
+     * reconciliation read it. When they disagree, an advice is either refused for money it was never
+     * supposed to carry, or confirmed while quietly missing somebody.
+     *
+     * @return \Illuminate\Support\Collection<int, PayrollSlip>
+     */
+    private function bankPayableSlips(int $sheetId): \Illuminate\Support\Collection
+    {
+        return PayrollSlip::query()
+            ->where('salary_sheet_id', $sheetId)
+            ->where('net_salary', '>', 0)
+            ->where(fn ($q) => $q->whereNull('payment_status')->orWhere('payment_status', '!=', 'paid'))
+            ->get()
+            ->filter(fn (PayrollSlip $slip) => preg_match('/^\d{10,16}$/', (string) ($this->resolveEmployeeBank($slip)['account_no'] ?? '')))
+            ->values();
     }
 
     /**
