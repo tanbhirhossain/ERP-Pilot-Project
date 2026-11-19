@@ -18,6 +18,12 @@ use Modules\PAYROLL\Interfaces\HRM\AttendancePayrollDataProviderInterface;
 
 final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataProviderInterface
 {
+    /**
+     * Carbon's `dayOfWeek` for Friday. The company-wide weekly off, used only when HR has not named
+     * one for that employee — see `$fallbackOffDays` below for why a missing row cannot mean "never off".
+     */
+    private const DEFAULT_WEEKLY_OFF_DAY = 5;
+
     public function __construct(private readonly LeaveBalanceService $leaveBalances) {}
 
     public function summaryForEmployee(string $employeeId, string $periodStart, string $periodEnd): AttendancePayrollSummary
@@ -77,6 +83,16 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
         // rostered absences like anyone else's. Changing it changes the next sheet, not the code.
         $missingAttendancePolicy = (string) (DB::table('payroll_settings')->value('missing_attendance_policy') ?? 'waive');
 
+        /*
+         * Everyone's contracted weekly off.
+         *
+         * An employee with no row here used to be treated as having *no* weekly off at all — every
+         * Friday was a working day unless the roster said otherwise — which is how 997 employees
+         * ended up charged an Absent every Friday of the month while only 4 of them had ever been
+         * asked what their off day was. HR enters the real day per employee; until they do, the
+         * company default (Friday, `day_of_week` 5 in Carbon's own numbering) applies. A nil is not
+         * a legitimate answer to "which day does this person not work", so it is never returned.
+         */
         $fallbackOffDays = DB::table('employee_fallback_off_days')->whereIn('employee_id', $employeeIds)
             ->pluck('day_of_week', 'employee_id')->all();
 
@@ -137,7 +153,8 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
             $absentDays = 0.0;
             $absentDates = [];
             $holidaysForEmployee = array_values(array_unique(array_merge($globalHolidays, $holidaysByDepartment[$employee?->department_id] ?? [])));
-            $fallbackDay = $fallbackOffDays[$employeeId] ?? null;
+            // Default 5 = Friday. Never null: "no weekly off" is not a state an employee can be in.
+            $fallbackDay = (int) ($fallbackOffDays[$employeeId] ?? self::DEFAULT_WEEKLY_OFF_DAY);
 
             // Only somebody who still works here can be absent. A resigned or terminated employee is
             // settled by their final settlement, not by docking days from a salary they are no longer
@@ -146,8 +163,8 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
             $employmentIsLive = $employee !== null
                 && ($employee->status === null || strcasecmp((string) $employee->status, 'Active') === 0);
 
-            $hasPunchEvidence = isset($punchedEmployeeIds[$employeeId])
-                || $missingAttendancePolicy === 'apply';
+            $punchedInPeriod = isset($punchedEmployeeIds[$employeeId]);
+            $hasPunchEvidence = $punchedInPeriod || $missingAttendancePolicy === 'apply';
 
             if ($employmentIsLive && $hasPunchEvidence) {
                 $leaveDates = [];
@@ -214,7 +231,15 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
                     'unpaid_leave_dates' => array_values(array_map(fn ($entry): string => (string) $entry['from'], $unpaidLeaveEntries)),
                     'absent_dates' => $absentDates,
                     'absent_days' => round($absentDays, 2),
-                    'absence_gated_by_punch' => isset($punchedEmployeeIds[$employeeId]),
+                    /*
+                     * Whether a punch is what opened the gate — reported as the *fact*, not as
+                     * "was this employee on the device". It used to read the punch set directly, so
+                     * under `apply` a punch-less employee reported `false` while the policy was the
+                     * only reason their month was being charged at all. Whoever reads a slip to ask
+                     * "why did this person lose 26 days" needs to see the policy, not `false`.
+                     */
+                    'absence_gated_by_punch' => $punchedInPeriod,
+                    'absence_differs_from_policy' => ! $punchedInPeriod && $missingAttendancePolicy === 'apply',
                     'missing_attendance_policy' => $missingAttendancePolicy,
                     'unpaid_leave_requests' => $unpaidLeaveEntries,
                 ],

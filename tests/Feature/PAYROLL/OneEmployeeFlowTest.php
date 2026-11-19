@@ -678,18 +678,19 @@ test('a day the employee was expected in and did not attend is deducted, and a m
     $slip = fn (string $id): PayrollSlip => PayrollSlip::query()
         ->where('salary_sheet_id', $sheet->id)->where('employee_id', $id)->firstOrFail();
 
-    // 31 Absent rows, but he was demonstrably on site twice in October — so 29 are his misses.
-    // Daily rate = 30,000 / 30 = 1,000.
+    // 31 Absent rows, but he was demonstrably on site twice in October — so his misses are the days
+    // that were neither present nor off. October 2026 holds 26 working days once its five Fridays are
+    // gone (the company weekly off since P30, applied to him too — he has no off-day row, and a
+    // missing row no longer means "never off"). One of the two punched days, October 2nd, *is* a
+    // Friday, so it costs him nothing: 26 working days − 1 worked = 25 charged. Daily rate = 1,000.
     $some = $slip('FLOW-SOME');
-    fwrite(STDERR, "\n=== DEBUG SOME: cutlist=".json_encode($some->breakdown_json['cutlist']['unpaid_leave_days'] ?? 'x')
-        ." absent_days=".json_encode($some->breakdown_json['cutlist']['source']['absent_days'] ?? 'x')
-        ." gated=".json_encode($some->breakdown_json['cutlist']['source']['absence_gated_by_punch'] ?? 'x')
-        ." dates=".count($some->breakdown_json['cutlist']['source']['absent_dates'] ?? [])
-        ." deductions=".$some->total_deductions."\n");
-    expect(round((float) $some->total_deductions, 2))->toBe(29000.0)
-        ->and(round((float) $some->net_salary, 2))->toBe(1000.0);
-    expect(round((float) $some->breakdown_json['cutlist']['unpaid_leave_days'], 2))->toBe(29.0);
-    expect($some->breakdown_json['cutlist']['source']['absent_dates'])->toHaveCount(29);
+    expect(round((float) $some->total_deductions, 2))->toBe(25000.0)
+        ->and(round((float) $some->net_salary, 2))->toBe(5000.0);
+    expect(round((float) $some->breakdown_json['cutlist']['unpaid_leave_days'], 2))->toBe(25.0);
+    expect($some->breakdown_json['cutlist']['source']['absent_dates'])->toHaveCount(25)
+        // And no Friday is among them: the weekly off is not a day he failed to work.
+        ->and(collect($some->breakdown_json['cutlist']['source']['absent_dates'])
+            ->contains(fn ($d) => Carbon::parse($d)->dayOfWeek === Carbon::FRIDAY))->toBeFalse();
 
     // Zero punches is a missing export, not 31 days of misconduct. He keeps his full month, and the
     // payslip says why rather than leaving the officer to wonder.

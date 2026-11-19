@@ -82,7 +82,9 @@ test('an employee who was on site and did not come in loses the day; one with no
     $onsite = $service->summaryForEmployee('P26-ONSITE', '2026-10-01', '2026-10-31');
     $nopunch = $service->summaryForEmployee('P26-NOPUNCH', '2026-10-01', '2026-10-31');
 
-    expect($onsite->unpaidLeaveDays)->toBe(31.0)
+    // 26, not 31: the five Fridays of October are the weekly off and are not absence. This employee
+    // has no off-day row at all, which is exactly the case P30 fixed — it used to mean "never off".
+    expect($onsite->unpaidLeaveDays)->toBe(26.0)
         ->and($onsite->sourceBreakdown['absence_gated_by_punch'])->toBeTrue();
 
     expect($nopunch->unpaidLeaveDays)->toBe(0.0)
@@ -230,7 +232,8 @@ test('the treatment of an employee with no attendance record is a setting, not a
     // HR flips the policy and the next run docks them like anyone else — no code change.
     DB::table('payroll_settings')->where('id', 1)->update(['missing_attendance_policy' => 'apply']);
     $applied = $service->summaryForEmployee('P26-SETTING', '2026-10-01', '2026-10-31');
-    expect($applied->unpaidLeaveDays)->toBe(31.0)
+    // 31 Absent rows, but the five Fridays are the weekly off and an off day is not an absence.
+    expect($applied->unpaidLeaveDays)->toBe(26.0)
         ->and($applied->sourceBreakdown['missing_attendance_policy'])->toBe('apply');
 });
 
@@ -263,7 +266,9 @@ test('a resigned or terminated employee is never docked for absence', function (
     $active = $service->summaryForEmployee('P26-ACTIVE', '2026-10-01', '2026-10-31');
     $resigned = $service->summaryForEmployee('P26-RESIGNED', '2026-10-01', '2026-10-31');
 
-    expect($active->unpaidLeaveDays)->toBe(31.0);
+    // October's five Fridays are the company weekly off since P30 (no off-day row means Friday, not
+    // "never off"), so a full month of Absent rows is 26 chargeable days, not 31.
+    expect($active->unpaidLeaveDays)->toBe(26.0);
     // A leaver is settled by their final settlement, not by docking a salary they no longer earn.
     expect($resigned->unpaidLeaveDays)->toBe(0.0);
 });
