@@ -19,8 +19,19 @@ class TaxConfiguration extends Model
         return $this->hasMany(TaxSlab::class)->orderBy('sort_order');
     }
 
+    /**
+     * The schedule that governs a date.
+     *
+     * `is_active` is part of "governs", not a separate concern. Retiring a schedule is how tax is
+     * switched off — HR deactivates a configuration rather than deleting it or editing its dates into
+     * a gap — so a scope that matched on dates alone could hand payroll a schedule that nobody meant
+     * to be in force. It stays off because a retired configuration still has to render in the admin
+     * list, which reads the table directly and is unaffected by this scope.
+     */
     public function scopeEffectiveOn(Builder $query, string $date): Builder
     {
-        return $query->where(fn (Builder $q) => $q->whereNull('effective_from')->orWhereDate('effective_from', '<=', $date))->where(fn (Builder $q) => $q->whereNull('effective_to')->orWhereDate('effective_to', '>=', $date));
+        return $query->where('is_active', true)
+            ->where(fn (Builder $q) => $q->whereNull('effective_from')->orWhereDate('effective_from', '<=', $date))
+            ->where(fn (Builder $q) => $q->whereNull('effective_to')->orWhereDate('effective_to', '>=', $date));
     }
 }
