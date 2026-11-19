@@ -42,8 +42,23 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
         }
 
         $employees = Employee::query()->with(['department', 'policy'])->whereIn('employee_id', $employeeIds)->get()->keyBy('employee_id');
+        /*
+         * `duty_date` is a `date` column by declaration and a free string in fact: SQLite stores what
+         * it is given, and rows exist in both shapes, `2026-10-31` and `2026-10-31 00:00:00`. That
+         * makes a string `BETWEEN $periodStart AND $periodEnd` quietly wrong at the top end — the
+         * longer form sorts after the bare date, so the last day of the period falls out of the
+         * result set and every employee who worked it is treated as never having been there.
+         *
+         * It is invisible until it matters: on a month whose final day is already an off day (or
+         * whose rows happen to be stored trimmed) nothing goes missing, and the run looks perfect.
+         * September 2026 had 17 worked days sitting behind this boundary, October none — the bug
+         * was live, not theoretical. A date range on a date column is written as `whereDate`
+         * so that neither shape can fall off the edge.
+         */
         $rowsByEmployee = AttendanceDaily::query()->whereIn('employee_id', $employeeIds)
-            ->whereBetween('duty_date', [$periodStart, $periodEnd])->get(['employee_id', 'duty_date', 'status', 'remarks'])->groupBy('employee_id');
+            ->whereDate('duty_date', '>=', $periodStart)
+            ->whereDate('duty_date', '<=', $periodEnd)
+            ->get(['employee_id', 'duty_date', 'status', 'remarks'])->groupBy('employee_id');
         $leaveByEmployee = LeaveRequest::query()->with('leaveType')
             ->whereIn('employee_id', $employeeIds)->where('status', 'Approved')
             ->whereDate('from_date', '<=', $periodEnd)->whereDate('to_date', '>=', $periodStart)
@@ -234,9 +249,9 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
                     /*
                      * Whether a punch is what opened the gate — reported as the *fact*, not as
                      * "was this employee on the device". It used to read the punch set directly, so
-                     * under `apply` a punch-less employee reported `false` while the policy was the
-                     * only reason their month was being charged at all. Whoever reads a slip to ask
-                     * "why did this person lose 26 days" needs to see the policy, not `false`.
+                     * under `apply` every punch-less employee reported `false` while the policy was
+                     * the only reason their month was being charged at all. Whoever reads a slip to
+                     * ask "why did this person lose 26 days" needs to see `apply`, not `false`.
                      */
                     'absence_gated_by_punch' => $punchedInPeriod,
                     'absence_differs_from_policy' => ! $punchedInPeriod && $missingAttendancePolicy === 'apply',
@@ -249,7 +264,17 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
         return $result;
     }
 
-    /** @param array<int, string> $employeeIds */
+    /**
+     * The approved overtime and extra duty that the attendance actually backs up.
+     *
+     * The date comparison is deliberately `DATE(a) = DATE(b)` rather than a column-to-column
+     * equality. Both columns are declared `date`, but SQLite has no date type and stores whatever
+     * string it is handed — so the same logical day can sit in one table as `2026-10-06` and in the
+     * other as `2026-10-06 00:00:00`. Whichever writer ran last decides, which means a column
+     * comparison works on one employee's rows and silently pays nothing on another's. Overtime that
+     * is approved and worked but matches by luck rather than by rule is worse than overtime that
+     * errors, because nobody finds out.
+     */
     private function approvedOvertimeRows(array $employeeIds, string $periodStart, string $periodEnd): Collection
     {
         return RosterOvertime::query()->whereIn('employee_id', $employeeIds)
@@ -259,14 +284,14 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
                     $ot->where('overtime_type', 'Overtime')->whereExists(function ($daily): void {
                         $daily->selectRaw('1')->from('attendance_dailies')
                             ->whereColumn('attendance_dailies.employee_id', 'roster_overtimes.employee_id')
-                            ->whereColumn('attendance_dailies.duty_date', 'roster_overtimes.overtime_date')
+                            ->whereRaw('DATE(attendance_dailies.duty_date) = DATE(roster_overtimes.overtime_date)')
                             ->where('attendance_dailies.total_overtime_hours', '>', 0.5);
                     });
                 })->orWhere(function ($extra): void {
                     $extra->whereIn('overtime_type', ['Extra Duty', 'Holiday Duty'])->whereExists(function ($daily): void {
                         $daily->selectRaw('1')->from('attendance_dailies')
                             ->whereColumn('attendance_dailies.employee_id', 'roster_overtimes.employee_id')
-                            ->whereColumn('attendance_dailies.duty_date', 'roster_overtimes.overtime_date')
+                            ->whereRaw('DATE(attendance_dailies.duty_date) = DATE(roster_overtimes.overtime_date)')
                             ->where('attendance_dailies.status', 'Extra Duty');
                     });
                 });
