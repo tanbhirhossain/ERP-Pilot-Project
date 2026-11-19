@@ -60,7 +60,12 @@ final class ProcessFinalSettlementAction
         $grossDue = round(collect($salarySegments)->sum(fn (array $segment): float => (float) $segment['gross_salary'] * (int) $segment['days'] / $monthDays), 2);
         $lastSalarySegment = collect($salarySegments)->last() ?? [];
         $serviceYears = $employee->joiningDate && Carbon::parse($employee->joiningDate)->lte($lastDay)
-            ? Carbon::parse($employee->joiningDate)->diffInYears($lastDay)
+            // Completed years, floored. `diffInYears()` returns a *fraction* on this Carbon version
+            // (7 years 9 months came back as 7.7863), and multiplying a fraction of a year by
+            // "days per service year" pays gratuity for service that has not happened yet — it
+            // also slips past a `minimum_service_years` of, say, 7 for somebody with 6 years and
+            // 11 months. Gratuity is settled in whole years everywhere it is audited, so floor it.
+            ? (int) floor(Carbon::parse($employee->joiningDate)->diffInYears($lastDay))
             : 0;
         $policy = GratuityPolicy::query()->where('is_active', true)->latest('id')->first();
         $gratuity = 0.0;

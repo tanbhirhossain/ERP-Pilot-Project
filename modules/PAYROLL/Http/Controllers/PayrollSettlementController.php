@@ -57,14 +57,26 @@ final class PayrollSettlementController extends Controller
 
     public function approve(Request $request, PayrollSettlement $settlement, PayrollSettlementService $settlements): RedirectResponse
     {
-        $settlements->approve($settlement, (int) $request->user()->id);
+        // The service refuses anything that is not pending, and refuses to pay anything that is not
+        // approved. Those are the two ordinary mistakes a payroll clerk makes on this screen (double
+        // click, or jumping the approval step), and uncaught they render a 500 page with no message.
+        // Every sibling controller converts the same refusal into a flash; this one now does too.
+        try {
+            $settlements->approve($settlement, (int) $request->user()->id);
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['settlement' => $e->getMessage()]);
+        }
 
         return back()->with('success', 'Final settlement approved.');
     }
 
     public function paid(Request $request, PayrollSettlement $settlement, PayrollSettlementService $settlements): RedirectResponse
     {
-        $settlements->markPaid($settlement, $request->user()?->id);
+        try {
+            $settlements->markPaid($settlement, $request->user()?->id);
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['settlement' => $e->getMessage()]);
+        }
 
         return back()->with('success', 'Settlement marked paid.');
     }

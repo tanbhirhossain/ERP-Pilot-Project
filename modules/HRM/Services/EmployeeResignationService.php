@@ -28,6 +28,8 @@ final class EmployeeResignationService
         return EmployeeResignation::query()->create($data + ['status' => 'Pending', 'requested_by' => $actorId]);
     }
 
+    public function __construct(private readonly ClearanceService $clearance) {}
+
     public function decide(EmployeeResignation $resignation, string $decision, ?int $actorId, ?string $note = null): EmployeeResignation
     {
         if (! in_array($decision, ['Approved', 'Rejected'], true)) {
@@ -40,6 +42,18 @@ final class EmployeeResignationService
                 throw new \RuntimeException('Only pending resignation requests may be decided.');
             }
             $record->update(['status' => $decision, 'approved_by' => $actorId, 'approved_at' => now(), 'decision_note' => $note]);
+
+            /*
+             * An approved resignation opens the exit checklist. `ClearanceService::seedForResignation()`
+             * has existed all along and nothing ever called it, so in production the Clearance screen —
+             * and the "is this employee fully cleared?" question the final settlement depends on — had
+             * no rows to show and no answer to give. Seeding here, inside the same transaction as the
+             * approval, means the checklist cannot be missing for somebody whose last day is already
+             * agreed. A rejection seeds nothing: the employee is staying.
+             */
+            if ($decision === 'Approved') {
+                $this->clearance->seedForResignation($record->employee_id, $record->id);
+            }
 
             return $record->refresh();
         });
