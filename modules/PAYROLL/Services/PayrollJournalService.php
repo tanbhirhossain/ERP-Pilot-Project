@@ -8,6 +8,7 @@ use Modules\ACCOUNTS\DTO\JournalData;
 use Modules\ACCOUNTS\DTO\JournalLineData;
 use Modules\ACCOUNTS\Interfaces\AccountsPostingProviderInterface;
 use Modules\ACCOUNTS\Models\Account;
+use Modules\PAYROLL\Models\FestivalBonusRun;
 use Modules\PAYROLL\Models\PayrollJournalPost;
 use Modules\PAYROLL\Models\PayrollSalarySheet;
 use Modules\PAYROLL\Models\PayrollSettlement;
@@ -306,18 +307,49 @@ final class PayrollJournalService
             if ($gross > 0) {
                 $lines[] = new JournalLineData(accountId: $accounts['5210'], debit: $gross, description: "Settlement gross due - {$settlement->employee_name}");
             }
+            /*
+             * Gratuity is an expense in its own right (5214) and sits in its own liability (2123).
+             * It used to be credited to Salary Payable with the salary, which let a one-off gratuity
+             * hide inside the monthly salary balance — and left 2123 unused while the chart of
+             * accounts advertised it.
+             */
             if ($gratuity > 0) {
                 $lines[] = new JournalLineData(accountId: $accounts['5214'], debit: $gratuity, description: "Gratuity - {$settlement->employee_name}");
             }
+            // Leave encashment is a benefit, not gross salary: 5211 is where the chart puts benefits.
             if ($leave > 0) {
-                $lines[] = new JournalLineData(accountId: $accounts['5210'], debit: $leave, description: "Leave encashment - {$settlement->employee_name}");
+                $lines[] = new JournalLineData(accountId: $accounts['5211'], debit: $leave, description: "Leave encashment - {$settlement->employee_name}");
             }
             if ($other > 0) {
-                $lines[] = new JournalLineData(accountId: $accounts['5210'], debit: $other, description: "Other benefits - {$settlement->employee_name}");
+                $lines[] = new JournalLineData(accountId: $accounts['5211'], debit: $other, description: "Other benefits - {$settlement->employee_name}");
             }
-            $lines[] = new JournalLineData(accountId: $accounts['2121'], credit: $net, description: "Settlement payable - {$settlement->employee_name}");
+            if ($gratuity > 0) {
+                $lines[] = new JournalLineData(accountId: $accounts['2123'], credit: $gratuity, description: "Gratuity payable - {$settlement->employee_name}");
+            }
+            /*
+             * Salary Payable carries what is actually paid for salary and benefits — `net` minus
+             * gratuity, because gratuity has its own payable above. Deductions are then a separate
+             * credit. The two together equal gross + leave + other, and the whole journal balances:
+             *   debit  = gross + gratuity + leave + other
+             *   credit = (net - gratuity) + gratuity + deductions = net + deductions
+             * and net + deductions == gross + gratuity + leave + other, asserted just below.
+             *
+             * The first attempt at this credited gross + benefits here *and* the deductions on top,
+             * which was 1,000 too much on the credit side. The balance check in this method is what
+             * caught it — the same check that would have caught the original code, had it ever run.
+             */
+            $salaryCredit = round($net - $gratuity, 2);
+            if ($salaryCredit > 0) {
+                $lines[] = new JournalLineData(accountId: $accounts['2121'], credit: $salaryCredit, description: "Settlement payable - {$settlement->employee_name}");
+            }
             if ($ded > 0) {
                 $lines[] = new JournalLineData(accountId: $accounts['2125'], credit: $ded, description: 'Settlement deductions');
+            }
+            if (abs(round($gross + $gratuity + $leave + $other - $ded - $net, 2)) > 0.01) {
+                throw new \DomainException(sprintf(
+                    'Settlement #%d does not add up: components %.2f vs net %.2f.',
+                    $settlement->id, $gross + $gratuity + $leave + $other - $ded, $net,
+                ));
             }
             $debit = array_sum(array_map(fn ($l) => $l->debit, $lines));
             $credit = array_sum(array_map(fn ($l) => $l->credit, $lines));
@@ -328,6 +360,66 @@ final class PayrollJournalService
             $journal = $this->posting->postJournal($dto);
 
             return PayrollJournalPost::create(['settlement_id' => $settlement->id, 'posting_type' => 'settlement', 'posting_scope' => 'sheet', 'reference_no' => $dto->referenceNo, 'journal_id' => $journal->id, 'total_debit' => $dto->totalDebit(), 'total_credit' => $dto->totalCredit(), 'status' => 'posted', 'created_by' => auth()->id()]);
+        });
+    }
+
+    /**
+     * Posts a released festival bonus run: expense to 5213, liability to 2124.
+     *
+     * Nothing posted bonus to the ledger at all before this — `payroll_journal_posts.bonus_run_id`
+     * existed and was never written, so a released bonus run left the payroll module without ever
+     * touching the books. The credit is Bonus Payable rather than Salary Payable because a festival
+     * bonus is settled separately from the monthly run and is usually paid in its own disbursement.
+     *
+     * Idempotent on the run, like the accrual and the settlement: approving twice, or a retry after a
+     * timeout, cannot double-book the expense.
+     */
+    public function postBonus(FestivalBonusRun $run): PayrollJournalPost
+    {
+        return DB::transaction(function () use ($run) {
+            $existing = PayrollJournalPost::where('bonus_run_id', $run->id)
+                ->where('posting_type', 'bonus')
+                ->where('status', 'posted')
+                ->first();
+            if ($existing) {
+                return $existing;
+            }
+
+            $amount = round((float) $run->items()->sum('amount'), 2);
+            if ($amount <= 0) {
+                throw new \DomainException('Bonus run #'.$run->id.' has nothing payable to post.');
+            }
+
+            $accounts = $this->ensurePayrollAccounts();
+            $period = sprintf('%d-%02d', $run->pay_year, $run->pay_month);
+            $lines = [
+                new JournalLineData(accountId: $accounts['5213'], debit: $amount, description: "Festival bonus - {$period} ({$run->employee_count} employees)"),
+                new JournalLineData(accountId: $accounts['2124'], credit: $amount, description: "Bonus payable - {$period}"),
+            ];
+
+            $dto = new JournalData(
+                journalDate: now()->toDateString(),
+                type: 'JV',
+                referenceNo: sprintf('BON-%05d', $run->id),
+                narration: "Festival bonus run #{$run->id} for {$period}",
+                lines: $lines,
+                sourceType: 'festival_bonus_run',
+                sourceId: $run->id,
+            );
+            $journal = $this->posting->postJournal($dto);
+
+            return PayrollJournalPost::create([
+                'bonus_run_id' => $run->id,
+                'posting_type' => 'bonus',
+                'posting_scope' => 'sheet',
+                'reference_no' => $dto->referenceNo,
+                'journal_id' => $journal->id,
+                'total_debit' => $dto->totalDebit(),
+                'total_credit' => $dto->totalCredit(),
+                'status' => 'posted',
+                'meta' => ['run_id' => $run->id, 'employees' => $run->employee_count, 'period' => $period],
+                'created_by' => auth()->id(),
+            ]);
         });
     }
 

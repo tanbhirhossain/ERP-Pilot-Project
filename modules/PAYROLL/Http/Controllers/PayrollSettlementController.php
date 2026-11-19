@@ -16,7 +16,13 @@ final class PayrollSettlementController extends Controller
 {
     public function index(Request $request, PayrollSettlementService $settlements): Response
     {
-        return Inertia::render('PAYROLL::Settlements/Index', ['settlements' => PaginatedResource::from($settlements->paginate($request->integer('per_page', 25), $request->input('search'))->through(fn ($row) => $row->toArray())), 'gratuityPolicies' => $settlements->gratuityPolicies()]);
+        return Inertia::render('PAYROLL::Settlements/Index', [
+            'settlements' => PaginatedResource::from($settlements->paginate($request->integer('per_page', 25), $request->input('search'))->through(fn ($row) => $row->toArray())),
+            'gratuityPolicies' => $settlements->gratuityPolicies(),
+            // An approved settlement with no journal is the one state that looks identical to a
+            // healthy one on this screen. The count is what tells finance there is work to do.
+            'unposted' => $settlements->pendingPostings()->count(),
+        ]);
     }
 
     public function create(EmployeePayrollDataProviderInterface $employees): Response

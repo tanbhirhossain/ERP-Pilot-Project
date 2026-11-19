@@ -10,6 +10,7 @@ use Modules\HRM\Models\Attendance\AttendanceDaily;
 use Modules\HRM\Models\Employee\Employee;
 use Modules\HRM\Models\Leave\LeaveType;
 use Modules\HRM\Models\LeaveRequest;
+use Modules\HRM\Services\LeaveWorkspaceService;
 use Modules\PAYROLL\Models\PayrollSlip;
 
 /**
@@ -35,6 +36,8 @@ class MyHrController extends Controller
 
         return Employee::where('user_id', $user->id)->first();
     }
+
+    public function __construct(private readonly LeaveWorkspaceService $workspace) {}
 
     public function dashboard(Request $request): Response
     {
@@ -129,6 +132,16 @@ class MyHrController extends Controller
             return Inertia::render('HRM::My/NotLinked', []);
         }
 
+        /*
+         * The page was asked for a paginator and nothing else, so an employee could see a list of
+         * their leave applications but never how many days they had left — the one number they open
+         * this screen for. `LeaveWorkspaceService::myLeave()` computes exactly that (applications,
+         * per-type balances, and the available/taken/pending totals) and had no caller anywhere in
+         * the codebase: the service had been written for this screen and the screen never asked.
+         */
+        $year = (int) $request->query('year', (string) now()->year);
+        $mine = $this->workspace->myLeave($employee->employee_id, $year);
+
         $requests = LeaveRequest::where('employee_id', $employee->employee_id)
             ->with('leaveType:id,name')
             ->orderByDesc('id')
@@ -137,7 +150,13 @@ class MyHrController extends Controller
 
         $types = LeaveType::where('is_active', true)->get(['id', 'name']);
 
-        return Inertia::render('HRM::My/Leave', ['requests' => $requests, 'types' => $types]);
+        return Inertia::render('HRM::My/Leave', [
+            'requests' => $requests,
+            'types' => $types,
+            'balances' => $mine['balances'],
+            'totals' => $mine['totals'],
+            'year' => $mine['year'],
+        ]);
     }
 
     public function attendance(Request $request): Response

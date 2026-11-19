@@ -20,6 +20,7 @@ final class PayrollBonusController extends Controller
             'runs' => PaginatedResource::from($bonuses->recentRuns($request->integer('per_page', 25), $request->input('search'))->through(fn ($row) => $row->toArray())),
             'defaultYear' => (int) now()->format('Y'),
             'defaultMonth' => (int) now()->format('m'),
+            'unposted' => $bonuses->pendingPostings()->count(),
         ]);
     }
 

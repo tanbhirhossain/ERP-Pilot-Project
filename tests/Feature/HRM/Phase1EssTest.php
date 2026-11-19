@@ -14,6 +14,7 @@
 
 use Modules\CORE\Models\User;
 use Modules\HRM\Models\Employee\Employee;
+use Modules\HRM\Models\Leave\LeaveType;
 use Modules\PAYROLL\Models\PayrollSalarySheet;
 use Modules\PAYROLL\Models\PayrollSlip;
 
@@ -145,4 +146,38 @@ test('an employee can open their own payslip', function () {
 
 test('ESS requires authentication', function () {
     $this->get(route('hrm.my.dashboard'))->assertRedirect();
+});
+
+/**
+ * The leave screen has to answer "how many days do I have left", not only "what did I apply for".
+ *
+ * `LeaveWorkspaceService::myLeave()` was written for this page and had no caller anywhere in the
+ * codebase: the controller asked LeaveBalanceService for nothing, the page received a paginator of
+ * requests and rendered it, and an employee could see their applications without ever seeing a
+ * balance. The screen looked complete — which is why nobody reported it.
+ */
+test('the ESS leave screen carries the balances, not just the applications', function () {
+    [$user] = p1essUserWithEmployee('P1ESS-BAL');
+
+    // One paid type every employee gets, so the page has a row to show regardless of gender rules.
+    LeaveType::query()->create([
+        'name' => 'ESS Casual Leave',
+        'code' => 'ESS-CL',
+        'days_per_year' => 10,
+        'is_paid' => true,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('hrm.my.leave'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('HRM::My/Leave')
+            // The three things the page renders and did not receive before.
+            ->has('balances')
+            ->has('totals')
+            ->has('totals.available')
+            ->has('totals.taken')
+            ->has('totals.pending')
+            ->has('year'));
 });

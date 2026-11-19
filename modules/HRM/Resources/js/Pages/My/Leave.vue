@@ -2,6 +2,7 @@
 import PageHeader from '@core/Components/PageHeader.vue';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import { CalendarDays } from 'lucide-vue-next';
 
 interface LeaveRow {
@@ -20,11 +21,25 @@ interface Paginator<T> {
     last_page: number;
     total: number;
 }
+interface BalanceRow {
+    leave_type?: string | null;
+    leave_type_id?: number;
+    entitlement?: number;
+    available?: number;
+    approved?: number;
+    pending?: number;
+}
 interface Props {
     requests: Paginator<LeaveRow>;
     types: Array<{ id: number; name: string }>;
+    /** Per-type balances for the year — what this screen exists to answer. */
+    balances?: BalanceRow[];
+    totals?: { available: number; taken: number; pending: number };
+    year?: number;
 }
 const props = defineProps<Props>();
+
+const rows = computed<BalanceRow[]>(() => props.balances ?? []);
 
 const STATUS_TONE: Record<string, string> = {
     Approved: 'bg-emerald-500/10 text-emerald-600',
@@ -38,6 +53,38 @@ const STATUS_TONE: Record<string, string> = {
     <Head title="My Leave" />
     <AdminLayout>
         <PageHeader title="My Leave" description="Your leave requests and their status. To request new leave, contact HR or use the leave application." :icon="CalendarDays" :actions="[{ label: 'My dashboard', route: 'hrm.my.dashboard', variant: 'outline' }]" />
+
+        <!-- Balances first: "how many days do I have left" is the question this page answers. -->
+        <div v-if="rows.length" class="mt-6 rounded-xl border bg-card p-4 shadow-sm">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 class="text-sm font-semibold">Leave balance{{ props.year ? ' — ' + props.year : '' }}</h2>
+                <p v-if="props.totals" class="text-[13px] text-muted-foreground">
+                    Available <span class="font-semibold text-foreground">{{ props.totals.available }}</span> ·
+                    Taken <span class="font-semibold text-foreground">{{ props.totals.taken }}</span> ·
+                    Pending <span class="font-semibold text-foreground">{{ props.totals.pending }}</span>
+                </p>
+            </div>
+            <table class="mt-3 w-full text-sm">
+                <thead class="border-b text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                        <th class="py-2 font-semibold">Type</th>
+                        <th class="py-2 text-right font-semibold">Entitlement</th>
+                        <th class="py-2 text-right font-semibold">Taken</th>
+                        <th class="py-2 text-right font-semibold">Pending</th>
+                        <th class="py-2 text-right font-semibold">Available</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(row, i) in rows" :key="row.leave_type_id ?? i" class="border-b last:border-0">
+                        <td class="py-2">{{ row.leave_type ?? '—' }}</td>
+                        <td class="py-2 text-right tabular-nums">{{ row.entitlement ?? 0 }}</td>
+                        <td class="py-2 text-right tabular-nums">{{ row.approved ?? 0 }}</td>
+                        <td class="py-2 text-right tabular-nums">{{ row.pending ?? 0 }}</td>
+                        <td class="py-2 text-right font-semibold tabular-nums">{{ row.available ?? 0 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
 
         <div class="mt-6 overflow-hidden rounded-xl border bg-card shadow-sm">
             <div v-if="props.requests.data.length === 0" class="px-6 py-14 text-center">
