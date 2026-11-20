@@ -130,7 +130,7 @@ const span = computed(() => props.colspan ?? (props.columns?.length || measuredS
                             scope="col"
                             :class="
                                 cn(
-                                    'st-th text-muted-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider uppercase',
+                                    'st-th text-muted-foreground px-3 py-2.5 text-left text-[11.5px] font-semibold tracking-[0.03em]',
                                     sticky && 'sticky top-0 z-[1]',
                                     dense && 'px-2 py-1.5',
                                     column.align === 'right' && 'text-right',
@@ -229,18 +229,37 @@ const span = computed(() => props.colspan ?? (props.columns?.length || measuredS
  * of them, since a grid with sort hints, colspan groups or units in the header needs real markup.
  * Unlayered: a uniform header is the point.
  */
+/*
+ * One header recipe, shared with DataTable — and it is sentence case.
+ *
+ * It used to be `text-transform: uppercase` with `letter-spacing: .05em` over a translucent
+ * background with a 6px backdrop blur. Three things were wrong at once: uppercasing an 11px label
+ * throws away word shape and makes a table of them read as a wall of shouting; the wide tracking
+ * blurs the letterforms further; and the blur sampled the row scrolling underneath, so a header
+ * literally was blurry. Sentence case, normal tracking and an opaque tint read as a document.
+ */
 :deep(thead th) {
-    padding: 0.5rem 0.75rem;
+    padding: 0.625rem 0.75rem;
     color: hsl(var(--muted-foreground));
-    font-size: 0.75rem;
+    font-size: 11.5px;
     font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    /* `th` defaults to centre in the UA sheet. Set the default here, and re-state the two
+       alternatives immediately after: this block is unlayered, so it outranks Tailwind's
+       utilities, and a page's own `text-right` on an amount column has to keep working. */
+    text-align: left;
     vertical-align: middle;
     font-variant-numeric: tabular-nums;
-    background-color: hsl(var(--muted) / 0.88);
-    backdrop-filter: blur(6px);
+    background-color: hsl(var(--muted) / 0.7);
     box-shadow: inset 0 -1px 0 0 hsl(var(--border));
+}
+
+:deep(thead th.text-right) {
+    text-align: right;
+}
+
+:deep(thead th.text-center) {
+    text-align: center;
 }
 
 .st-dense :deep(thead th) {
@@ -272,8 +291,7 @@ const span = computed(() => props.colspan ?? (props.columns?.length || measuredS
 
 /* DataTable's header paint, so a mixed page does not show two kinds of table. */
 .st-th {
-    background-color: hsl(var(--muted) / 0.88);
-    backdrop-filter: blur(6px);
+    background-color: hsl(var(--muted) / 0.7);
     box-shadow: inset 0 -1px 0 0 hsl(var(--border));
 }
 

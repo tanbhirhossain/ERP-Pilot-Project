@@ -44,13 +44,27 @@ function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') retu
       </div>
 
       <DataTable route-name="accounts.journals.index" title="Journals" :columns="columns" :rows="journals.data" :meta="journals.meta" search-placeholder="Search journal no, ref, narration…">
-        <template #cell-journal_no="{row}"><span class="font-mono text-xs font-bold px-1.5 py-0.5 rounded border" :class="row.status==='posted'?'bg-emerald-500/10 text-emerald-700 border-emerald-500/20':row.status==='draft'?'bg-amber-500/10 text-amber-600 border-amber-500/20':'bg-rose-500/10 text-rose-700 border-rose-500/20'">{{ row.journal_no }}</span></template>
-        <template #cell-journal_date="{row}"><span class="text-sm font-medium">{{ formatDate(row.journal_date) }}</span><span class="text-xs text-muted-foreground block">{{ row.journal_no }}</span></template>
-        <template #cell-type="{row}"><span class="text-xs px-2 py-0.5 rounded-full bg-primary text-primary-foreground font-mono font-bold tracking-widest">{{ row.type }}</span></template>
+        <template #cell-journal_no="{row}"><Link :href="route('accounts.journals.show', row.id)" class="text-foreground font-mono text-xs font-semibold hover:underline">{{ row.journal_no }}</Link></template>
+        <template #cell-journal_date="{row}"><span class="text-sm whitespace-nowrap tabular-nums">{{ formatDate(row.journal_date) }}</span></template>
+        <template #cell-type="{row}"><span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px] font-semibold">{{ row.type }}</span></template>
         <template #cell-narration="{row}"><div class="min-w-0"><span class="text-sm line-clamp-1">{{ row.narration || '—' }}</span><span class="text-xs text-muted-foreground flex items-center gap-1"><FileText class="size-3" /> {{ row.lines_count }} lines · {{ row.reference_no || 'no ref' }}</span></div></template>
-        <template #cell-total_debit="{row}"><span class="font-mono font-bold">{{ formatCurrency(Number(row.total_debit)) }}</span><span class="text-xs text-muted-foreground block">Dr = Cr</span></template>
+        <template #cell-total_debit="{row}"><span class="font-mono text-sm font-semibold tabular-nums">{{ formatCurrency(Number(row.total_debit)) }}</span></template>
         <template #cell-status="{row}"><StatusBadge :label="row.status" :tone="tone(row.status)" /></template>
-        <template #cell-actions="{row}"><div class="flex justify-end gap-1"><Link :href="route('accounts.journals.show',row.id)" class="size-8 grid place-items-center rounded-lg hover:bg-accent transition"><Eye class="size-4"/></Link><Link :href="route('accounts.journals.edit',row.id)" class="size-8 grid place-items-center rounded-lg hover:bg-accent transition"><Pencil class="size-4"/></Link><button @click="askDelete(row)" class="size-8 grid place-items-center rounded-lg hover:bg-destructive/10 hover:text-destructive transition"><Trash2 class="size-4"/></button></div></template>
+        <template #cell-actions="{row}">
+          <!--
+            A posted journal cannot be edited (JournalRepository: "Only draft journals can be
+            edited") or deleted ("Posted journal cannot be deleted. Void it instead."). The row
+            offered both anyway, so two of the three icons on every line were buttons that existed
+            only to raise a DomainException. Show the actions the row actually permits.
+          -->
+          <div class="flex justify-end gap-1">
+            <Link :href="route('accounts.journals.show', row.id)" class="hover:bg-accent grid size-8 place-items-center rounded-md transition" :aria-label="`View ${row.journal_no}`"><Eye class="size-4" /></Link>
+            <template v-if="row.status === 'draft'">
+              <Link :href="route('accounts.journals.edit', row.id)" class="hover:bg-accent grid size-8 place-items-center rounded-md transition" :aria-label="`Edit ${row.journal_no}`"><Pencil class="size-4" /></Link>
+              <button class="hover:bg-destructive/10 hover:text-destructive grid size-8 place-items-center rounded-md transition" :aria-label="`Delete ${row.journal_no}`" @click="askDelete(row)"><Trash2 class="size-4" /></button>
+            </template>
+          </div>
+        </template>
       </DataTable>
       <ConfirmDialog v-model:open="confirmOpen" :processing="processing" title="Delete journal?" :description="`Delete ${pending?.journal_no}? Only draft journals can be deleted — posted ones must be voided.`" confirm-label="Delete" @confirm="confirmDelete" />
     </PageHeader>

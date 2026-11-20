@@ -279,13 +279,19 @@ test('the reasons in the allowlist are still true of the code', function () {
     // The grays are excused *because* they are print-only; if that wrapper goes, so does the excuse.
     $this->assertStringContainsString('hidden print:block', $dataTable, 'DataTable no longer marks its sheet header print-only, so its gray palette is now a screen defect');
 
-    // Item 42 inverted both of these. The hero was excused *because* it was a fixed navy; it now
-    // paints the palette's ramp, so what has to hold is that its ink comes from the ramp too —
-    // a hardcoded navy with tokenised ink is exactly the defect the ink rule describes.
+    // Item 42 gave PageHeader a full-bleed gradient hero and painted every letter on it `hero-ink`.
+    // At the UI redesign the fill was rejected: a saturated gradient block above every page competes
+    // with the numbers underneath it, and the screen stopped looking like a ledger. The ramp survived
+    // as a 3px rule along the top edge — the palette is still carried, nothing is covered by it.
+    //
+    // So the old assertion (`text-hero-ink` must appear) is now asserting a design that was removed.
+    // What still has to hold is what the ink rule is actually for: the hero takes its colour from the
+    // palette ramp, not from a hex literal no palette can reach.
     $header = sctStripComments($pageHeader);
 
     $this->assertStringContainsString('from-hero-from', $header, 'PageHeader no longer paints its hero from the palette ramp');
-    $this->assertStringContainsString('text-hero-ink', $header, 'PageHeader no longer takes its hero ink from a token, so the ramp can invert underneath it');
+    $this->assertStringContainsString('bg-card', $header, 'PageHeader no longer puts its page title on a themed surface');
+    $this->assertStringNotContainsString('text-hero-ink', $header, 'PageHeader has a gradient hero again; its title ink sits on the gradient, not on a surface');
     $this->assertStringNotContainsString('bg-[#', $header, 'PageHeader paints an arbitrary colour again, which no palette can reach');
 
     // The badge used to need six `dark:` counterparts to stay legible. It needs none, because a

@@ -14,11 +14,11 @@ defineProps<{ accounts: Paginator<Row>; tree:any[]; parentOptions:any[] }>();
 const columns: DataTableColumn[] = [
   {key:'code',label:'Code',sortable:true,width:'7.5rem'},
   {key:'name',label:'Account',sortable:true},
-  {key:'account_type',label:'Type',align:'center',sortable:true,width:'8rem'},
-  {key:'nature',label:'Nature',align:'center',width:'6rem'},
-  {key:'is_group',label:'Group',align:'center',width:'7rem'},
-  {key:'is_active',label:'Active',align:'center',width:'7rem'},
-  {key:'actions',label:'',align:'right',exportable:false,width:'8rem'},
+  {key:'account_type',label:'Type',width:'9rem'},
+  {key:'nature',label:'Nature',width:'6.5rem'},
+  {key:'is_group',label:'Kind',width:'6.5rem'},
+  {key:'is_active',label:'Active',width:'6.5rem'},
+  {key:'actions',label:'',align:'right',exportable:false,width:'7rem'},
 ];
 const confirmOpen=ref(false), pending=ref<Row|null>(null), processing=ref(false);
 function askDelete(r:Row){ pending.value=r; confirmOpen.value=true; }
@@ -40,22 +40,60 @@ function typeTone(t:string){ if(t==='asset') return 'info'; if(t==='liability') 
           <h3 class="text-sm font-semibold flex items-center gap-2"><Layers class="size-4 text-primary" /> Account tree</h3>
           <span class="text-xs text-muted-foreground">{{ tree.length }} roots</span>
         </div>
-        <div class="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          <div v-for="root in tree" :key="root.id" class="rounded-lg border bg-card p-3 shadow-sm">
-            <p class="font-mono text-xs font-bold flex items-center gap-1.5"><span class="size-2 rounded-full bg-primary"></span>{{ root.code }} — {{ root.name }}</p>
-            <div class="flex flex-wrap gap-1.5 mt-2">
-              <Link v-for="ch in root.children" :key="ch.id" :href="route('accounts.coa.show', ch.id)" class="text-xs px-2 py-1 rounded-full border bg-muted/40 hover:bg-accent transition font-medium">{{ ch.code }} {{ ch.name }}</Link>
-              <span v-if="!root.children?.length" class="text-xs text-muted-foreground">No children — leaf</span>
-            </div>
-          </div>
-        </div>
+        <!--
+          A tree is a list, not a cloud.
+
+          This was a three-column grid of pills. Account codes are fixed-width and people scan them
+          down a column; wrapping them into a ragged cloud destroys that column, and `{{ ch.code }}
+          {{ ch.name }}` interpolated into one inline link glued the two together ("1000Cash in
+          Hand"). A real table gives the code a column, the name a column, and the eye a line to
+          follow — which is the whole reason a chart of accounts is printed as a list.
+        -->
+        <table class="w-full text-sm">
+          <tbody class="divide-border/70 divide-y">
+            <template v-for="root in tree" :key="root.id">
+              <tr class="bg-muted/40">
+                <td class="w-[7.5rem] px-4 py-2.5">
+                  <span class="font-mono text-xs font-semibold">{{ root.code }}</span>
+                </td>
+                <td class="px-4 py-2.5">
+                  <span class="flex items-center gap-2 font-semibold">
+                    <span class="bg-primary size-1.5 rounded-full" />
+                    {{ root.name }}
+                  </span>
+                </td>
+                <td class="text-muted-foreground w-[6rem] px-4 py-2.5 text-right text-xs">
+                  {{ root.children?.length ?? 0 }} sub-accounts
+                </td>
+              </tr>
+              <tr v-for="ch in root.children" :key="ch.id" class="hover:bg-accent/50 transition-colors">
+                <td class="px-4 py-2">
+                  <span class="text-muted-foreground pl-4 font-mono text-xs">{{ ch.code }}</span>
+                </td>
+                <td class="px-4 py-2">
+                  <Link
+                    :href="route('accounts.coa.show', ch.id)"
+                    class="text-foreground decoration-muted-foreground/40 hover:decoration-foreground underline-offset-2 hover:underline"
+                  >
+                    {{ ch.name }}
+                  </Link>
+                </td>
+                <!-- The name is the link; a second "open" label in the same row is a competing action. -->
+                <td class="px-4 py-2" />
+              </tr>
+              <tr v-if="!root.children?.length">
+                <td colspan="3" class="text-muted-foreground px-4 py-2 text-xs">No child accounts — leaf</td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
 
       <DataTable route-name="accounts.coa.index" title="Chart of Accounts" :columns="columns" :rows="accounts.data" :meta="accounts.meta" search-placeholder="Search code, name, type…">
-        <template #cell-code="{row}"><span class="font-mono text-xs font-bold px-1.5 py-1 rounded border flex items-center gap-1" :class="row.is_system?'bg-amber-500/10 text-amber-700 border-amber-500/20':'bg-slate-500/10 text-slate-700 border-slate-500/20'">{{ row.code }} <Shield v-if="row.is_system" class="inline size-3" /></span></template>
-        <template #cell-name="{row}"><div class="min-w-0"><p class="font-semibold flex items-center gap-1.5 truncate">{{ row.name }} <span v-if="row.is_group" class="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-600 border border-violet-500/20 font-bold tracking-widest">GROUP</span></p><p class="text-xs text-muted-foreground truncate">{{ row.parent ? `↳ ${row.parent.code} ${row.parent.name}` : 'Root' }} · L{{ row.level }} · {{ row.children_count }} children · {{ row.lines_count }} postings</p></div></template>
+        <template #cell-code="{row}"><span class="text-foreground/80 inline-flex items-center gap-1 font-mono text-xs font-semibold">{{ row.code }} <Shield v-if="row.is_system" class="text-muted-foreground size-3" :title="'System account'" /></span></template>
+        <template #cell-name="{row}"><div class="min-w-0"><p class="flex items-center gap-1.5 truncate font-medium">{{ row.name }}<span v-if="row.is_group" class="text-muted-foreground ml-1 text-[11px] font-normal">group</span></p><p class="text-xs text-muted-foreground truncate">{{ row.parent ? `↳ ${row.parent.code} ${row.parent.name}` : 'Root' }} · L{{ row.level }} · {{ row.children_count }} children · {{ row.lines_count }} postings</p></div></template>
         <template #cell-account_type="{row}"><StatusBadge :label="row.account_type" :tone="typeTone(row.account_type)" /></template>
-        <template #cell-nature="{row}"><span class="text-xs font-mono px-2 py-1 rounded-full border font-bold" :class="row.nature==='debit'?'bg-emerald-500/10 text-emerald-700 border-emerald-500/20':'bg-rose-500/10 text-rose-700 border-rose-500/20'">{{ row.nature.toUpperCase() }}</span></template>
+        <template #cell-nature="{row}"><StatusBadge :label="row.nature === 'debit' ? 'Debit' : 'Credit'" :tone="row.nature === 'debit' ? 'info' : 'primary'" /></template>
         <template #cell-is_group="{row}"><StatusBadge :label="row.is_group?'Group':'Posting'" :tone="row.is_group?'warning':'success'" /></template>
         <template #cell-is_active="{row}"><StatusBadge :label="row.is_active?'Active':'Inactive'" :tone="row.is_active?'success':'neutral'" /></template>
         <template #cell-actions="{row}"><div class="flex justify-end gap-1"><Link :href="route('accounts.coa.show',row.id)" class="size-8 grid place-items-center rounded-lg hover:bg-accent transition"><Eye class="size-4"/></Link><Link :href="route('accounts.coa.edit',row.id)" class="size-8 grid place-items-center rounded-lg hover:bg-accent transition"><Pencil class="size-4"/></Link><button @click="askDelete(row)" class="size-8 grid place-items-center rounded-lg hover:bg-destructive/10 hover:text-destructive transition"><Trash2 class="size-4"/></button></div></template>

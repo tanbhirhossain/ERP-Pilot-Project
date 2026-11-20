@@ -645,17 +645,27 @@ onMounted(() => {
             >
               <button
                 v-for="p in catalog" :key="p.value" type="button"
-                class="group flex flex-col justify-between gap-2 rounded-xl border bg-card p-3 text-left transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:translate-y-0"
+                class="group flex min-h-[104px] flex-col justify-between gap-2 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 :aria-label="`Add ${p.label}, ${p.meta} BDT`"
                 @click="addFromCatalog(p)"
               >
+                <!--
+                  Two lines, not one.
+                  The name was `truncate`d to a single line inside a fifth-of-the-screen tile, so every
+                  garment in the catalogue read "Cotton Panjabi …" — seven identical tiles, each
+                  hiding the one word that told them apart (Off White? Navy?). A cashier cannot sell
+                  what they cannot read. The name now gets two lines and the SKU stays as the
+                  tie-breaker underneath.
+                -->
                 <div class="min-w-0">
-                  <p class="truncate text-[13px] font-semibold leading-tight">{{ p.label }}</p>
-                  <p class="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{{ p.sku }}</p>
+                  <p class="line-clamp-2 text-[12.5px] font-medium leading-snug text-foreground">{{ p.label }}</p>
+                  <p class="mt-1 truncate text-[10.5px] uppercase tracking-wide text-muted-foreground">{{ p.sku }}</p>
                 </div>
                 <div class="flex items-end justify-between gap-1">
-                  <span class="font-mono text-sm font-bold tabular-nums text-primary">{{ p.meta }}</span>
-                  <Plus class="size-4 shrink-0 text-muted-foreground transition group-hover:text-primary" aria-hidden="true" />
+                  <span class="num-display text-[15px] font-semibold text-foreground">{{ p.meta }}</span>
+                  <span class="grid size-6 place-items-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                    <Plus class="size-3.5" aria-hidden="true" />
+                  </span>
                 </div>
               </button>
             </div>
@@ -885,11 +895,18 @@ onMounted(() => {
         </div>
 
         <!-- ── Total + charge ─────────────────────────────────────────── -->
-        <div class="overflow-hidden rounded-xl border border-primary/20 bg-primary text-primary-foreground shadow-lg">
-          <div class="px-4 pt-4">
-            <p class="text-[11px] font-semibold uppercase tracking-widest opacity-80">Total to pay</p>
-            <p class="mt-0.5 font-mono text-4xl font-bold leading-none tabular-nums">{{ money(grandTotal) }}<span class="ml-1.5 text-sm font-semibold opacity-80">BDT</span></p>
-            <p class="mt-1.5 text-xs opacity-85">
+        <!--
+          The total is the one place on this screen that earns the full colour block.
+          It is the figure the cashier reads aloud, so it is the only element allowed to be a solid
+          field of the brand colour — everything else in the column is a surface with a border. The
+          panel used to be `bg-primary` too, but as one of four equally loud blocks it read as
+          decoration; now it reads as the answer.
+        -->
+        <div class="overflow-hidden rounded-lg border border-primary/20 bg-card shadow-[0_2px_12px_-2px_hsl(var(--primary)/0.18)]">
+          <div class="border-b bg-primary/[0.04] px-4 py-3">
+            <p class="eyebrow">Total to pay</p>
+            <p class="num-display mt-1 text-[34px] font-semibold leading-none text-foreground">{{ money(grandTotal) }}<span class="ml-2 text-[13px] font-medium text-muted-foreground">BDT</span></p>
+            <p class="mt-1.5 text-[11.5px] text-muted-foreground">
               {{ cart.length }} line{{ cart.length === 1 ? '' : 's' }} · {{ money(itemCount) }} unit{{ itemCount === 1 ? '' : 's' }}
               <span v-if="changeDue > 0"> · change {{ money(changeDue) }}</span>
               <span v-else-if="isPartPaid"> · {{ money(balanceDue) }} due</span>
@@ -897,7 +914,7 @@ onMounted(() => {
           </div>
           <div class="p-4 pt-3">
             <Button
-              class="h-12 w-full bg-primary-foreground text-base font-bold text-primary shadow-sm hover:bg-primary-foreground/90"
+              class="h-11 w-full text-[14px] font-semibold"
               size="lg" @click="sell" :disabled="!canSell || adding"
             >
               <template v-if="paymentMethod === 'cash'"><Banknote class="size-5" />{{ changeDue > 0 ? `Take ${money(tenderedCents / 100)} · change ${money(changeDue)}` : 'Charge cash' }}</template>
@@ -908,12 +925,12 @@ onMounted(() => {
               <template v-else><Split class="size-5" />Charge split</template>
             </Button>
 
-            <p v-if="!warehouseId" class="mt-2 text-xs font-medium opacity-90">Select a warehouse to enable selling.</p>
-            <p v-else-if="!cart.length" class="mt-2 text-xs font-medium opacity-90">Add at least one item to enable selling.</p>
-            <p v-else-if="paymentMethod === 'split' && !splitValid" class="mt-2 text-xs font-medium opacity-90">Cash + Bank must equal the total.</p>
-            <p v-else-if="dueNeedsCustomer" class="mt-2 text-xs font-medium opacity-90">A credit or part-paid sale needs a customer.</p>
-            <p v-else-if="tenderIncomplete" class="mt-2 text-xs font-medium opacity-90">The amount received is short of the total.</p>
-            <p v-else class="mt-2 text-xs opacity-80">Stock deducted now. Nothing posts yet — the whole day goes to one journal when this drawer closes (Sales 4001 · VAT 2110 · COGS 5001 · Inventory 1200).</p>
+            <p v-if="!warehouseId" class="mt-2 flex items-start gap-1.5 text-[11.5px] font-medium text-amber-600 dark:text-amber-400"><AlertCircle class="mt-px size-3.5 shrink-0" aria-hidden="true" />Select a warehouse to enable selling.</p>
+            <p v-else-if="!cart.length" class="mt-2 text-[11.5px] text-muted-foreground">Add at least one item to enable selling.</p>
+            <p v-else-if="paymentMethod === 'split' && !splitValid" class="mt-2 flex items-start gap-1.5 text-[11.5px] font-medium text-amber-600 dark:text-amber-400"><AlertCircle class="mt-px size-3.5 shrink-0" aria-hidden="true" />Cash + Bank must equal the total.</p>
+            <p v-else-if="dueNeedsCustomer" class="mt-2 flex items-start gap-1.5 text-[11.5px] font-medium text-amber-600 dark:text-amber-400"><AlertCircle class="mt-px size-3.5 shrink-0" aria-hidden="true" />A credit or part-paid sale needs a customer.</p>
+            <p v-else-if="tenderIncomplete" class="mt-2 flex items-start gap-1.5 text-[11.5px] font-medium text-amber-600 dark:text-amber-400"><AlertCircle class="mt-px size-3.5 shrink-0" aria-hidden="true" />The amount received is short of the total.</p>
+            <p v-else class="mt-2 text-[11px] leading-relaxed text-muted-foreground">Stock deducted now. Nothing posts yet — the whole day goes to one journal when this drawer closes (Sales 4001 · VAT 2110 · COGS 5001 · Inventory 1200).</p>
 
             <div v-if="page.props?.flash?.error" role="alert" class="mt-2 rounded-lg border border-destructive/30 bg-destructive/15 p-2 text-xs font-medium">{{ page.props.flash.error }}</div>
             <div v-if="page.props?.flash?.success" class="mt-2 rounded-lg bg-primary-foreground/15 p-2 text-xs font-medium">{{ page.props.flash.success }}</div>

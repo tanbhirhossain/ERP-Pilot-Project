@@ -23,6 +23,25 @@ const props = withDefaults(defineProps<{
  * showed indigo badges. The status tokens are defined per mode and never per palette, so green means
  * the same thing under every scheme and the dark variants are simply gone.
  */
+/*
+ * A status is stored as an enum (`partially_paid`, `draft`, `stockable`) and shown to a person.
+ * Printing the column straight through is what put "partially_paid" in a badge on screen — an
+ * underscore in a financial ledger reads as a database leak, not a status.
+ *
+ * Only values that already look like identifiers are rewritten, so a label that the page wrote
+ * itself ("Active", "Opening Balance", "N/A") passes through untouched.
+ */
+function humanise(label: string): string {
+  if (!label) return '';
+  const looksLikeEnum = /^[a-z0-9]+(_[a-z0-9]+)+$/.test(label) || /^[a-z]+$/.test(label);
+  if (!looksLikeEnum) return label;
+
+  const text = label.replace(/_/g, ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+const display = computed(() => humanise(props.label));
+
 const toneClass = computed(() => {
   const map: Record<Tone, string> = {
     neutral: 'bg-neutral-ink/10 text-neutral-ink ring-neutral-ink/25',
@@ -54,6 +73,6 @@ const dotClass = computed(() => {
     :class="[toneClass, size === 'sm' ? 'px-2.5 py-0.5 text-xs' : 'px-3 py-1 text-sm']"
   >
     <span v-if="dot" class="size-1.5 rounded-full flex-shrink-0" :class="dotClass" />
-    {{ label }}
+    {{ display }}
   </span>
 </template>

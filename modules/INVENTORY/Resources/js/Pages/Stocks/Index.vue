@@ -6,7 +6,7 @@ import PageHeader from '@core/Components/PageHeader.vue';
 import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import type { Paginator } from '@core/types';
-import { formatCurrency } from '@core/Utils/format';
+import { formatCurrency, formatNumber } from '@core/Utils/format';
 interface Row { id:number; product:{name:string; sku:string; reorder_level:number}; variant?:{name:string}; warehouse:{name:string; code:string}; location?:{name:string}; lot_no?:string; qty_on_hand:string; qty_reserved:string; qty_available:string; avg_cost:string; total_value:string; status:string; last_movement_at?:string }
 defineProps<{ stocks: Paginator<Row>; warehouseOptions:any[]; summary:any }>();
 const columns: DataTableColumn[] = [
@@ -22,18 +22,33 @@ const columns: DataTableColumn[] = [
 <template>
   <AdminLayout :breadcrumbs="[{title:'Inventory'},{title:'Stock Overview'}]">
     <Head title="Stock Overview" />
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <div class="bg-card border rounded-xl p-3"><p class="text-xs text-muted-foreground flex items-center gap-1"><Wallet class="size-3"/> Total Value</p><p class="text-lg font-bold font-mono">{{ formatCurrency(summary.total_value) }}</p></div>
-      <div class="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3"><p class="text-xs text-amber-600 flex items-center gap-1"><AlertTriangle class="size-3"/> Low Stock</p><p class="text-lg font-bold text-amber-600">{{ summary.low_count }}</p></div>
-      <div class="bg-rose-500/5 border border-rose-500/20 rounded-xl p-3"><p class="text-xs text-rose-600 flex items-center gap-1"><Package class="size-3"/> Out of Stock</p><p class="text-lg font-bold text-rose-600">{{ summary.out_count }}</p></div>
-      <div class="bg-card border rounded-xl p-3"><p class="text-xs text-muted-foreground flex items-center gap-1"><Boxes class="size-3"/> Stock Lines</p><p class="text-lg font-bold">{{ stocks.meta.total }}</p></div>
-    </div>
-        <PageHeader title="Stock Overview" description="Stock Overview" :icon="Boxes" >
+        <PageHeader title="Stock Overview" description="What is physically in each warehouse, and what it is worth." :icon="Boxes">
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="bg-card rounded-xl border p-3"><p class="text-muted-foreground flex items-center gap-1 text-xs"><Wallet class="size-3" /> Total Value</p><p class="mt-1 font-mono text-lg font-semibold tabular-nums">{{ formatCurrency(summary.total_value) }}</p></div>
+        <div class="bg-card rounded-xl border p-3"><p class="text-muted-foreground flex items-center gap-1 text-xs"><AlertTriangle class="size-3" /> Low Stock</p><p class="text-warning mt-1 text-lg font-semibold tabular-nums">{{ summary.low_count }}</p></div>
+        <div class="bg-card rounded-xl border p-3"><p class="text-muted-foreground flex items-center gap-1 text-xs"><Package class="size-3" /> Out of Stock</p><p class="text-danger mt-1 text-lg font-semibold tabular-nums">{{ summary.out_count }}</p></div>
+        <div class="bg-card rounded-xl border p-3"><p class="text-muted-foreground flex items-center gap-1 text-xs"><Boxes class="size-3" /> Stock Lines</p><p class="mt-1 text-lg font-semibold tabular-nums">{{ stocks.meta.total }}</p></div>
+      </div>
     <DataTable route-name="inventory.stocks.index" title="Stock Overview" :columns="columns" :rows="stocks.data" :meta="stocks.meta" search-placeholder="Search product…">
       <template #cell-product="{row}"><div><p class="font-semibold">{{ row.product.name }}</p><p class="text-xs text-muted-foreground font-mono">{{ row.product.sku }} <span v-if="row.lot_no" class="ml-1 px-1 py-0.5 bg-muted rounded">Lot: {{ row.lot_no }}</span></p></div></template>
-      <template #cell-warehouse="{row}"><div><p class="text-sm">{{ row.warehouse.name }}</p><p class="text-xs text-muted-foreground">{{ row.location?.name || 'No location' }}</p></div></template>
-      <template #cell-qty_on_hand="{row}"><span class="font-mono font-bold" :class="row.status==='out'?'text-rose-600':row.status==='low'?'text-amber-600':'text-emerald-600'">{{ row.qty_on_hand }}</span></template>
-      <template #cell-qty_available="{row}"><span class="font-mono">{{ row.qty_available }} <span class="text-xs text-muted-foreground">({{ row.qty_reserved }} resv)</span></span></template>
+      <template #cell-warehouse="{row}"><div class="leading-tight"><p class="text-sm">{{ row.warehouse.name }}</p><p v-if="row.location?.name" class="text-muted-foreground mt-0.5 text-xs">{{ row.location.name }}</p></div></template>
+      <!--
+        `qty_on_hand` arrives as a decimal string ("10.0000"). Interpolating it printed four
+        trailing zeros on every line — a quantity in a stock list is a count of pieces, and the
+        database's precision is not a fact about the goods. Same for the reservation, which was
+        shown as "(0.0000 resv)" on every row: a zero that appears everywhere is noise, so it is
+        only rendered when something is actually reserved.
+      -->
+      <template #cell-qty_on_hand="{row}">
+        <span class="font-mono text-sm font-semibold tabular-nums" :class="row.status === 'out' ? 'text-danger' : row.status === 'low' ? 'text-warning' : 'text-foreground'">{{ formatNumber(Number(row.qty_on_hand)) }}</span>
+      </template>
+      <template #cell-qty_available="{row}">
+        <div class="flex flex-col items-center leading-tight">
+          <span class="font-mono text-sm tabular-nums">{{ formatNumber(Number(row.qty_available)) }}</span>
+          <span v-if="Number(row.qty_reserved) > 0" class="text-muted-foreground mt-0.5 text-[11px] tabular-nums">{{ formatNumber(Number(row.qty_reserved)) }} reserved</span>
+        </div>
+      </template>
       <template #cell-avg_cost="{row}"><span class="font-mono text-sm">{{ formatCurrency(Number(row.avg_cost)) }}</span></template>
       <template #cell-total_value="{row}"><span class="font-mono font-semibold">{{ formatCurrency(Number(row.total_value)) }}</span></template>
       <template #cell-status="{row}"><StatusBadge :label="row.status" :tone="row.status==='in'?'success':row.status==='low'?'warning':'danger'" /></template>

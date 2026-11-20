@@ -183,7 +183,11 @@ const bdtNumberFormatter = new Intl.NumberFormat('en-BD', { minimumFractionDigit
  */
 export function formatCurrency(value: number | null | undefined, currency: string = 'BDT'): string {
     if (value === null || value === undefined) return '—';
-    if (currency === 'BDT') return `৳${bdtNumberFormatter.format(Number(value))}`;
+    // Bengali taka signs. `৳15,720.00` is two glyphs colliding: the taka sign already has a
+    // descender on that side, and the digit beside it closes the gap to nothing, so four-figure
+    // amounts read as "৳15" wrapped onto its own line. The space is not decoration — it is what
+    // separates the symbol from the numeral in every printed taka statement.
+    if (currency === 'BDT') return `৳ ${bdtNumberFormatter.format(Number(value))}`;
     return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(value));
 }
 

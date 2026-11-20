@@ -83,9 +83,18 @@ class InventoryDemoSeeder extends Seeder
             ]);
         }
 
-        // Create a known product for testing POS/valuation
+        /*
+         * The demo dataset is supposed to carry at least one FIFO-valued product: weight-average is
+         * the default everywhere, so without one there is no path through the code that maintains
+         * `inventory_fifo_layers`, and that table stayed empty.
+         *
+         * This product is that one — and its name was "Cotton Fabric — Premium White", identical to
+         * FAB-001, which is why the POS grid showed the same item twice under two SKUs. It is a
+         * different thing: a cotton-poplin roll kept under FIFO, so the two names now say so.
+         */
         $test = Product::firstOrCreate(['sku' => 'SKU-TEST001'], [
-            'name' => 'Cotton Fabric — Premium White',
+            'name' => 'Cotton Poplin — FIFO Roll',
+            'valuation_method' => 'fifo',
             'barcode' => '8801000000011',
             'category_id' => $catFabric->id,
             'uom_id' => $pcs->id,

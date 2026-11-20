@@ -574,7 +574,40 @@ function setDensity(value: 'comfortable' | 'compact'): void {
     }
 }
 
-const cellPad = computed(() => (density.value === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'));
+/*
+ * Rows breathe less than they used to.
+ *
+ * `comfortable` was py-3 + px-4, which at 14px text is a 52px row — an index page showing eight rows
+ * filled the viewport and a two-row table left 600px of nothing beneath it. `compact` at py-1.5 then
+ * went the other way and clipped the two-line cells (invoices carry a due date under the issue date)
+ * into a smudge. Neither is a density a financial reader wants, because the unit they scan is a
+ * *line*, and a line needs to be tall enough to hold two stacked facts without touching its
+ * neighbour, and short enough that dozens fit.
+ */
+/*
+ * A column's share of the row, for the columns that declare no width.
+ *
+ * The role decides it: identifiers are narrow and never wrap; a name or a reference gets the room
+ * because it is the only arbitrary-length text on the line; money is sized to its digits and right
+ * aligned. This is what stops the amount column collapsing to 90px beside a 500px gap.
+ */
+function columnShare(column: any): string {
+    if (column.key === 'actions') return '6rem';
+    if (column.key === 'status' || column.key === 'is_active') return '9rem';
+    // Money and counts: sized to their digits, never the row's slack.
+    if (column.align === 'right' || column.align === 'center') return '9rem';
+    if (column.key === 'date' || column.key === 'created_at' || column.key === 'due_date') return '8.5rem';
+    // Document numbers are fixed-width and monospaced.
+    if (/no$|_no$|^code$|^sku$/.test(column.key)) return '8rem';
+
+    // Everything else is arbitrary-length text — a vendor name, a narration.
+    // Letting one such column take `auto` under table-fixed gave it an equal share with
+    // every other `auto` column, which is how a bill line ended up with two 409px slabs
+    // and a 96px amount. A name gets the remaining space instead.
+    return 'auto';
+}
+
+const cellPad = computed(() => (density.value === 'compact' ? 'px-3 py-2' : 'px-4 py-2.5'));
 
 /* ------------------------- saved views (U8) ------------------------------ */
 
@@ -963,7 +996,16 @@ onMounted(() => {
                 class="dt-scroll max-h-[72vh] overflow-auto print:max-h-none print:overflow-visible"
                 :class="loading && 'pointer-events-none opacity-70 transition-opacity'"
             >
-                <table class="w-full caption-bottom text-sm">
+                <!--
+                  `table-fixed` with explicit widths.
+                  Under the browser's automatic layout, a column's width is driven by its widest cell:
+                  "Padma Textile Mills Ltd." took 250px and the four columns beside it took what was
+                  left, so a bill list showed a 500px void between the vendor and the total while the
+                  amount column — the one thing anyone actually reads — was squeezed to its minimum.
+                  Fixed layout distributes the row predictably, and each column's declared width (or a
+                  proportional share when it declares none) is respected.
+                -->
+                <table class="w-full table-fixed caption-bottom text-sm">
                     <thead>
                         <tr class="border-b">
                             <th v-if="selectable" scope="col" class="dt-th bg-card sticky top-0 z-[1] w-10 px-3 py-3 print:hidden">
@@ -980,12 +1022,18 @@ onMounted(() => {
                                 v-for="column in visibleColumns"
                                 :key="column.key"
                                 scope="col"
-                                :style="column.width ? { width: column.width } : undefined"
+                                :style="{ width: column.width ?? columnShare(column) }"
                                 :class="
                                     cn(
-                                        'dt-th text-muted-foreground sticky top-0 z-[1] px-4 py-2.5 text-[11.5px] font-semibold tracking-[0.03em] whitespace-nowrap',
-                                        column.align === 'right' && 'text-right',
-                                        column.align === 'center' && 'text-center',
+                                        'dt-th text-muted-foreground sticky top-0 z-[1] px-4 py-2.5 text-[11.5px] font-semibold tracking-[0.03em]',
+                                        // One alignment class, never two: `text-left` plus `text-right` on
+                                        // the same cell resolves by stylesheet order, not by intent, so a
+                                        // money column could show its header over the wrong edge.
+                                        column.align === 'right'
+                                            ? 'text-right'
+                                            : column.align === 'center'
+                                              ? 'text-center'
+                                              : 'text-left',
                                         column.key === 'actions' && 'w-1 print:hidden',
                                         column.sortable && 'select-none',
                                         column.headerClass,

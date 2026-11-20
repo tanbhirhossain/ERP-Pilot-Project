@@ -7,7 +7,6 @@ import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
 import PageHeader from '@core/Components/PageHeader.vue';
 import { formatCurrency } from '@core/Utils/format';
-import AcctKpi from '../../Components/AcctKpi.vue';
 import AcctSection from '../../Components/AcctSection.vue';
 import AcctEmpty from '../../Components/AcctEmpty.vue';
 import { ref, computed } from 'vue';
@@ -31,36 +30,39 @@ const margin = computed(()=> props.report.income > 0 ? (net.value/props.report.i
       :icon="TrendingUp"
       :actions="[{ label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
-        { label:'Income', value: formatCurrency(report.income), sub: incomeRows.length + ' heads' },
-        { label:'Expense', value: formatCurrency(report.expense), sub: expenseRows.length + ' heads' },
-        { label: report.is_profit ? 'Net Profit' : 'Net Loss', value: formatCurrency(Math.abs(net)), sub: (margin>=0?'+':'')+margin.toFixed(1)+'% margin' },
-        { label:'Period', value: `${from} → ${to}`, sub: report.is_profit?'Profit':'Loss' },
+        { label: 'Income', value: formatCurrency(report.income), sub: `${incomeRows.length} ${incomeRows.length === 1 ? 'account' : 'accounts'}` },
+        { label: 'Expense', value: formatCurrency(report.expense), sub: `${expenseRows.length} ${expenseRows.length === 1 ? 'account' : 'accounts'}` },
+        { label: report.is_profit ? 'Net profit' : 'Net loss', value: formatCurrency(Math.abs(net)), sub: `${Math.abs(margin).toFixed(1)}% of income` },
+        { label: 'Margin', value: `${margin > 0 ? '+' : margin < 0 ? '−' : ''}${Math.abs(margin).toFixed(1)}%`, sub: 'net ÷ income' },
       ]"
     >
-      <!-- Hero KPI -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <AcctKpi label="Total Income" :value="formatCurrency(report.income)" :sub="`${incomeRows.length} income heads`" :icon="Wallet" tone="success" />
-        <AcctKpi label="Total Expense" :value="formatCurrency(report.expense)" :sub="`${expenseRows.length} expense heads`" :icon="Receipt" tone="danger" />
-        <div class="rounded-xl border p-4 shadow-sm flex flex-col justify-center" :class="report.is_profit ? 'bg-emerald-500/[0.06] border-emerald-500/20' : 'bg-rose-500/[0.06] border-rose-500/20'">
-          <p class="text-[11px] font-semibold tracking-widest uppercase flex items-center gap-1.5" :class="report.is_profit?'text-emerald-600':'text-rose-600'"><Sparkles class="size-3.5" /> {{ report.is_profit ? 'Net Profit' : 'Net Loss' }}</p>
-          <p class="text-2xl font-bold font-mono mt-1" :class="report.is_profit?'text-emerald-600':'text-rose-600'">{{ formatCurrency(Math.abs(net)) }}</p>
-          <p class="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-            <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium" :class="report.is_profit?'border-emerald-500/20 text-emerald-700 bg-emerald-500/10':'border-rose-500/20 text-rose-700 bg-rose-500/10'">
-              <TrendingUp v-if="report.is_profit" class="size-3" /> <TrendingDown v-else class="size-3" /> {{ margin.toFixed(1) }}% margin
-            </span>
-            <span class="hidden sm:inline">Income − Expense</span>
-          </p>
-        </div>
-      </div>
+      <!--
+        There used to be a row of three oversized tiles here — Total Income, Total Expense, Net —
+        printing the exact three figures the header strip above already printed, in a second,
+        larger typeface. A report that states its headline twice does not look richer; it looks
+        like two people assembled it. The strip is the summary. What follows is the statement.
+      -->
 
-      <!-- Waterfall bar -->
-      <div class="bg-card border rounded-xl p-4 shadow-sm">
-        <div class="flex items-center justify-between text-xs text-muted-foreground mb-2"><span>Income</span><span>Expense → Net</span></div>
-        <div class="h-3 rounded-full bg-muted overflow-hidden flex">
-          <div class="h-full bg-emerald-500 transition-all" :style="{ width: report.income>0 ? (report.income/(report.income+report.expense || 1)*100)+'%' : '0%' }"></div>
-          <div class="h-full bg-rose-500 transition-all" :style="{ width: report.expense>0 ? (report.expense/(report.income+report.expense || 1)*100)+'%' : '0%' }"></div>
+      <!--
+        Income against expense, on one scale, as tokens rather than raw emerald/rose.
+        The bar is the only place the two figures are compared proportionally, so it earns its space.
+      -->
+      <div class="bg-card rounded-xl border p-4">
+        <div class="text-muted-foreground mb-2 flex items-center justify-between text-[11px] font-medium tracking-[0.03em]">
+          <span>Income</span>
+          <span>Expense</span>
         </div>
-        <div class="flex justify-between text-xs font-mono mt-2"><span class="text-emerald-600 font-semibold">{{ formatCurrency(report.income) }}</span><span class="font-bold" :class="report.is_profit?'text-emerald-600':'text-rose-600'">{{ report.is_profit?'+':'' }}{{ formatCurrency(net) }}</span><span class="text-rose-600 font-semibold">{{ formatCurrency(report.expense) }}</span></div>
+        <div class="bg-muted flex h-2.5 overflow-hidden rounded-full">
+          <div class="bg-success h-full" :style="{ width: report.income > 0 ? (report.income / (report.income + report.expense || 1)) * 100 + '%' : '0%' }" />
+          <div class="bg-danger h-full" :style="{ width: report.expense > 0 ? (report.expense / (report.income + report.expense || 1)) * 100 + '%' : '0%' }" />
+        </div>
+        <div class="mt-2 flex items-center justify-between font-mono text-xs tabular-nums">
+          <span class="text-foreground font-semibold">{{ formatCurrency(report.income) }}</span>
+          <span class="text-muted-foreground">
+            net <span class="font-semibold" :class="report.is_profit ? 'text-success' : 'text-danger'">{{ report.is_profit ? '+' : '−' }}{{ formatCurrency(Math.abs(net)) }}</span>
+          </span>
+          <span class="text-foreground font-semibold">{{ formatCurrency(report.expense) }}</span>
+        </div>
       </div>
 
       <!-- Controls -->
@@ -72,7 +74,7 @@ const margin = computed(()=> props.report.income > 0 ? (net.value/props.report.i
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <AcctSection title="Income" :description="`${incomeRows.length} accounts · credit nature`" :icon="Wallet">
+        <AcctSection title="Income" :description="`${incomeRows.length} ${incomeRows.length === 1 ? 'account' : 'accounts'} · credit nature`" :icon="Wallet">
           <div v-if="!incomeRows.length" class="p-4"><AcctEmpty title="No income in period" hint="Income appears when a sales/income posting exists between those dates. Check Journal type SV/RV." :icon="Wallet" /></div>
           <div v-else class="divide-y">
             <div v-for="r in incomeRows" :key="r.account_id" class="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-muted/30 transition">
@@ -85,7 +87,7 @@ const margin = computed(()=> props.report.income > 0 ? (net.value/props.report.i
           </div>
         </AcctSection>
 
-        <AcctSection title="Expenses" :description="`${expenseRows.length} accounts · debit nature`" :icon="Receipt">
+        <AcctSection title="Expenses" :description="`${expenseRows.length} ${expenseRows.length === 1 ? 'account' : 'accounts'} · debit nature`" :icon="Receipt">
           <div v-if="!expenseRows.length" class="p-4"><AcctEmpty title="No expense in period" hint="Expenses appear once JV/PV postings hit expense heads in the window." :icon="Receipt" /></div>
           <div v-else class="divide-y">
             <div v-for="r in expenseRows" :key="r.account_id" class="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-muted/30 transition">
