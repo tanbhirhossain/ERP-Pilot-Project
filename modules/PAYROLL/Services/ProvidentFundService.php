@@ -499,14 +499,30 @@ final class ProvidentFundService
                 continue;
             }
 
-            $exists = PfLedger::query()
+            /*
+             * Has this month already been recognised for this account, in *any* state?
+             *
+             * The idempotency guard used to ask `status = 'accrued'` only, which made the function
+             * idempotent exactly once: the first re-run wrote nothing (the rows were still accrued),
+             * so the second re-run — after `settleMonth()` had flipped them to `settled` — wrote the
+             * whole month again. Live probe on the pilot database: October 2026 went from 28 rows /
+             * 67,300 to 56 rows / 134,600 on a single `accrueFromSheet()` call after a reopen
+             * (reopen → `ready` → re-release → accrue is the real sequence, not a contrived one).
+             *
+             * The month is a fact once it has been recognised: accrued, settled, or reversed. Only
+             * written-off (a reversal that voids the liability) may be accrued again, because there
+             * the money was never really owed. Amounts are deliberately not compared — a reopened
+             * month that recomputes to a different figure is a *correction*, and silently adding a
+             * second row would pay the member twice; it needs the existing row withdrawn first.
+             */
+            $alreadyRecognised = PfLedger::query()
                 ->where('pf_account_id', $account->id)
                 ->where('entry_type', $type)
                 ->where('contribution_month', $period)
-                ->where('status', 'accrued')
+                ->whereIn('status', ['accrued', 'settled'])
                 ->exists();
 
-            if ($exists) {
+            if ($alreadyRecognised) {
                 continue;
             }
 

@@ -498,3 +498,60 @@ it('leaves a request raised outside the desk (no actor) decidable by anyone', fu
 
     assertBalancesReconcile($account);
 });
+
+/*
+ * P37 — accrual is idempotent *after* settlement, not just before it.
+ *
+ * `postAccrualForAccount()` asked `status = 'accrued'` when deciding whether the month was already
+ * recognised, so the function was idempotent exactly once: a second run wrote nothing because the
+ * rows were still accrued, and the third — after `settleMonth()` flipped them to `settled` — wrote
+ * the whole month again. The real sequence is not contrived: a released sheet is reopened (`ready`),
+ * corrected, re-released, and accrued again, which is precisely what the fund module exists to make
+ * safe. Live probe on the pilot database: 28 rows / 67,300 became 56 rows / 134,600 on one call.
+ */
+it('does not accrue the same month twice after it has been settled', function (): void {
+    $policy = pfPolicy();
+    $account = pfAccount(pfEmployee(), $policy);
+    $service = app(ProvidentFundService::class);
+    $sheet = pfSheet($account, 2026, 10, 'released', 500.0, 500.0);
+
+    $first = $service->accrueFromSheet($sheet, 1);
+    expect($first['posted'])->toBe(1)
+        ->and(PfLedger::query()->where('contribution_month', '2026-10')->count())->toBe(2)
+        ->and((float) $account->fresh()->totalBalance())->toBe(1000.0);
+
+    // The cash moves: both rows become `settled`, the balance does not move.
+    $service->settleMonth('2026-10', 1);
+    expect(PfLedger::query()->where('contribution_month', '2026-10')->where('status', 'settled')->count())->toBe(2);
+
+    // Reopen → correct → re-release → accrue. This used to double the month.
+    $second = $service->accrueFromSheet($sheet->fresh(), 1);
+
+    expect($second['posted'])->toBe(0)
+        ->and(PfLedger::query()->where('contribution_month', '2026-10')->count())->toBe(2)
+        ->and((float) $account->fresh()->totalBalance())->toBe(1000.0);
+
+    assertBalancesReconcile($account);
+});
+
+it('does not accrue a month again when the only rows left are a withdrawal', function (): void {
+    $policy = pfPolicy();
+    $account = pfAccount(pfEmployee(), $policy);
+    $service = app(ProvidentFundService::class);
+    $sheet = pfSheet($account, 2026, 10, 'released', 500.0, 500.0);
+
+    $service->accrueFromSheet($sheet, 1);
+
+    // A payout is a *different* entry type and must not be mistaken for the contribution itself:
+    // the month still holds its two accruals, so nothing is re-posted.
+    $service->decideWithdrawal($service->requestWithdrawal($account->fresh(), [
+        'type' => 'partial', 'requested_amount' => 200, 'reason' => 'Medical',
+    ], User::factory()->create()->id), 'pay', 200.0, User::factory()->create()->id);
+
+    $again = $service->accrueFromSheet($sheet->fresh(), 1);
+
+    expect($again['posted'])->toBe(0)
+        ->and(PfLedger::query()->where('contribution_month', '2026-10')->whereIn('entry_type', ['employee_contribution', 'employer_contribution'])->count())->toBe(2);
+
+    assertBalancesReconcile($account);
+});
