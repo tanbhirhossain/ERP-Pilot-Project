@@ -330,6 +330,95 @@ test('every journal the demo data creates balances', function () {
     $this->assertSame([], $unbalanced, implode('; ', $unbalanced));
 });
 
+test('the inventory the warehouse reports is the inventory the books hold', function () {
+    ddDemo();
+
+    // Two systems describe the same stock: `inventory_stocks` (what the storekeeper counts) and
+    // account 1200 Inventory (what the accountant reports). `InventoryDemoSeeder` opens every SKU
+    // with a stock movement but posts nothing to the ledger, so 445,768.92 of goods existed in one
+    // system only — the stock screen said 606,083.60, the balance sheet said 173,648.37, and both
+    // were "right".
+    //
+    // They cannot be expected to agree to the paisa: internal transfers, adjustments and rounding
+    // move value between accounts without changing the total the same way, and valuation methods
+    // disagree by design. What they cannot do is disagree by the whole opening balance, which is
+    // what a missing opening entry looks like. The bound below is loose enough to allow the ordinary
+    // noise and tight enough to catch a month of stock arriving with no accounting behind it.
+    $stock = (float) DB::table('inventory_stocks')->sum('total_value');
+
+    $ledger = (float) DB::table('acc_account_ledger as l')
+        ->join('acc_accounts as a', 'a.id', '=', 'l.account_id')
+        ->join('acc_journals as j', function ($join) {
+            $join->on('j.id', '=', 'l.journal_id')->where('j.status', '=', 'posted');
+        })
+        ->where('a.code', '1200')
+        ->selectRaw('SUM(l.debit) - SUM(l.credit) AS balance')
+        ->value('balance');
+
+    expect($stock)->toBeGreaterThan(0, 'the warehouse holds no stock at all, so this proves nothing');
+
+    $gap = abs($stock - $ledger);
+
+    expect($gap)->toBeLessThan(
+        $stock * 0.05,
+        sprintf('stock reports %.2f but the ledger holds %.2f — a gap of %.2f, which is an opening balance that never reached the books', $stock, $ledger, $gap)
+    );
+});
+
+test('the demo books never show cash or bank below zero', function () {
+    ddDemo();
+
+    // The demo spent money it never received. Rent, the payroll run and the vendor payments all
+    // left cash in hand and the bank account, and nothing ever put money in, so both accounts
+    // carried a credit balance: an overdraft nobody applied for, and *negative total assets* on the
+    // balance sheet. Every report agreed with every other report while describing an entity that
+    // owns less than nothing — arithmetic right, commercially impossible.
+    //
+    // `accountsEntries()` now posts an opening position first (Dr cash / Dr bank / Cr 3900 Opening
+    // Balance Equity). This test is the guard: a dataset built to be looked at cannot open with a
+    // bank balance below zero, and if a future change reorders or drops that entry, this says so
+    // instead of leaving the negative figure for a reader to notice.
+    $ledger = DB::table('acc_account_ledger as l')
+        ->join('acc_accounts as a', 'a.id', '=', 'l.account_id')
+        ->join('acc_journals as j', function ($join) {
+            $join->on('j.id', '=', 'l.journal_id')->where('j.status', '=', 'posted');
+        })
+        ->whereIn('a.code', ['1001', '1002', '100201', '100202'])
+        ->groupBy('a.code', 'a.name')
+        ->selectRaw('a.code, a.name, SUM(l.debit) - SUM(l.credit) AS balance')
+        ->get();
+
+    expect($ledger)->not->toBeEmpty('the demo posted no cash or bank movement at all');
+
+    $negative = [];
+    foreach ($ledger as $row) {
+        if ((float) $row->balance < 0) {
+            $negative[] = "{$row->code} {$row->name}: {$row->balance}";
+        }
+    }
+
+    $this->assertSame([], $negative, 'cash/bank went below zero, so the demo spends money it never received: '.implode('; ', $negative));
+});
+
+test('the demo balance sheet reports positive total assets', function () {
+    ddDemo();
+
+    $net = DB::table('acc_account_ledger as l')
+        ->join('acc_accounts as a', 'a.id', '=', 'l.account_id')
+        ->join('acc_journals as j', function ($join) {
+            $join->on('j.id', '=', 'l.journal_id')->where('j.status', '=', 'posted');
+        })
+        ->whereIn('a.account_type', ['asset', 'assetinvesting'])
+        ->selectRaw('SUM(l.debit) - SUM(l.credit) AS assets')
+        ->value('assets');
+
+    // A business can owe more than it owns, but it cannot *own* a negative amount of things. The
+    // distinction matters for a demo dataset: an insolvent-looking balance sheet makes every
+    // screenshot of it look like a software defect, and invites the reader to distrust figures that
+    // are in fact correct.
+    expect(round((float) $net, 2))->toBeGreaterThan(0, 'total assets are not positive — the opening position is missing or too small');
+});
+
 test('the ledger agrees with the journals and the stock cache agrees with the movements', function () {
     ddDemo();
 

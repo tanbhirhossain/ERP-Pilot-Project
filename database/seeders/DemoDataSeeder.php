@@ -935,6 +935,65 @@ class DemoDataSeeder extends Seeder
 
         $journals = app(JournalService::class);
 
+        // Opening position, before anything is spent.
+        //
+        // Without this the demo spends money it never received: rent, payroll and vendor payments
+        // leave cash and bank accounts that started at zero, so the demo books report a negative
+        // bank balance and *negative total assets* — an entity that owns less than nothing. Every
+        // figure downstream (balance sheet, cash flow opening balance, running balances) is then
+        // arithmetically right and commercially absurd, which is the worst way to be wrong: the
+        // reports agree with each other while telling a story no business could be in.
+        //
+        // The counter-entry is 3900 Opening Balance Equity, the account that exists for exactly
+        // this. It is not a capital contribution — no owner put money in — it is the balance the
+        // books were opened on, and keeping it separate from 3100 Capital preserves that
+        // distinction in the equity section of the balance sheet.
+        $opening = [
+            ['account_id' => $byCode('1001'), 'debit' => '150000', 'credit' => '0', 'description' => 'Opening cash in hand'],
+            ['account_id' => $byCode('100201'), 'debit' => '600000', 'credit' => '0', 'description' => 'Opening balance — Prime Bank'],
+            ['account_id' => $byCode('3900'), 'debit' => '0', 'credit' => '750000', 'description' => 'Opening balance equity'],
+        ];
+        // Skip the entry when anything is missing rather than posting one side of it: a
+        // half-written opening balance would be worse than none.
+        if (! in_array(null, array_column($opening, 'account_id'), true)) {
+            $openingJournal = $journals->create([
+                'journal_date' => $this->date(1),
+                'type' => 'JV',
+                'narration' => 'Opening balances brought forward — '.self::MARKER,
+                'lines' => $opening,
+            ]);
+            $openingJournal->refresh();
+            $journals->post($openingJournal);
+        }
+
+        // Opening stock, on the same footing as the opening cash.
+        //
+        // `InventoryDemoSeeder` receives opening stock for every SKU before this runs, and it writes
+        // stock movements and the stock cache — but nothing in the ledger. So the warehouse held
+        // 445,768.92 of goods that the books had never heard of: the balance sheet's Inventory line
+        // reported 173,648.37 while the stock screens reported 606,083.60, and every ratio built on
+        // either number was computed from a different business.
+        //
+        // The value is read from the movements themselves rather than from the cache, because the
+        // movements are the record of what was received and at what cost; the cache is derived and
+        // can drift.
+        $openingStock = (float) DB::table('inventory_stock_moves')
+            ->where('reference_type', 'opening')->sum('total_cost');
+
+        if ($openingStock > 0 && $byCode('1200') !== null && $byCode('3900') !== null) {
+            $stockJournal = $journals->create([
+                'journal_date' => $this->date(1),
+                'type' => 'JV',
+                'narration' => 'Opening stock brought forward — '.self::MARKER,
+                'lines' => [
+                    ['account_id' => $byCode('1200'), 'debit' => (string) round($openingStock, 2), 'credit' => '0', 'description' => 'Opening inventory at cost'],
+                    ['account_id' => $byCode('3900'), 'debit' => '0', 'credit' => (string) round($openingStock, 2), 'description' => 'Opening balance equity'],
+                ],
+            ]);
+            $stockJournal->refresh();
+            $journals->post($stockJournal);
+        }
+
         /** @var Journal $journal */
         $journal = $journals->create([
             'journal_date' => $this->date(15),

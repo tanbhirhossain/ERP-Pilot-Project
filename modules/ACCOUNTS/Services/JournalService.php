@@ -268,25 +268,107 @@ class JournalService
 
     private function syncPayableReceivable(Journal $journal): void
     {
-        // minimal AP/AR sync: if journal has partner and type PV/BV => payable, RV => receivable
+        // Keep the AP/AR sub-ledgers in step with the control accounts.
+        //
+        // This used to take the amount from `$journal->total_debit` — the whole journal — and treat
+        // every RV as a new receivable. Both are wrong, and wrong in a way no report could see:
+        //
+        //   • `total_debit` is every debit line added together. A sale journal debits Accounts
+        //     Receivable *and* Cost of Goods Sold, so the receivable it opened was overstated by the
+        //     cost of the goods sold — 6,275.42 booked against an invoice of 3,502.25.
+        //   • An RV is money *coming in*: it debits cash and credits the receivable. Recording that
+        //     as `status = open` opened a fresh receivable for every collection, so paying a customer
+        //     invoice made the customer owe more. Nothing ever closed a receivable, because nothing
+        //     ever looked for the one it was settling.
+        //
+        // The amount now comes from the control line itself — Account 1100 for a receivable, 2100 for
+        // a payable — which is the only line that knows what the partner actually owes. Collections
+        // settle the oldest open document rather than opening a new one, and an amount that exceeds
+        // everything outstanding is left unapplied instead of being invented as a debt.
         if (! $journal->partner_id || ! $journal->partner_type) {
             return;
         }
-        $type = strtoupper($journal->type);
-        $amount = (float) $journal->total_debit; // convention
-        if (in_array($type, ['PV', 'BV'], true) && $journal->partner_type === 'vendor') {
-            Payable::create([
-                'partner_id' => $journal->partner_id, 'journal_id' => $journal->id,
-                'bill_no' => $journal->reference_no, 'bill_date' => $journal->journal_date, 'due_date' => $journal->journal_date->copy()->addDays(30),
-                'amount' => $amount, 'status' => 'open',
-            ]);
+
+        $lines = $journal->lines()->with('account')->get();
+        $byCode = fn (string $code) => $lines->first(fn ($l) => $l->account && $l->account->code === $code);
+
+        if ($journal->partner_type === 'vendor') {
+            $control = $byCode('2100');
+            if ($control === null) {
+                return;
+            }
+            $debit = (float) $control->debit;
+            $credit = (float) $control->credit;
+
+            // A credit on the payable control is a new bill; a debit is us paying one down.
+            if ($credit > 0) {
+                Payable::create([
+                    'partner_id' => $journal->partner_id, 'journal_id' => $journal->id,
+                    'bill_no' => $journal->reference_no, 'bill_date' => $journal->journal_date,
+                    'due_date' => $journal->journal_date->copy()->addDays(30),
+                    'amount' => $credit, 'status' => 'open',
+                ]);
+            } elseif ($debit > 0) {
+                $this->settleOpen(Payable::query(), $journal, $debit);
+            }
+
+            return;
         }
-        if (in_array($type, ['RV', 'SV'], true) && $journal->partner_type === 'customer') {
-            Receivable::create([
-                'partner_id' => $journal->partner_id, 'journal_id' => $journal->id,
-                'invoice_no' => $journal->reference_no, 'invoice_date' => $journal->journal_date, 'due_date' => $journal->journal_date->copy()->addDays(30),
-                'amount' => $amount, 'status' => 'open',
+
+        if ($journal->partner_type === 'customer') {
+            $control = $byCode('1100');
+            if ($control === null) {
+                return;
+            }
+            $debit = (float) $control->debit;
+            $credit = (float) $control->credit;
+
+            // A debit on the receivable control is a new invoice; a credit is the customer paying.
+            if ($debit > 0) {
+                Receivable::create([
+                    'partner_id' => $journal->partner_id, 'journal_id' => $journal->id,
+                    'invoice_no' => $journal->reference_no, 'invoice_date' => $journal->journal_date,
+                    'due_date' => $journal->journal_date->copy()->addDays(30),
+                    'amount' => $debit, 'status' => 'open',
+                ]);
+            } elseif ($credit > 0) {
+                $this->settleOpen(Receivable::query(), $journal, $credit);
+            }
+        }
+    }
+
+    /**
+     * Apply money received/paid against the oldest open documents, oldest first.
+     *
+     * Anything left over after every open document is settled is deliberately dropped rather than
+     * turned into a negative-balance row: a partner who has paid more than they owed is an advance,
+     * which belongs in its own accounting treatment, not in the receivables list as a phantom debt.
+     */
+    private function settleOpen($query, Journal $journal, float $amount): void
+    {
+        $open = $query->where('partner_id', $journal->partner_id)
+            ->whereNotIn('status', ['paid', 'cancelled', 'void'])
+            ->orderBy('invoice_date')->orderBy('id')->get();
+
+        $left = $amount;
+        foreach ($open as $doc) {
+            if ($left <= 0) {
+                break;
+            }
+            $outstanding = (float) $doc->balance;
+            if ($outstanding <= 0) {
+                continue;
+            }
+            $applied = min($outstanding, $left);
+            $newBalance = round($outstanding - $applied, 2);
+            // `balance` is `amount - paid_amount` as a stored generated column, so writing it is both
+            // rejected by the database and unnecessary: record what was paid and let it recompute.
+            $paidColumn = array_key_exists('paid_amount', (array) $doc->getAttributes()) ? 'paid_amount' : 'received_amount';
+            $doc->update([
+                $paidColumn => round((float) $doc->{$paidColumn} + $applied, 2),
+                'status' => $newBalance <= 0.005 ? 'paid' : 'partial',
             ]);
+            $left = round($left - $applied, 2);
         }
     }
 }

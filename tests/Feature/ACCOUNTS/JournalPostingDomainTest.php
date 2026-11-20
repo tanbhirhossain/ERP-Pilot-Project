@@ -68,8 +68,10 @@ function jpdService(): JournalService
 /** A leaf posting account, active and not a group header, per assertAccountsPosting(). */
 function jpdAccount(string $code, string $name, string $nature): Account
 {
-    return Account::create([
-        'code' => $code,
+    // firstOrCreate, not create: a test may need the same control account on both sides of a
+    // transaction (1100 is debited by a sale and credited by the collection that settles it), and
+    // the second call must find the row rather than collide with its slug.
+    return Account::firstOrCreate(['code' => $code], [
         'name' => $name,
         'account_type' => $nature === 'debit' ? 'asset' : 'income',
         'nature' => $nature,
@@ -86,6 +88,26 @@ function jpdAccount(string $code, string $name, string $nature): Account
 function jpdPair(): array
 {
     return [jpdAccount('1001', 'Cash in Hand', 'debit'), jpdAccount('4001', 'Sales Revenue', 'credit')];
+}
+
+/**
+ * The pair a partner-linked voucher actually posts through.
+ *
+ * The AP/AR sub-ledger used to take its amount from the journal's total debit, so it did not matter
+ * which accounts a fixture used — the number always appeared. It now takes it from the control
+ * account (1100 receivable / 2100 payable), which is the only line that knows what the partner owes,
+ * so a fixture that settles its partner through *sales revenue* opens nothing. That is not a
+ * shortcoming of the fixture: posting a receivable through the revenue account is not a receivable.
+ * These two helpers give the tests the accounts a real bill and receipt post to.
+ */
+function jpdReceivablePair(): array
+{
+    return [jpdAccount('1100', 'Accounts Receivable', 'debit'), jpdAccount('4001', 'Sales Revenue', 'credit')];
+}
+
+function jpdPayablePair(): array
+{
+    return [jpdAccount('5300', 'Rent Expense', 'debit'), jpdAccount('2100', 'Accounts Payable', 'credit')];
 }
 
 function jpdFiscalYear(string $status = 'open'): FiscalYear
@@ -469,7 +491,7 @@ test('the first and last day of a fiscal year are both inside it', function (str
 test('posting a bill voucher against a vendor opens a payable', function () {
     jpdAdmin();
     jpdFiscalYear();
-    $pair = jpdPair();
+    $pair = jpdPayablePair();
 
     $vendor = Partner::create(['partner_code' => 'V-JPD-1', 'type' => 'vendor', 'name' => 'JPD Vendor Ltd']);
 
@@ -491,7 +513,7 @@ test('posting a bill voucher against a vendor opens a payable', function () {
 test('posting a receipt voucher against a customer opens a receivable', function () {
     jpdAdmin();
     jpdFiscalYear();
-    $pair = jpdPair();
+    $pair = jpdReceivablePair();
 
     $customer = Partner::create(['partner_code' => 'C-JPD-1', 'type' => 'customer', 'name' => 'JPD Customer Ltd']);
 
@@ -507,6 +529,87 @@ test('posting a receipt voucher against a customer opens a receivable', function
     expect($receivable)->not->toBeNull()
         ->and((float) $receivable->amount)->toBe(900.0)
         ->and($receivable->status)->toBe('open');
+});
+
+test('a collection settles the receivable instead of opening a new one', function () {
+    jpdAdmin();
+    jpdFiscalYear();
+
+    $customer = Partner::create(['partner_code' => 'C-JPD-2', 'type' => 'customer', 'name' => 'JPD Second Customer']);
+
+    // A sale on credit: the receivable control is debited, so a receivable is opened.
+    $salePair = jpdReceivablePair();
+    jpdService()->post(jpdService()->create(
+        jpdPayload($salePair, 1000.00, 1000.00, JPD_TODAY, 'SV') + ['partner_id' => $customer->id, 'partner_type' => 'customer']
+    ));
+
+    // The customer pays it off: cash is debited and the receivable control is *credited*.
+    $collectionPair = [jpdAccount('1001', 'Cash in Hand', 'debit'), jpdAccount('1100', 'Accounts Receivable', 'debit')];
+    jpdService()->post(jpdService()->create(
+        jpdPayload($collectionPair, 1000.00, 1000.00, JPD_TODAY, 'RV') + ['partner_id' => $customer->id, 'partner_type' => 'customer']
+    ));
+
+    // One receivable, closed. Before this rule every receipt added a *second* row marked `open`, so a
+    // customer who paid their bill appeared in the aging report as owing more than before they paid —
+    // and the dashboard's "Receivables outstanding" was the sum of these rows.
+    $receivables = Receivable::where('partner_id', $customer->id)->get();
+
+    expect($receivables)->toHaveCount(1)
+        ->and((float) $receivables->first()->amount)->toBe(1000.0)
+        ->and((float) $receivables->first()->received_amount)->toBe(1000.0)
+        ->and((float) $receivables->first()->balance)->toBe(0.0)
+        ->and($receivables->first()->status)->toBe('paid');
+});
+
+test('a part payment leaves the rest of the receivable open', function () {
+    jpdAdmin();
+    jpdFiscalYear();
+
+    $customer = Partner::create(['partner_code' => 'C-JPD-3', 'type' => 'customer', 'name' => 'JPD Third Customer']);
+
+    jpdService()->post(jpdService()->create(
+        jpdPayload(jpdReceivablePair(), 1000.00, 1000.00, JPD_TODAY, 'SV') + ['partner_id' => $customer->id, 'partner_type' => 'customer']
+    ));
+
+    $collectionPair = [jpdAccount('1001', 'Cash in Hand', 'debit'), jpdAccount('1100', 'Accounts Receivable', 'debit')];
+    jpdService()->post(jpdService()->create(
+        jpdPayload($collectionPair, 400.00, 400.00, JPD_TODAY, 'RV') + ['partner_id' => $customer->id, 'partner_type' => 'customer']
+    ));
+
+    $receivable = Receivable::where('partner_id', $customer->id)->first();
+
+    expect((float) $receivable->received_amount)->toBe(400.0)
+        ->and((float) $receivable->balance)->toBe(600.0)
+        ->and($receivable->status)->toBe('partial');
+});
+
+test('the receivable is the control line, not the whole journal', function () {
+    jpdAdmin();
+    jpdFiscalYear();
+
+    $customer = Partner::create(['partner_code' => 'C-JPD-4', 'type' => 'customer', 'name' => 'JPD Fourth Customer']);
+
+    // A sale journal debits Receivable *and* Cost of Goods Sold. Taking the amount from the journal's
+    // total debit reported a receivable of 1,300 for an invoice of 1,000 — 300 of it being the cost of
+    // the goods, which the customer does not owe and never will.
+    $lines = [
+        ['account_id' => jpdAccount('1100', 'Accounts Receivable', 'debit')->id, 'debit' => '1000', 'credit' => '0'],
+        ['account_id' => jpdAccount('5001', 'Cost of Goods Sold', 'debit')->id, 'debit' => '300', 'credit' => '0'],
+        ['account_id' => jpdAccount('1200', 'Inventory', 'credit')->id, 'debit' => '0', 'credit' => '300'],
+        ['account_id' => jpdAccount('4001', 'Sales Revenue', 'credit')->id, 'debit' => '0', 'credit' => '1000'],
+    ];
+
+    $posted = jpdService()->post(jpdService()->create([
+        'journal_date' => JPD_TODAY, 'type' => 'SV', 'reference_no' => 'JPD-COGS',
+        'narration' => 'Sale with cost of goods sold',
+        'total_debit' => 1300.0, 'total_credit' => 1300.0, 'status' => 'draft',
+        'lines' => $lines,
+    ] + ['partner_id' => $customer->id, 'partner_type' => 'customer']));
+
+    $receivable = Receivable::where('journal_id', $posted->id)->first();
+
+    expect($receivable)->not->toBeNull()
+        ->and((float) $receivable->amount)->toBe(1000.0);
 });
 
 test('a journal voucher with no partner opens neither a payable nor a receivable', function () {
