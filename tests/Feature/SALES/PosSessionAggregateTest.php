@@ -140,21 +140,79 @@ test('the aggregate statement carries exact decimal text, not a float rendering'
     DB::disableQueryLog();
 });
 
-test('a sale with no open session still sells and touches no aggregate', function () {
+/**
+ * This used to assert the opposite: that a sale naming no session *succeeds* and merely skips the
+ * aggregate update. That is exactly what it did, and that was the problem. The day-end posting is
+ * the only code that puts a POS day into the ledger and it reaches its sales through the session,
+ * so a session-less sale was completed, took its stock off the shelf, kept its cash in the till,
+ * and never appeared in revenue, output VAT or cost of goods sold — and no report listed it either,
+ * because the collection report is filtered by drawer. The sale is now refused at the service.
+ */
+/**
+ * The guard lives in `PosService::sell()`, not in the repository — `psaSell()` above writes through
+ * the repository directly so the aggregate can be probed without a product fixture, so it cannot see
+ * this rule. These two go through the service, and need a real product to sell.
+ */
+test('a sale with no session is refused, because nothing would ever post it', function () {
     $warehouse = psaWarehouse();
+    $session = psaSession($warehouse);
+    $product = psaProduct($warehouse);
 
-    DB::flushQueryLog();
-    DB::enableQueryLog();
+    $before = PosSale::count();
 
-    $sale = psaSell(psaSession($warehouse), ['session_id' => null]);
+    expect(fn () => app(\Modules\SALES\Services\PosService::class)->sell(new \Modules\SALES\DTO\PosSaleData(
+        warehouseId: $warehouse->id,
+        lines: [new \Modules\SALES\DTO\InvoiceLineData(productId: $product->id, qty: 1, unitPrice: 100.0)],
+        sessionId: null,
+    )))->toThrow(\DomainException::class, 'A sale needs an open drawer');
+
+    expect(PosSale::count())->toBe($before, 'a refused sale still wrote a row')
+        ->and(PosSession::count())->toBe(1, 'the refused sale created or deleted a session');
+});
+
+test('a sale still sells against an open session', function () {
+    // The guard must not have broken the path it exists to protect.
+    $warehouse = psaWarehouse();
+    $session = psaSession($warehouse);
+    $product = psaProduct($warehouse);
+
+    $sale = app(\Modules\SALES\Services\PosService::class)->sell(new \Modules\SALES\DTO\PosSaleData(
+        warehouseId: $warehouse->id,
+        lines: [new \Modules\SALES\DTO\InvoiceLineData(productId: $product->id, qty: 1, unitPrice: 100.0)],
+        sessionId: $session->id,
+    ));
 
     expect($sale->exists)->toBeTrue()
-        ->and($sale->pos_no)->not->toBeEmpty()
-        ->and(PosSession::count())->toBe(1, 'a session-less sale created or deleted a session')
-        ->and(psaSessionUpdate())->toBeNull('the aggregate ran for a sale that named no session');
-
-    DB::disableQueryLog();
+        ->and((int) $sale->session_id)->toBe((int) $session->id);
 });
+
+/** A stocked product the service can actually take off a shelf. */
+function psaProduct(?\Modules\INVENTORY\Models\Warehouse $warehouse = null): \Modules\INVENTORY\Models\Product
+{
+    $warehouse ??= psaWarehouse();
+
+    $product = \Modules\INVENTORY\Models\Product::create([
+        'name' => 'PSA Widget',
+        'sku' => 'PSA-W-1',
+        'type' => 'stockable',
+        'cost_price' => 40,
+        'selling_price' => 100,
+        'is_active' => true,
+        'status' => 'active',
+    ]);
+
+    app(\Modules\INVENTORY\Services\StockService::class)->move(new \Modules\INVENTORY\DTO\StockMoveData(
+        productId: $product->id,
+        variantId: null,
+        warehouseId: $warehouse->id,
+        locationId: null,
+        qty: 10,
+        direction: 'in',
+        unitCost: 40.0,
+    ));
+
+    return $product;
+}
 
 test('the aggregate update still stamps updated_at', function () {
     $session = psaSession(psaWarehouse());

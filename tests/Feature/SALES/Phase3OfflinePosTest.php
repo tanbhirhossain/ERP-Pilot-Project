@@ -120,6 +120,16 @@ function pofSession(int $warehouseId, bool $closeIt = false): PosSession
     return $closeIt ? app(PosService::class)->closeSession($session, []) : $session;
 }
 
+/**
+ * A ticket has to belong to a day. The till resolves the warehouse's open drawer when it queues a
+ * sale, and `PosService::sell()` refuses one that names no session, so a sync test that posts a
+ * ticket needs a drawer open at that warehouse first — exactly as the running till does.
+ */
+function pofOpenDrawer(int $warehouseId): PosSession
+{
+    return pofSession($warehouseId);
+}
+
 /** One row exactly as a till would queue it: totals are not sent, the server computes them. */
 function pofRow(Product $product, int $warehouseId, array $overrides = []): array
 {
@@ -196,6 +206,7 @@ test('the two offline columns exist and the device key is enforced by the databa
         ->and(Schema::hasColumn('pos_sales', 'rang_up_at'))->toBeTrue();
 
     [$warehouse, $product] = pofTill();
+    pofOpenDrawer($warehouse->id);
     $ref = (string) Str::uuid();
 
     pofSync([pofRow($product, $warehouse->id, ['client_ref' => $ref])])->assertOk();
@@ -294,6 +305,7 @@ test('replaying the same ticket writes one sale, not two', function () {
 
 test('a repeat of the same reference inside one batch posts once', function () {
     [$warehouse, $product] = pofTill();
+    pofOpenDrawer($warehouse->id);
     $row = pofRow($product, $warehouse->id);
 
     $response = pofSync([$row, $row])->assertOk();
@@ -334,6 +346,7 @@ test('one closed drawer rejects its own ticket and the rest of the batch lands',
 
 test('a ticket from yesterday is refused, and says which day it belongs to', function () {
     [$warehouse, $product] = pofTill();
+    pofOpenDrawer($warehouse->id);
     $row = pofRow($product, $warehouse->id, ['rang_up_at' => now()->subDay()->toIso8601String()]);
 
     $refused = pofSync([$row])->assertOk();
@@ -353,6 +366,7 @@ test('a ticket from yesterday is refused, and says which day it belongs to', fun
 
 test('a row is validated by the till’s own rules, not a copy of them', function () {
     [$warehouse, $product] = pofTill();
+    pofOpenDrawer($warehouse->id);
 
     // `due` without a customer is the rule the till enforces at the field level; the service would
     // also refuse it, but the row has to come back with the field named so the ticket can be fixed.
@@ -385,6 +399,7 @@ test('a row is validated by the till’s own rules, not a copy of them', functio
 
 test('a malformed batch is a 422 but a refused ticket is not', function () {
     [$warehouse, $product] = pofTill();
+    pofOpenDrawer($warehouse->id);
 
     // The envelope: a row with no device key is a broken till, not a broken sale.
     $noRef = pofSync([['payment_method' => 'cash']])->assertStatus(422);
@@ -408,6 +423,7 @@ test('a malformed batch is a 422 but a refused ticket is not', function () {
 
 test('a price that moved while the device was offline is reported, not swallowed', function () {
     [$warehouse, $product] = pofTill();
+    pofOpenDrawer($warehouse->id);
 
     $response = pofSync([pofRow($product, $warehouse->id, [
         // The cached price list said 90.00 a unit; the ledger says 100.00.
@@ -455,6 +471,7 @@ test('a cashier who may sell may open the offline desk, and no one else', functi
 
 test('the desk lists what the ledger accepted from an offline queue', function () {
     [$warehouse, $product] = pofTill();
+    pofOpenDrawer($warehouse->id);
     $row = pofRow($product, $warehouse->id, ['rang_up_at' => now()->subMinutes(3)->toIso8601String()]);
     $posted = pofSync([$row])->assertOk()->json('results.0');
 

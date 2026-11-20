@@ -119,17 +119,30 @@ class PosService
     public function sell(PosSaleData $dto): PosSale
     {
         return DB::transaction(function () use ($dto): PosSale {
-            // A named session must be open. Selling into a closed drawer puts money in a till whose
-            // day is already in the ledger, where nothing will ever account for it. A sale with no
-            // session at all is still accepted — `PosSessionAggregateTest` pins that behaviour, and
-            // the collection report surfaces those sales as unattached rather than letting them hide.
-            $session = $dto->sessionId !== null ? PosSession::find($dto->sessionId) : null;
+            // A session is mandatory, and it must be open. Both rules protect the same thing: the
+            // day-end posting is the only code that puts a POS day into the ledger, and it works from
+            // `$session->sales`. A sale that names no drawer therefore belongs to no day, is posted by
+            // nothing, and cannot be reached from any report — while its stock has already left the
+            // shelf and its cash is already in the till. The sale was previously accepted in that
+            // state on the strength of a test that only pinned "no session means no aggregate update",
+            // which is true and beside the point: the money still vanished from the books. Refusing
+            // instead costs the cashier one click and keeps revenue, output VAT and cost of goods in
+            // the ledger where they belong.
+            if ($dto->sessionId === null) {
+                throw new \DomainException(
+                    'A sale needs an open drawer. Open a session for this till first — a sale that belongs '
+                    .'to no drawer is never posted to the ledger, so its takings and its stock would leave '
+                    .'the shop without ever reaching the books.'
+                );
+            }
 
-            if ($dto->sessionId !== null && $session === null) {
+            $session = PosSession::find($dto->sessionId);
+
+            if ($session === null) {
                 throw new \DomainException("Session {$dto->sessionId} does not exist.");
             }
 
-            if ($session !== null && ! $session->isOpen()) {
+            if (! $session->isOpen()) {
                 throw new \DomainException(
                     "Session {$session->session_no} is {$session->status}, so it cannot take a sale. "
                     .'Open a session for this till first: a sale in a closed drawer is money the ledger has already counted.'

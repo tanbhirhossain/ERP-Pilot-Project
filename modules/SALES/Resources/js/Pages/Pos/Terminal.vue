@@ -182,15 +182,6 @@ const tenderShort = computed(() => {
 });
 const tenderIncomplete = computed(() => tenderShort.value > 0.005);
 
-const canSell = computed(() =>
-  !!warehouseId.value
-  && cart.value.length > 0
-  && (paymentMethod.value !== 'split' || splitValid.value)
-  && !dueNeedsCustomer.value
-  && !tenderIncomplete.value,
-);
-const selectedCustomer = computed(() => props.customers.find((c: any) => c.value === customerId.value));
-
 /**
  * The drawer this till is selling into.
  *
@@ -212,6 +203,21 @@ const activeDrawer = computed(() => {
   return drawers.find((d: any) => d.mine || d.id === props.openSession?.id) ?? drawers[0];
 });
 watch(activeDrawer, (d) => { sessionId.value = d?.id ?? null; }, { immediate: true });
+
+const canSell = computed(() =>
+  !!warehouseId.value
+  && cart.value.length > 0
+  && (paymentMethod.value !== 'split' || splitValid.value)
+  && !dueNeedsCustomer.value
+  && !tenderIncomplete.value
+  // A sale needs a drawer: the day-end posting is the only path into the ledger, and it reads
+  // sales through their session. Without this the till rang up a sale whose stock left and whose
+  // cash was taken, and neither the revenue nor its VAT ever reached the books.
+  && !!activeDrawer.value,
+);
+const selectedCustomer = computed(() => props.customers.find((c: any) => c.value === customerId.value));
+
+
 
 const METHODS = [
   { id: 'cash', label: 'Cash', icon: Banknote },
@@ -692,7 +698,7 @@ onMounted(() => {
               </p>
               <p v-if="!warehouseId" class="mt-1 opacity-85">Pick the warehouse you are selling from and the till will use that warehouse's drawer.</p>
             </div>
-            <p v-else class="mt-2 text-xs text-muted-foreground">No drawer is open. Sales still ring up, but they will not belong to a day-end until one is.</p>
+            <p v-else class="mt-2 text-xs text-amber-700 dark:text-amber-400">No drawer is open. Open one below before selling — a sale with no drawer is never posted to the ledger, so its takings would leave the shop unrecorded.</p>
 
             <div class="mt-3 grid gap-3 sm:grid-cols-2">
               <div class="space-y-1">

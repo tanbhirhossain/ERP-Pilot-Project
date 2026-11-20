@@ -10,6 +10,7 @@ use Modules\CORE\Models\User;
 use Modules\SALES\DTO\InvoiceLineData;
 use Modules\SALES\DTO\PosSaleData;
 use Modules\SALES\Models\PosSale;
+use Modules\SALES\Models\PosSession;
 use Modules\SALES\Requests\PosSaleRequest;
 
 /**
@@ -213,7 +214,15 @@ final class PosOfflineSyncService
             bankId: isset($row['bank_id']) ? (int) $row['bank_id'] : null,
             cashAmount: (float) ($row['cash_amount'] ?? 0),
             bankAmount: (float) ($row['bank_amount'] ?? 0),
-            sessionId: isset($row['session_id']) ? (int) $row['session_id'] : null,
+            // A queued ticket carries no drawer when the device could not reach one, and `sell()`
+            // now refuses a sale that belongs to no day — because nothing would ever post it. Resolve
+            // the warehouse's open drawer here instead of passing the absence through: the ticket was
+            // rung up at that till, and the drawer open at that till is the day it belongs to. If no
+            // drawer is open now the sale is refused and lands in the rejected queue for a person,
+            // which is right — it must not be posted into a day that does not exist.
+            sessionId: isset($row['session_id'])
+                ? (int) $row['session_id']
+                : PosSession::where('warehouse_id', (int) $row['warehouse_id'])->where('status', 'open')->value('id'),
             paidAmount: (float) ($row['paid_amount'] ?? 0),
             tenderedAmount: (float) ($row['tendered_amount'] ?? 0),
             clientRef: $ref,
