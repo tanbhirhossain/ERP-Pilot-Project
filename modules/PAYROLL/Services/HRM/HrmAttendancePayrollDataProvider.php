@@ -12,6 +12,7 @@ use Modules\HRM\Models\Holiday;
 use Modules\HRM\Models\Roster\RosterDuty;
 use Modules\HRM\Models\Leave\LeaveRequest;
 use Modules\HRM\Models\Roster\RosterOvertime;
+use Modules\HRM\Models\Employee\EmployeeResignation;
 use Modules\HRM\Services\LeaveBalanceService;
 use Modules\PAYROLL\DTO\AttendancePayrollSummary;
 use Modules\PAYROLL\Interfaces\HRM\AttendancePayrollDataProviderInterface;
@@ -71,6 +72,28 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
         $globalHolidays = $holidayRows->whereNull('department_id')->map(fn ($row): string => Carbon::parse($row->holiday_date)->toDateString())->unique()->values()->all();
         $holidaysByDepartment = $holidayRows->whereNotNull('department_id')->groupBy('department_id')
             ->map(fn ($rows): array => $rows->map(fn ($row): string => Carbon::parse($row->holiday_date)->toDateString())->unique()->values()->all())->all();
+
+        /*
+         * When somebody's employment ended.
+         *
+         * `$employmentIsLive` below has always refused to dock a *resigned* employee — but it reads
+         * `employees.status`, and approving a resignation never writes that column (the HRM
+         * resignation flow leaves the row `Active`; the payroll roster excludes the person by a
+         * separate `NOT EXISTS` on `employee_resignations`). So a leaver who is excluded from the
+         * salary sheet, then has the sheet reopened and recalculated, is charged absence for every
+         * working day after their last day — days on which they were not employed at all.
+         *
+         * The last working day is the fact that decides this, not a status somebody has to remember
+         * to change, so it is read from the resignation record itself.
+         */
+        $lastWorkingDays = DB::table('employee_resignations')
+            ->whereIn('employee_id', $employeeIds)
+            ->where('status', 'Approved')
+            ->whereDate('last_working_date', '<=', $periodEnd)
+            ->orderBy('last_working_date')
+            ->get(['employee_id', 'last_working_date'])
+            ->mapWithKeys(fn ($row): array => [(string) $row->employee_id => Carbon::parse($row->last_working_date)->toDateString()])
+            ->all();
 
         $approvedRows = $this->approvedOvertimeRows($employeeIds, $periodStart, $periodEnd)->groupBy('employee_id');
         $daysInPeriod = iterator_count(CarbonPeriod::create($periodStart, $periodEnd));
@@ -167,6 +190,9 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
             // ── Absent days with no leave paperwork ──
             $absentDays = 0.0;
             $absentDates = [];
+            // Read before the punch gate below: an employee who never punched still has a last day,
+            // and the audit breakdown must say so whether or not the absence loop ran.
+            $lastWorkingDay = $lastWorkingDays[$employeeId] ?? null;
             $holidaysForEmployee = array_values(array_unique(array_merge($globalHolidays, $holidaysByDepartment[$employee?->department_id] ?? [])));
             // Default 5 = Friday. Never null: "no weekly off" is not a state an employee can be in.
             $fallbackDay = (int) ($fallbackOffDays[$employeeId] ?? self::DEFAULT_WEEKLY_OFF_DAY);
@@ -191,6 +217,12 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
 
                 for ($day = Carbon::parse($periodStart); $day->lte(Carbon::parse($periodEnd)); $day->addDay()) {
                     if ($employee->joining_date !== null && Carbon::parse($employee->joining_date)->gt($day)) {
+                        continue;
+                    }
+                    // The employment ended on the last working day: from the next morning there is no
+                    // duty to miss, so there is nothing to deduct. Before this, a reopened month
+                    // charged a leaver for every working day after they had left.
+                    if ($lastWorkingDay !== null && $day->toDateString() > $lastWorkingDay) {
                         continue;
                     }
                     $date = $day->toDateString();
@@ -246,6 +278,7 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
                     'unpaid_leave_dates' => array_values(array_map(fn ($entry): string => (string) $entry['from'], $unpaidLeaveEntries)),
                     'absent_dates' => $absentDates,
                     'absent_days' => round($absentDays, 2),
+                    'last_working_day' => $lastWorkingDay,
                     /*
                      * Whether a punch is what opened the gate — reported as the *fact*, not as
                      * "was this employee on the device". It used to read the punch set directly, so

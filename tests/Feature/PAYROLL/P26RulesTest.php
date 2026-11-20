@@ -273,6 +273,62 @@ test('a resigned or terminated employee is never docked for absence', function (
     expect($resigned->unpaidLeaveDays)->toBe(0.0);
 });
 
+/*
+ * P32 — the leaver who is still `Active`.
+ *
+ * Approving a resignation does not write `employees.status`; the payroll roster excludes the person
+ * through `employee_resignations` instead. The docking guard above only ever looked at `status`, so a
+ * leaver who stayed `Active` was charged absence for every working day after their last day the
+ * moment the sheet was recalculated (found on the clean rebuild: F-0006, last day 2026-10-20, charged
+ * nine days in the second half of October). The deciding fact is the last working day itself.
+ */
+test('an approved resignation stops the docking on the last working day, even while status is Active', function () {
+    p26Setup();
+
+    foreach (['P32-LIVE' => '2026-10-20', 'P32-STAYS' => null] as $id => $lastDay) {
+        Employee::factory()->create([
+            'employee_id' => $id, 'full_name' => 'P32 '.$id, 'status' => 'Active',
+            'is_active' => true, 'joining_date' => '2019-01-01', 'gender' => 'Male',
+        ]);
+        DB::table('employee_policies')->insert([
+            'employee_id' => $id, 'grace_time_in' => 15, 'grace_time_out' => 15, 'shift_type' => 'Fixed',
+            'is_punishable' => true, 'duty_hours' => 8, 'auto_shift' => false,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('attendance_logs')->insert([
+            'employee_id' => $id, 'device_id' => null, 'punch_time' => '2026-10-02 09:00:00',
+            'punch_type' => 'IN', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('attendance_dailies')->insert(
+            collect(range(1, 31))->map(fn (int $d) => [
+                'employee_id' => $id, 'duty_date' => sprintf('2026-10-%02d', $d),
+                'status' => 'Absent', 'created_at' => now(), 'updated_at' => now(),
+            ])->all()
+        );
+
+        if ($lastDay !== null) {
+            DB::table('employee_resignations')->insert([
+                'employee_id' => $id, 'last_working_date' => $lastDay, 'reason' => 'P32 regression',
+                'status' => 'Approved', 'requested_by' => null, 'approved_by' => null,
+                'approved_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+    }
+
+    $service = app(Modules\PAYROLL\Services\HRM\HrmAttendancePayrollDataProvider::class);
+    $leaver = $service->summaryForEmployee('P32-LIVE', '2026-10-01', '2026-10-31');
+    $stayer = $service->summaryForEmployee('P32-STAYS', '2026-10-01', '2026-10-31');
+
+    // 1–20 October 2026 holds three Fridays (2, 9, 16): 17 chargeable days, then employment ends.
+    expect($leaver->unpaidLeaveDays)->toBe(17.0)
+        ->and($leaver->sourceBreakdown['last_working_day'])->toBe('2026-10-20')
+        ->and(max(array_map('strval', $leaver->sourceBreakdown['absent_dates'])))->toBe('2026-10-20');
+
+    // Nobody else's figures move: the same full month of Absent rows still costs 26 days.
+    expect($stayer->unpaidLeaveDays)->toBe(26.0)
+        ->and($stayer->sourceBreakdown['last_working_day'])->toBeNull();
+});
+
 test('switching the punishable flag off restores a full salary without touching any other employee', function () {
     p26Setup();
 
