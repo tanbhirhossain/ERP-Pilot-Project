@@ -45,10 +45,35 @@ class RosterShiftSwapService
             if ($swap->status !== 'Pending') {
                 throw new \RuntimeException('Only Pending can be approved');
             }
+            /*
+             * The day the swap is about, as a calendar day.
+             *
+             * `swap_date` is cast to a date on the model, so passing it straight into a where() binds
+             * it as "2026-10-13 00:00:00" while `roster_duties.roster_date` is stored as "2026-10-13".
+             * The lookup therefore matched nothing, the whole exchange was skipped — and the swap was
+             * still marked Approved, so the roster screen said the swap had happened while both
+             * employees kept their original shift. Found on the clean rebuild: an approved F-0009 /
+             * F-0010 swap on 2026-10-13 left both duties untouched and `Scheduled`.
+             *
+             * Matching with whereDate() makes the day match whichever shape the column holds, and an
+             * approval that cannot find the duty it is meant to change now fails loudly instead of
+             * reporting success.
+             */
+            $swapDay = $swap->swap_date instanceof \DateTimeInterface
+                ? $swap->swap_date->format('Y-m-d')
+                : (string) $swap->swap_date;
+
             // Swap logic: if target_employee_id set, exchange duties on swap_date; else change requester duty to requested_shift
             if ($swap->target_employee_id) {
-                $reqDuty = RosterDuty::where('employee_id', $swap->requester_employee_id)->where('roster_date', $swap->swap_date)->first();
-                $tgtDuty = RosterDuty::where('employee_id', $swap->target_employee_id)->where('roster_date', $swap->swap_date)->first();
+                $reqDuty = RosterDuty::where('employee_id', $swap->requester_employee_id)->whereDate('roster_date', $swapDay)->first();
+                $tgtDuty = RosterDuty::where('employee_id', $swap->target_employee_id)->whereDate('roster_date', $swapDay)->first();
+                if ($reqDuty === null || $tgtDuty === null) {
+                    throw new \DomainException(sprintf(
+                        'The swap cannot be approved: %s has no roster duty on %s to exchange.',
+                        $reqDuty === null ? $swap->requester_employee_id : $swap->target_employee_id,
+                        $swapDay,
+                    ));
+                }
                 if ($reqDuty && $tgtDuty) {
                     // exchange shift_id — cache both original shifts BEFORE mutation
                     $tmpShiftId = $reqDuty->shift_id;
@@ -63,14 +88,14 @@ class RosterShiftSwapService
                     $reqDuty->update(['shift_id' => $swap->requested_shift_id, 'status' => 'Swapped']);
                 }
             } elseif ($swap->requested_shift_id) {
-                $reqDuty = RosterDuty::where('employee_id', $swap->requester_employee_id)->where('roster_date', $swap->swap_date)->first();
+                $reqDuty = RosterDuty::where('employee_id', $swap->requester_employee_id)->whereDate('roster_date', $swapDay)->first();
                 if ($reqDuty) {
                     $shift = RosterShift::find($swap->requested_shift_id);
                     $reqDuty->update(['shift_id' => $swap->requested_shift_id, 'scheduled_start_time' => $shift?->start_time, 'scheduled_end_time' => $shift?->end_time, 'status' => 'Swapped']);
                 } else {
                     // create duty if not exists
                     $shift = RosterShift::find($swap->requested_shift_id);
-                    RosterDuty::create(['employee_id' => $swap->requester_employee_id, 'roster_date' => $swap->swap_date, 'shift_id' => $swap->requested_shift_id, 'scheduled_start_time' => $shift?->start_time, 'scheduled_end_time' => $shift?->end_time, 'status' => 'Swapped']);
+                    RosterDuty::create(['employee_id' => $swap->requester_employee_id, 'roster_date' => $swapDay, 'shift_id' => $swap->requested_shift_id, 'scheduled_start_time' => $shift?->start_time, 'scheduled_end_time' => $shift?->end_time, 'status' => 'Swapped']);
                 }
             }
             $swap->update(['status' => 'Approved', 'approved_by' => auth()->id()]);
