@@ -611,6 +611,30 @@ final class ProvidentFundService
         return DB::transaction(function () use ($withdrawal, $decision, $approvedAmount, $actorId, $note): PfWithdrawal {
             $locked = PfWithdrawal::query()->whereKey($withdrawal->id)->lockForUpdate()->firstOrFail();
 
+            /*
+             * Four eyes on the fund.
+             *
+             * Nothing stopped the officer who raised a withdrawal from walking it straight through to
+             * a payout — the request carried `requested_by` and the decision wrote `decided_by` to the
+             * same id, and the ledger moved real money on the strength of one person's word. Salary
+             * increments already refuse self-approval (`ApproveSalaryIncrementAction`); the fund, which
+             * pays cash out rather than promising a future rate, did not.
+             *
+             * Refusing *your own* request is the rule that fits both kinds of fund, so it needs no
+             * setting. A one-person fund can still say "I asked, somebody else pays" by having a second
+             * signer; that is a staffing decision, not a code one. Anything stricter — say, always two
+             * different people even for a withdrawal raised by the fund itself — would be policy, and
+             * this class deliberately keeps policy in `pf_policies`, not in an `if`.
+             *
+             * `null` means "the system did it" (a migration, a console command, an import) and is left
+             * alone: there is no person there to be a second pair of eyes, so the rule is silent.
+             */
+            if ($actorId !== null && $locked->requested_by !== null && (int) $locked->requested_by === $actorId) {
+                throw ValidationException::withMessages([
+                    'requested_by' => 'A provident-fund withdrawal must be decided by someone other than the officer who raised it — this request was raised by you.',
+                ]);
+            }
+
             // Paying is the *end* of the lifecycle, so it is legal from `pending` (a small fund that
             // approves by paying) and from `approved` (the two-step flow the screens present). Every
             // other decision needs a request that is still open. Guarding all three on `pending`

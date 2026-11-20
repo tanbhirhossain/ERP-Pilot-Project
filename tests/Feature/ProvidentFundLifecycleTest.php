@@ -246,16 +246,20 @@ it('approving a withdrawal moves no money, and paying it posts exactly one ledge
     $service = app(ProvidentFundService::class);
     $service->accrueFromSheet(pfSheet($account, 2026, 10, 'released', 500.0, 500.0), 1);
 
+    $requester = User::factory()->create();
+    $signer = User::factory()->create();
+
     $request = $service->requestWithdrawal($account->fresh(), [
         'type' => 'partial', 'requested_amount' => 400, 'reason' => 'Medical expenses',
-    ], 1);
+    ], $requester->id);
 
-    $service->decideWithdrawal($request, 'approve', null, 1);
+    // Four eyes: the officer who raises a withdrawal may not be the one who clears it.
+    $service->decideWithdrawal($request, 'approve', null, $signer->id);
 
     expect((float) $account->fresh()->totalBalance())->toBe(1000.0)
         ->and(PfLedger::query()->whereIn('entry_type', ['withdrawal', 'settlement'])->count())->toBe(0);
 
-    $service->decideWithdrawal($request->fresh(), 'pay', 400.0, 1);
+    $service->decideWithdrawal($request->fresh(), 'pay', 400.0, $signer->id);
 
     $debits = PfLedger::query()->whereIn('entry_type', ['withdrawal', 'settlement'])->get();
     expect($debits)->toHaveCount(1)
@@ -275,13 +279,16 @@ it('pays a request that was approved first, not only one still pending', functio
     $service = app(ProvidentFundService::class);
     $service->accrueFromSheet(pfSheet($account, 2026, 10, 'released', 500.0, 500.0), 1);
 
+    $requester = User::factory()->create();
+    $signer = User::factory()->create();
+
     $request = $service->requestWithdrawal($account->fresh(), [
         'type' => 'partial', 'requested_amount' => 300, 'reason' => 'School fees',
-    ], 1);
+    ], $requester->id);
 
     // The two-step flow the withdrawal desk presents: approve, then pay the approved row.
-    $service->decideWithdrawal($request, 'approve', 300.0, 1);
-    $service->decideWithdrawal($request->fresh(), 'pay', 300.0, 1);
+    $service->decideWithdrawal($request, 'approve', 300.0, $signer->id);
+    $service->decideWithdrawal($request->fresh(), 'pay', 300.0, $signer->id);
 
     expect($request->fresh()->status)->toBe('paid')
         ->and((float) $account->fresh()->totalBalance())->toBe(700.0);
@@ -299,7 +306,7 @@ it('pays a final settlement as a settlement entry and closes the account', funct
         'type' => 'final_settlement', 'requested_amount' => 1000, 'reason' => 'Resignation',
     ], 1);
 
-    $service->decideWithdrawal($request, 'pay', 1000.0, 1);
+    $service->decideWithdrawal($request, 'pay', 1000.0, User::factory()->create()->id);
 
     $entry = PfLedger::query()->where('entry_type', 'settlement')->sole();
     expect((float) $entry->amount)->toBe(1000.0);
@@ -320,7 +327,7 @@ it('refuses to accrue into a closed account', function (): void {
     $request = $service->requestWithdrawal($account->fresh(), [
         'type' => 'final_settlement', 'requested_amount' => 1000, 'reason' => 'Resignation',
     ], 1);
-    $service->decideWithdrawal($request, 'pay', 1000.0, 1);
+    $service->decideWithdrawal($request, 'pay', 1000.0, User::factory()->create()->id);
 
     $service->accrueFromSheet(pfSheet($account->fresh(), 2026, 11, 'released'), 1);
 
@@ -413,4 +420,81 @@ it('writes a date-only eligible_from instead of a timestamp', function (): void 
     $row = collect($rows)->firstWhere('employee_id', 'PF-2001');
 
     expect($row['eligible_from'])->toBe('2023-03-15');
+});
+
+/*
+ * Four eyes on the fund.
+ *
+ * User 1 raised withdrawal #3 and user 1 approved it, and the withdrawable amount moved. Nothing in
+ * the service objected, because nothing looked. The three tests below pin the rule in both
+ * directions: self-decision refused at *both* decision points, and a second signer unaffected.
+ */
+it('refuses to let the officer who raised a withdrawal approve or pay it', function (): void {
+    $policy = pfPolicy();
+    $account = pfAccount(pfEmployee(), $policy);
+    $service = app(ProvidentFundService::class);
+    $service->accrueFromSheet(pfSheet($account, 2026, 10, 'released', 500.0, 500.0), 1);
+
+    $officer = User::factory()->create();
+
+    $request = $service->requestWithdrawal($account->fresh(), [
+        'type' => 'partial', 'requested_amount' => 400, 'reason' => 'Medical expenses',
+    ], $officer->id);
+
+    expect(fn () => $service->decideWithdrawal($request, 'approve', null, $officer->id))
+        ->toThrow(Illuminate\Validation\ValidationException::class);
+
+    // Paying straight from `pending` is a legal shortcut for a second signer, not for the requester.
+    expect(fn () => $service->decideWithdrawal($request->fresh(), 'pay', 400.0, $officer->id))
+        ->toThrow(Illuminate\Validation\ValidationException::class);
+
+    expect($request->fresh()->status)->toBe('pending')
+        ->and((float) $account->fresh()->totalBalance())->toBe(1000.0)
+        ->and(PfLedger::query()->whereIn('entry_type', ['withdrawal', 'settlement'])->count())->toBe(0);
+
+    assertBalancesReconcile($account);
+});
+
+it('lets a second signer clear a withdrawal the first officer raised', function (): void {
+    $policy = pfPolicy();
+    $account = pfAccount(pfEmployee(), $policy);
+    $service = app(ProvidentFundService::class);
+    $service->accrueFromSheet(pfSheet($account, 2026, 10, 'released', 500.0, 500.0), 1);
+
+    $requester = User::factory()->create();
+    $signer = User::factory()->create();
+
+    $request = $service->requestWithdrawal($account->fresh(), [
+        'type' => 'partial', 'requested_amount' => 400, 'reason' => 'Medical expenses',
+    ], $requester->id);
+
+    $service->decideWithdrawal($request, 'approve', null, $signer->id);
+    $service->decideWithdrawal($request->fresh(), 'pay', 400.0, $signer->id);
+
+    $paid = $request->fresh();
+    expect($paid->status)->toBe('paid')
+        ->and((int) $paid->requested_by)->toBe($requester->id)
+        ->and((int) $paid->decided_by)->toBe($signer->id)
+        ->and((float) $account->fresh()->totalBalance())->toBe(600.0);
+
+    assertBalancesReconcile($account);
+});
+
+it('leaves a request raised outside the desk (no actor) decidable by anyone', function (): void {
+    $policy = pfPolicy();
+    $account = pfAccount(pfEmployee(), $policy);
+    $service = app(ProvidentFundService::class);
+    $service->accrueFromSheet(pfSheet($account, 2026, 10, 'released', 500.0, 500.0), 1);
+
+    $request = $service->requestWithdrawal($account->fresh(), [
+        'type' => 'partial', 'requested_amount' => 250, 'reason' => 'System-generated request',
+    ], null);
+
+    // No person raised it, so there is no second pair of eyes to demand.
+    $service->decideWithdrawal($request, 'pay', 250.0, User::factory()->create()->id);
+
+    expect($request->fresh()->status)->toBe('paid')
+        ->and((float) $account->fresh()->totalBalance())->toBe(750.0);
+
+    assertBalancesReconcile($account);
 });
