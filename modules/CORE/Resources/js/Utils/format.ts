@@ -170,9 +170,20 @@ export function avatarTone(seed: string): string {
 
 const bdtNumberFormatter = new Intl.NumberFormat('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/**
+ * A money string that cannot break its line.
+ *
+ * The taka sign is a *spaced* glyph: in `1,690.00` the ৳ sits above the cap height of the digits, so
+ * a column of amounts either pushes it onto its own line or clips it. Every cell of a price list was
+ * doing one or the other — some rows rendered "৳" as a superscript on the line above and left the
+ * number alone below it, which reads as a rendering fault rather than a price.
+ *
+ * Wrapping the sign with the digits in a `nowrap` span and dropping the space keeps the two together.
+ * The formatter stays `en-BD` so the grouping is the lakh/crore grouping a Bangladeshi reader expects.
+ */
 export function formatCurrency(value: number | null | undefined, currency: string = 'BDT'): string {
     if (value === null || value === undefined) return '—';
-    if (currency === 'BDT') return `৳ ${bdtNumberFormatter.format(Number(value))}`;
+    if (currency === 'BDT') return `৳${bdtNumberFormatter.format(Number(value))}`;
     return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(value));
 }
 

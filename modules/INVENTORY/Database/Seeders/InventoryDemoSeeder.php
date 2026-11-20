@@ -37,7 +37,51 @@ class InventoryDemoSeeder extends Seeder
         Warehouse::firstOrCreate(['code' => 'WH-002'], ['name' => 'Factory Warehouse', 'type' => 'sub', 'city' => 'Gazipur', 'is_active' => true]);
 
         // Products
-        Product::factory()->count(15)->create(['uom_id' => $pcs->id, 'category_id' => $catFabric->id]);
+        //
+        // These were `Product::factory()->count(15)` — Faker's Latin lorem ipsis, which is what every
+        // Laravel demo ships and what makes a demo look like a demo. "Adipisci Enim Id" is not a
+        // product, so a screenshot of it proves nothing to anyone evaluating the software: the
+        // reader spends their attention decoding the name instead of judging the screen, and the
+        // prices were random numbers unrelated to the merchandise.
+        //
+        // Real items with plausible costs let a buyer test the thing that actually matters — the
+        // margin. A cotton panjabi bought at 1,180 and sold at 1,690 is a story the reader can
+        // check; the same row labelled "Quidem Aut Veritatis" is noise.
+        $catalogue = [
+            ['Cotton Panjabi — Off White', 'PNJ-001', 1180.00, 1690.00, 'pcs'],
+            ['Cotton Panjabi — Navy', 'PNJ-002', 1180.00, 1690.00, 'pcs'],
+            ['Printed Cotton Saree — Tangail', 'SAR-001', 2450.00, 3600.00, 'pcs'],
+            ['Jamdani Saree — Half Silk', 'SAR-002', 4800.00, 7200.00, 'pcs'],
+            ['Mens Formal Shirt — Sky Blue', 'SHT-001', 880.00, 1290.00, 'pcs'],
+            ['Mens Formal Shirt — White', 'SHT-002', 880.00, 1290.00, 'pcs'],
+            ['Denim Pant — Slim Fit', 'PNT-001', 1650.00, 2450.00, 'pcs'],
+            ['Cotton Churidar — Black', 'CHR-001', 720.00, 1090.00, 'pcs'],
+            ['Three Piece Salwar Kameez — Embroidered', 'TPC-001', 3200.00, 4750.00, 'pcs'],
+            ['Kids T-Shirt — Assorted Print', 'KTS-001', 240.00, 390.00, 'pcs'],
+            ['Terry Towel — Bath Size', 'TWL-001', 340.00, 520.00, 'pcs'],
+            ['Bed Sheet Set — Queen', 'BDS-001', 1250.00, 1850.00, 'pcs'],
+            ['Cotton Fabric — Premium White', 'FAB-001', 210.00, 310.00, 'mtr'],
+            ['Denim Fabric — 12 oz', 'FAB-002', 385.00, 540.00, 'mtr'],
+            ['Muslin Fabric — Fine Weave', 'FAB-003', 460.00, 650.00, 'mtr'],
+        ];
+
+        $uomByCode = ['pcs' => $pcs->id, 'mtr' => Uom::firstOrCreate(['code' => 'MTR'], ['name' => 'Meter', 'symbol' => 'm', 'is_active' => true])->id];
+
+        foreach ($catalogue as [$name, $code, $cost, $price, $uom]) {
+            Product::firstOrCreate(['sku' => $code], [
+                'name' => $name,
+                'barcode' => '8801'.str_pad((string) (crc32($code) % 10000000000), 10, '0', STR_PAD_LEFT),
+                'category_id' => $catFabric->id,
+                'uom_id' => $uomByCode[$uom],
+                'type' => 'stockable',
+                'cost_price' => $cost,
+                'selling_price' => $price,
+                'mrp' => round($price * 1.08, 2),
+                'reorder_level' => 20,
+                'is_active' => true,
+                'status' => 'active',
+            ]);
+        }
 
         // Create a known product for testing POS/valuation
         $test = Product::firstOrCreate(['sku' => 'SKU-TEST001'], [

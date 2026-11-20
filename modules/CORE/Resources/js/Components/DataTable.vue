@@ -983,7 +983,7 @@ onMounted(() => {
                                 :style="column.width ? { width: column.width } : undefined"
                                 :class="
                                     cn(
-                                        'dt-th text-muted-foreground sticky top-0 z-[1] px-4 py-3 text-xs font-semibold tracking-wider uppercase',
+                                        'dt-th text-muted-foreground sticky top-0 z-[1] px-4 py-2.5 text-[11.5px] font-semibold tracking-[0.03em] whitespace-nowrap',
                                         column.align === 'right' && 'text-right',
                                         column.align === 'center' && 'text-center',
                                         column.key === 'actions' && 'w-1 print:hidden',
@@ -1216,27 +1216,17 @@ onMounted(() => {
 
 /* Sticky header over the scrolled body (theme vars are raw HSL triplets) */
 .dt-th {
-    background-color: hsl(var(--muted) / 0.88);
-    backdrop-filter: blur(6px);
+    background-color: hsl(var(--muted) / 0.62);
     box-shadow: inset 0 -1px 0 0 hsl(var(--border));
 }
 
-/* Staggered row entrance — re-triggered whenever the page key changes */
-.dt-row {
-    animation: dt-row-in 0.32s cubic-bezier(0.21, 1.02, 0.73, 1) both;
-    animation-delay: var(--dt-row-delay, 0ms);
-}
-
-@keyframes dt-row-in {
-    from {
-        opacity: 0;
-        transform: translateY(6px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
+/* Rows do not animate in.
+ *
+ * They used to: every render replayed a staggered fade, so typing in the search box made each
+ * keystroke flash the whole table. Motion on a list you are scanning for a number is noise, and it
+ * makes a financial screen feel like a marketing site. The row hover still gives the feedback that
+ * matters — which line the cursor is on.
+ */
 
 @media (prefers-reduced-motion: reduce) {
     .dt-row,

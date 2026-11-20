@@ -94,12 +94,34 @@ const agingChartOption = computed(() => ({
     ],
 }));
 
+/**
+ * A card's accent, earned rather than assigned.
+ *
+ * Each figure used to carry its own gradient — emerald, cyan, amber, violet, rose — so the top of the
+ * dashboard was five colours competing for the same glance. Colour that distinguishes nothing is
+ * decoration, and decoration at the top of a finance screen reads as a template. The tiles are now
+ * one colour, and the only figure allowed to be tinted is one that is asking for attention (a
+ * pending approval) or one whose sign carries meaning (revenue below zero).
+ */
+function cardTone(tone: string): { tile: string; value: string } {
+    switch (tone) {
+        case 'brand':
+            return { tile: 'bg-brand-tint text-brand-tint-ink', value: 'text-foreground' };
+        case 'warning':
+            return { tile: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400', value: 'text-amber-600 dark:text-amber-400' };
+        case 'danger':
+            return { tile: 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400', value: 'text-rose-600 dark:text-rose-400' };
+        default:
+            return { tile: 'bg-muted text-muted-foreground', value: 'text-foreground' };
+    }
+}
+
 const businessCards = computed(() => [
-    { key: 'revenue', label: 'Revenue this month', value: props.businessKpis.revenue_mtd, icon: TrendingUp, tint: 'from-emerald-500 to-teal-500', money: true, hint: `${props.businessKpis.invoices_mtd} posted invoice(s)` },
-    { key: 'receivables', label: 'Receivables outstanding', value: props.businessKpis.receivables, icon: Banknote, tint: 'from-sky-500 to-cyan-500', money: true, hint: 'Open AR balance' },
-    { key: 'payables', label: 'Payables outstanding', value: props.businessKpis.payables, icon: TrendingDown, tint: 'from-amber-500 to-orange-500', money: true, hint: 'Open AP balance' },
-    { key: 'inventory', label: 'Inventory value', value: props.businessKpis.inventory_value, icon: Package, tint: 'from-violet-500 to-purple-500', money: true, hint: 'Stock at average cost' },
-    { key: 'approvals', label: 'Pending approvals', value: props.businessKpis.pending_approvals, icon: ClipboardCheck, tint: 'from-rose-500 to-pink-500', money: false, hint: 'Awaiting a decision' },
+    { key: 'revenue', label: 'Revenue this month', value: props.businessKpis.revenue_mtd, icon: TrendingUp, tone: 'brand', money: true, hint: `${props.businessKpis.invoices_mtd} posted invoice(s)` },
+    { key: 'receivables', label: 'Receivables outstanding', value: props.businessKpis.receivables, icon: Banknote, tone: 'neutral', money: true, hint: 'Open AR balance' },
+    { key: 'payables', label: 'Payables outstanding', value: props.businessKpis.payables, icon: TrendingDown, tone: 'neutral', money: true, hint: 'Open AP balance' },
+    { key: 'inventory', label: 'Inventory value', value: props.businessKpis.inventory_value, icon: Package, tone: 'neutral', money: true, hint: 'Stock at average cost' },
+    { key: 'approvals', label: 'Pending approvals', value: props.businessKpis.pending_approvals, icon: ClipboardCheck, tone: props.businessKpis.pending_approvals > 0 ? 'warning' : 'neutral', money: false, hint: 'Awaiting a decision' },
 ]);
 
 /* ----------------------------- entrance + count-up ----------------------- */
@@ -161,10 +183,10 @@ const today = now.toLocaleDateString(undefined, {
 /* -------------------------------- stat cards ----------------------------- */
 
 const cards = computed(() => [
-    { key: 'users', label: 'Total users', icon: Users, tint: 'from-indigo-500 to-violet-500', glow: 'group-hover:shadow-indigo-500/20', hint: 'Registered accounts', routeName: 'core.users.index', permission: 'users.view', value: props.stats.users },
-    { key: 'roles', label: 'Roles', icon: ShieldCheck, tint: 'from-sky-500 to-cyan-500', glow: 'group-hover:shadow-sky-500/20', hint: 'Access profiles', routeName: 'core.roles.index', permission: 'roles.view', value: props.stats.roles },
-    { key: 'permissions', label: 'Permissions', icon: KeyRound, tint: 'from-amber-500 to-orange-500', glow: 'group-hover:shadow-amber-500/20', hint: 'ACL capabilities', routeName: 'core.permissions.index', permission: 'permissions.view', value: props.stats.permissions },
-    { key: 'audit_24h', label: 'Audit events', icon: Activity, tint: 'from-emerald-500 to-teal-500', glow: 'group-hover:shadow-emerald-500/20', hint: 'Recorded in the last 24h', routeName: 'core.activities.index', permission: 'audit.view', value: props.stats.audit_events_24h },
+    { key: 'users', label: 'Total users', icon: Users, tone: 'neutral', hint: 'Registered accounts', routeName: 'core.users.index', permission: 'users.view', value: props.stats.users },
+    { key: 'roles', label: 'Roles', icon: ShieldCheck, tone: 'neutral', hint: 'Access profiles', routeName: 'core.roles.index', permission: 'roles.view', value: props.stats.roles },
+    { key: 'permissions', label: 'Permissions', icon: KeyRound, tone: 'neutral', hint: 'ACL capabilities', routeName: 'core.permissions.index', permission: 'permissions.view', value: props.stats.permissions },
+    { key: 'audit_24h', label: 'Audit events', icon: Activity, tone: 'neutral', hint: 'Recorded in the last 24h', routeName: 'core.activities.index', permission: 'audit.view', value: props.stats.audit_events_24h },
 ]);
 
 const verifiedPct = computed(() =>
@@ -302,19 +324,17 @@ onMounted(() => {
                 <div
                     v-for="(card, index) in businessCards"
                     :key="card.key"
-                    class="group relative overflow-hidden rounded-xl border bg-card p-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-lg"
-                    :style="{ 'animation-delay': `${120 + index * 60}ms` }"
+                    class="group relative rounded-lg border bg-card p-4 transition-colors hover:border-border/80"
                 >
-                    <span class="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r" :class="card.tint" aria-hidden="true" />
                     <div class="flex items-center justify-between">
-                        <span class="grid size-9 place-items-center rounded-lg bg-gradient-to-br text-hero-ink shadow-sm" :class="card.tint">
-                            <component :is="card.icon" class="size-4.5" />
+                        <span class="grid size-8 place-items-center rounded-md" :class="cardTone(card.tone).tile">
+                            <component :is="card.icon" class="size-4" />
                         </span>
                     </div>
-                    <p class="mt-3 text-xl font-bold tabular-nums tracking-tight">
+                    <p class="num-display mt-3 text-[22px] font-semibold" :class="cardTone(card.tone).value">
                         {{ card.money ? formatCurrencyCompact(card.value) : formatNumber(card.value) }}
                     </p>
-                    <p class="mt-0.5 text-[13px] font-medium">{{ card.label }}</p>
+                    <p class="mt-0.5 text-[12.5px] font-medium text-foreground">{{ card.label }}</p>
                     <p class="text-[11px] text-muted-foreground">{{ card.hint }}</p>
                 </div>
             </div>
@@ -345,30 +365,19 @@ onMounted(() => {
                 v-for="(card, index) in cards"
                 :key="card.key"
                 :href="can(card.permission) ? route(card.routeName) : undefined"
-                class="d-rise group relative overflow-hidden rounded-xl border bg-card p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
-                :class="[card.glow, !can(card.permission) && 'pointer-events-none opacity-60']"
-                :style="{ 'animation-delay': `${90 + index * 70}ms` }"
+                class="group relative rounded-lg border bg-card p-5 transition-colors hover:border-primary/30"
+                :class="[!can(card.permission) && 'pointer-events-none opacity-60']"
             >
-                <!-- accent ribbon -->
-                <span
-                    class="absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-gradient-to-r transition-transform duration-500 group-hover:scale-x-100"
-                    :class="card.tint"
-                    aria-hidden="true"
-                />
-
                 <div class="flex items-start justify-between">
-                    <span
-                        class="grid size-11 place-items-center rounded-xl bg-gradient-to-br text-white shadow-md transition-transform duration-300 group-hover:scale-105"
-                        :class="card.tint"
-                    >
-                        <component :is="card.icon" class="size-5" />
+                    <span class="grid size-9 place-items-center rounded-md" :class="cardTone(card.tone).tile">
+                        <component :is="card.icon" class="size-4.5" />
                     </span>
                     <ArrowRight
                         class="size-4 translate-x-1 text-muted-foreground opacity-0 transition group-hover:translate-x-0 group-hover:opacity-100"
                     />
                 </div>
 
-                <p class="mt-4 text-3xl font-bold tabular-nums tracking-tight">
+                <p class="num-display mt-4 text-[26px] font-semibold">
                     {{ display(card.value) }}
                 </p>
                 <p class="mt-1 text-sm font-medium">{{ card.label }}</p>

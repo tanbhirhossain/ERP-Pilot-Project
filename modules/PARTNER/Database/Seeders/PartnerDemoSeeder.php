@@ -16,8 +16,46 @@ class PartnerDemoSeeder extends Seeder
 
         $groups = PartnerGroup::all();
 
-        Partner::factory()->count(10)->vendor()->create();
-        Partner::factory()->count(10)->customer()->create();
+        // Named counterparties, not Faker people.
+        //
+        // A customer list reading "Crystal Hettinger I Enterprise" tells a Bangladeshi finance team
+        // nothing about whether the software understands their business, and a vendor list of
+        // American surnames on a garment importer is quietly wrong. These are the kind of names an
+        // accounts department in Dhaka would recognise, and the TIN/BIN styles match the real ones so
+        // a VAT report looks like a VAT report.
+        $vendors = [
+            ['Padma Textile Mills Ltd.', 'V-1001'],
+            ['Karnafuli Fabrics Ltd.', 'V-1002'],
+            ['Meghna Dyeing & Finishing', 'V-1003'],
+            ['Jamuna Accessories Co.', 'V-1004'],
+            ['Rupsha Garments Accessories', 'V-1005'],
+            ['Bengal Yarn Trading', 'V-1006'],
+            ['Sylhet Silk House', 'V-1007'],
+            ['Tangail Weavers Cooperative', 'V-1008'],
+        ];
+
+        $customers = [
+            ['Rahim Traders', 'C-2001'],
+            ['Karim Enterprise', 'C-2002'],
+            ['New Market Fashion House', 'C-2003'],
+            ['Bashundhara Mega Mall — Outlet 4', 'C-2004'],
+            ['Agrabad Retail Point', 'C-2005'],
+            ['Uttara Collection', 'C-2006'],
+            ['Dhanmondi Style Corner', 'C-2007'],
+            ['Chittagong Garments Outlet', 'C-2008'],
+        ];
+
+        foreach ($vendors as [$name, $code]) {
+            Partner::firstOrCreate(['partner_code' => $code], [
+                'type' => 'vendor', 'name' => $name, 'is_active' => true, 'is_verified' => true,
+            ]);
+        }
+
+        foreach ($customers as [$name, $code]) {
+            Partner::firstOrCreate(['partner_code' => $code], [
+                'type' => 'customer', 'name' => $name, 'is_active' => true, 'is_verified' => true,
+            ]);
+        }
 
         // Add a few with full relations
         $vendor = Partner::factory()->vendor()->create(['name' => 'Bangladesh Fabric Mills Ltd.', 'is_verified' => true]);
