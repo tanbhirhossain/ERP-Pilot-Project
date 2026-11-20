@@ -21,7 +21,7 @@ class PurchaseOrder extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'order_date' => 'date', 'expected_date' => 'date',
+        'order_date' => 'date:Y-m-d', 'expected_date' => 'date:Y-m-d',
         'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2', 'total_amount' => 'decimal:2', 'received_amount' => 'decimal:2',
         'confirmed_at' => 'datetime',
     ];

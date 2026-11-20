@@ -34,7 +34,7 @@ class PurchaseRequisition extends Model
     ];
 
     protected $casts = [
-        'need_by' => 'date',
+        'need_by' => 'date:Y-m-d',
         'reviewed_at' => 'datetime',
         'estimated_amount' => 'decimal:2',
     ];

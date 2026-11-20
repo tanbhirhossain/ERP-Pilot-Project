@@ -16,8 +16,8 @@ class TaxDeposit extends Model
     protected $fillable = ['deposit_no', 'type', 'period', 'amount', 'deposit_date', 'bank_id', 'challan_no', 'treasury_code', 'journal_id', 'notes', 'created_by'];
 
     protected $casts = [
-        'period' => 'date',
-        'deposit_date' => 'date',
+        'period' => 'date:Y-m-d',
+        'deposit_date' => 'date:Y-m-d',
         'amount' => 'decimal:2',
     ];
 

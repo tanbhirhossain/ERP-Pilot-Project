@@ -11,7 +11,7 @@ class AccountLedger extends Model
 
     protected $fillable = ['account_id', 'journal_id', 'journal_line_id', 'posting_date', 'debit', 'credit', 'balance_after', 'reference_no'];
 
-    protected $casts = ['posting_date' => 'date', 'debit' => 'decimal:2', 'credit' => 'decimal:2', 'balance_after' => 'decimal:2'];
+    protected $casts = ['posting_date' => 'date:Y-m-d', 'debit' => 'decimal:2', 'credit' => 'decimal:2', 'balance_after' => 'decimal:2'];
 
     public function account(): BelongsTo
     {

@@ -19,7 +19,7 @@ class Delivery extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['delivery_date' => 'date', 'shipped_at' => 'datetime'];
+    protected $casts = ['delivery_date' => 'date:Y-m-d', 'shipped_at' => 'datetime'];
 
     public function order(): BelongsTo
     {

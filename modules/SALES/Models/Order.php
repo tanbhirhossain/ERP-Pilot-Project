@@ -20,7 +20,7 @@ class Order extends Model
 
     protected $fillable = ['order_no', 'quotation_id', 'customer_id', 'warehouse_id', 'price_list_id', 'order_date', 'delivery_date', 'currency', 'subtotal', 'discount_amount', 'vat_amount', 'total_amount', 'invoiced_amount', 'status', 'payment_status', 'shipping_address', 'notes', 'created_by', 'confirmed_by', 'confirmed_at'];
 
-    protected $casts = ['order_date' => 'date', 'delivery_date' => 'date', 'total_amount' => 'decimal:2', 'confirmed_at' => 'datetime', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2', 'invoiced_amount' => 'decimal:2'];
+    protected $casts = ['order_date' => 'date:Y-m-d', 'delivery_date' => 'date:Y-m-d', 'total_amount' => 'decimal:2', 'confirmed_at' => 'datetime', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2', 'invoiced_amount' => 'decimal:2'];
 
     public function customer(): BelongsTo
     {

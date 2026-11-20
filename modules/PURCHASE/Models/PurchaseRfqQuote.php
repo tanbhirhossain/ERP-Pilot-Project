@@ -29,8 +29,8 @@ class PurchaseRfqQuote extends Model
     ];
 
     protected $casts = [
-        'quoted_on' => 'date',
-        'valid_until' => 'date',
+        'quoted_on' => 'date:Y-m-d',
+        'valid_until' => 'date:Y-m-d',
         'total_amount' => 'decimal:2',
         'lead_time_days' => 'integer',
     ];

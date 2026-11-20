@@ -20,7 +20,7 @@ class SalesReturn extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['return_date' => 'date', 'subtotal' => 'decimal:2', 'vat_amount' => 'decimal:2', 'total_amount' => 'decimal:2', 'is_restocked' => 'boolean', 'approved_at' => 'datetime'];
+    protected $casts = ['return_date' => 'date:Y-m-d', 'subtotal' => 'decimal:2', 'vat_amount' => 'decimal:2', 'total_amount' => 'decimal:2', 'is_restocked' => 'boolean', 'approved_at' => 'datetime'];
 
     public function invoice(): BelongsTo
     {

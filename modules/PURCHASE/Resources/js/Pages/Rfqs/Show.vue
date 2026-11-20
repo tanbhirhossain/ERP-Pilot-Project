@@ -45,6 +45,23 @@ const quotes = computed<any[]>(() => props.compare.quotes ?? []);
 const recommendation = computed<any>(() => props.compare.recommendation ?? null);
 const awarded = computed(() => rfq.value.awarded_quote_id !== null && rfq.value.awarded_quote_id !== undefined);
 
+/**
+ * Who won — in the plural, when the round was split.
+ *
+ * A split award names one vendor per line, so printing the first award's vendor says the whole round
+ * went to them. It did not: the comparison above shows line two's price in the other vendor's column,
+ * and the header contradicted it.
+ */
+const awardedTo = computed(() => {
+    const awards = rfq.value.awards ?? [];
+    const names = [...new Set(awards.map((a: any) => a.quote?.vendor?.name).filter(Boolean))];
+
+    if (names.length === 0) return awarded ? 'see awards' : 'not yet';
+    if (names.length === 1) return names[0];
+
+    return `${names.length} vendors — split by line (see Awarded)`;
+});
+
 /** A serialised date cast is an ISO string; a date on a round is a day. */
 function day(value: unknown): string | null {
     return value ? String(value).slice(0, 10) : null;
@@ -232,7 +249,7 @@ const draft = computed(() => rfq.value.status === 'draft');
                 <div class="space-y-2 text-sm">
                     <DetailItem label="Due" :value="day(rfq.due_on) ?? 'not set'" />
                     <DetailItem label="Answers" :value="`${quotes.length} of ${lines.length} line(s) each`" />
-                    <DetailItem label="Awarded to" :value="awarded ? (rfq.awards?.[0]?.quote?.vendor?.name ?? 'see awards') : 'not yet'" />
+                    <DetailItem label="Awarded to" :value="awardedTo" />
                     <DetailItem v-if="rfq.requisition?.warehouse?.name" label="Delivers to" :value="rfq.requisition.warehouse.name" />
                     <p v-if="rfq.notes" class="rounded-lg bg-muted/40 px-3 py-2 text-sm">{{ rfq.notes }}</p>
 

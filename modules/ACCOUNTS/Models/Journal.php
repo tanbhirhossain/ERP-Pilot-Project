@@ -24,7 +24,7 @@ class Journal extends Model
     ];
 
     protected $casts = [
-        'journal_date' => 'date', 'posted_at' => 'datetime', 'voided_at' => 'datetime',
+        'journal_date' => 'date:Y-m-d', 'posted_at' => 'datetime', 'voided_at' => 'datetime',
         'total_debit' => 'decimal:2', 'total_credit' => 'decimal:2',
     ];
 

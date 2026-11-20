@@ -23,7 +23,7 @@ class Withholding extends Model
     protected $fillable = ['type', 'direction', 'rule_id', 'partner_id', 'bill_id', 'invoice_id', 'period', 'base_amount', 'rate', 'amount', 'status', 'deposit_id', 'certificate_no', 'deposited_at', 'notes', 'created_by'];
 
     protected $casts = [
-        'period' => 'date',
+        'period' => 'date:Y-m-d',
         'base_amount' => 'decimal:2',
         'rate' => 'decimal:2',
         'amount' => 'decimal:2',

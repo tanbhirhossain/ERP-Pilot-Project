@@ -6,6 +6,7 @@ import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@core/Utils/format';
+import { FileText } from 'lucide-vue-next';
 import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ receipt: GoodsReceipt }>();
 function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') return 'warning'; return 'neutral'; }
@@ -13,7 +14,11 @@ function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') retu
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: 'Goods Receipts (GRN)', href: route('purchase.receipts.index') }, { title: receipt.receipt_no }]">
     <Head :title="receipt.receipt_no" />
-    <PageHeader title="Pages Detail" description="Vendor: {{ receipt.vendor?.name }} · WH: {{ receipt.warehouse?.name }} · {{ formatDate(receipt.recei" :icon="FileText">
+    <PageHeader
+      :title="`Goods receipt ${receipt.receipt_no}`"
+      :description="`Vendor: ${receipt.vendor?.name ?? '—'} · WH: ${receipt.warehouse?.name ?? '—'} · ${formatDate(receipt.receipt_date)}`"
+      :icon="FileText"
+    >
     <div class="space-y-4">
       <div class="bg-card border rounded-xl shadow-sm p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
@@ -44,6 +49,6 @@ function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') retu
         </StaticTable>
       </div>
     </div>
-      </PageHeader>
+    </PageHeader>
   </AdminLayout>
 </template>

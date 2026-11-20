@@ -19,7 +19,7 @@ class Quotation extends Model
 
     protected $fillable = ['quotation_no', 'customer_id', 'price_list_id', 'quotation_date', 'expiry_date', 'currency', 'subtotal', 'discount_amount', 'vat_amount', 'total_amount', 'status', 'notes', 'terms', 'converted_order_id', 'created_by', 'approved_by', 'approved_at'];
 
-    protected $casts = ['quotation_date' => 'date', 'expiry_date' => 'date', 'subtotal' => 'decimal:2', 'total_amount' => 'decimal:2', 'approved_at' => 'datetime', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2'];
+    protected $casts = ['quotation_date' => 'date:Y-m-d', 'expiry_date' => 'date:Y-m-d', 'subtotal' => 'decimal:2', 'total_amount' => 'decimal:2', 'approved_at' => 'datetime', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2'];
 
     public function customer(): BelongsTo
     {

@@ -12,7 +12,7 @@ class Lot extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['manufacture_date' => 'date', 'expiry_date' => 'date', 'qty_received' => 'decimal:4', 'qty_remaining' => 'decimal:4', 'is_expired' => 'boolean', 'unit_cost' => 'decimal:4'];
+    protected $casts = ['manufacture_date' => 'date:Y-m-d', 'expiry_date' => 'date:Y-m-d', 'qty_received' => 'decimal:4', 'qty_remaining' => 'decimal:4', 'is_expired' => 'boolean', 'unit_cost' => 'decimal:4'];
 
     public function product(): BelongsTo
     {

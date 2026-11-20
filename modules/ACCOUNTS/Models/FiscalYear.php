@@ -15,7 +15,7 @@ class FiscalYear extends Model
 
     protected $fillable = ['name', 'code', 'start_date', 'end_date', 'status', 'closed_by', 'closed_at', 'notes', 'created_by'];
 
-    protected $casts = ['start_date' => 'date', 'end_date' => 'date', 'closed_at' => 'datetime'];
+    protected $casts = ['start_date' => 'date:Y-m-d', 'end_date' => 'date:Y-m-d', 'closed_at' => 'datetime'];
 
     public function periods(): HasMany
     {

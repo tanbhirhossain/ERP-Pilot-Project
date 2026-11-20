@@ -29,7 +29,7 @@ class PurchaseRfq extends Model
     ];
 
     protected $casts = [
-        'due_on' => 'date',
+        'due_on' => 'date:Y-m-d',
         'sent_at' => 'datetime',
         'awarded_at' => 'datetime',
     ];

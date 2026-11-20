@@ -19,7 +19,7 @@ class PosSale extends Model
     protected $fillable = ['pos_no', 'client_ref', 'rang_up_at', 'session_id', 'invoice_id', 'customer_id', 'customer_name', 'warehouse_id', 'sale_date', 'subtotal', 'discount_amount', 'vat_amount', 'total_amount', 'paid_amount', 'due_amount', 'collected_amount', 'change_amount', 'payment_method', 'cash_amount', 'bank_amount', 'cost_total', 'bank_id', 'status', 'notes', 'created_by'];
 
     protected $casts = [
-        'sale_date' => 'date', 'total_amount' => 'decimal:2', 'paid_amount' => 'decimal:2',
+        'sale_date' => 'date:Y-m-d', 'total_amount' => 'decimal:2', 'paid_amount' => 'decimal:2',
         'due_amount' => 'decimal:2', 'collected_amount' => 'decimal:2', 'subtotal' => 'decimal:2',
         'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2', 'change_amount' => 'decimal:2',
         'cash_amount' => 'decimal:2', 'bank_amount' => 'decimal:2', 'cost_total' => 'decimal:2',

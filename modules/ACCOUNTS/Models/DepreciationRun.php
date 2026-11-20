@@ -23,7 +23,7 @@ class DepreciationRun extends Model
     ];
 
     protected $casts = [
-        'run_date' => 'date',
+        'run_date' => 'date:Y-m-d',
         'posted_at' => 'datetime',
         'total_amount' => 'decimal:2',
         'line_count' => 'integer',

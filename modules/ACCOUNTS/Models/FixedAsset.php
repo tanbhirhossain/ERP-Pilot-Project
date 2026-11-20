@@ -31,9 +31,9 @@ class FixedAsset extends Model
     ];
 
     protected $casts = [
-        'purchase_date' => 'date',
-        'in_service_date' => 'date',
-        'disposed_date' => 'date',
+        'purchase_date' => 'date:Y-m-d',
+        'in_service_date' => 'date:Y-m-d',
+        'disposed_date' => 'date:Y-m-d',
         'cost' => 'decimal:2',
         'salvage_value' => 'decimal:2',
         'accumulated_dep' => 'decimal:2',

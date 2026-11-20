@@ -16,13 +16,68 @@ export function formatCompact(value: number | null | undefined): string {
  * A timestamp renders at 115px in a list column and at ~160px in a detail grid; the same string used
  * for both wraps in the narrow one and reads as two facts ("14 Nov 2026" / "03:33 pm") in the wide
  * one. `width` lets the caller say which it is, instead of every caller hard-coding a fixed format.
+ *
+ * A `date` column — a receipt date, a bill date, a joining date — is a *day*, not an instant, and it
+ * does not survive the round trip through an instant unchanged.
+ *
+ * Laravel casts it with timezone information, so `2026-11-20` in the database leaves as
+ * `2026-11-19T18:00:00.000000Z`: the day starts at midnight in Asia/Dhaka, which is six hours earlier
+ * in UTC. Formatting that instant in UTC prints the 19th, and formatting it in a browser further west
+ * prints the 19th too — the receipt disagreed with the ledger it posted to, depending on who opened it.
+ *
+ * The day is therefore recovered the only way it can be: by reading the instant in the zone the day
+ * was written in (see `APP_TIMEZONE` below), then ignoring the time. `created_at` and `posted_at` are
+ * real instants and still format in the reader's own zone, because "when did this happen" is local.
  */
+
+/** The zone every date column in this app is written in. Must match `config('app.timezone')`. */
+const APP_TIMEZONE = 'Asia/Dhaka';
+
+function isDateOnly(value: string): boolean {
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value);
+}
+
+/**
+ * The calendar day an instant names, in the app's zone.
+ *
+ * Built from `en-CA` parts because `en-CA` is the one common locale whose date order is ISO
+ * (`2026-11-20`), and a plain ISO string is what `new Date()` reads back without any further
+ * timezone guessing.
+ */
+function dayOf(value: string): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: APP_TIMEZONE,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(new Date(value));
+
+    return parts;
+}
+
 export function formatDate(
     value: string | null | undefined,
     withTime = false,
     width: 'short' | 'long' = 'long',
 ): string {
     if (!value) return '—';
+
+    const dateOnly = isDateOnly(value);
+
+    // A day-cast column: read it in the zone it was written in, print the day, stop.
+    if (dateOnly) {
+        const day = dayOf(value);
+        const date = new Date(`${day}T00:00:00Z`);
+
+        if (Number.isNaN(date.getTime())) return value;
+
+        return date.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            timeZone: 'UTC',
+        });
+    }
 
     const date = new Date(value);
 

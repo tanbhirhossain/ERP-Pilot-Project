@@ -11,7 +11,7 @@ class Payable extends Model
 
     protected $fillable = ['partner_id', 'journal_id', 'bill_no', 'bill_date', 'due_date', 'amount', 'paid_amount', 'status'];
 
-    protected $casts = ['bill_date' => 'date', 'due_date' => 'date', 'amount' => 'decimal:2', 'paid_amount' => 'decimal:2', 'balance' => 'decimal:2'];
+    protected $casts = ['bill_date' => 'date:Y-m-d', 'due_date' => 'date:Y-m-d', 'amount' => 'decimal:2', 'paid_amount' => 'decimal:2', 'balance' => 'decimal:2'];
 
     public function journal(): BelongsTo
     {

@@ -21,7 +21,7 @@ class Invoice extends Model
 
     protected $fillable = ['invoice_no', 'order_id', 'quotation_id', 'customer_id', 'warehouse_id', 'journal_id', 'invoice_date', 'due_date', 'currency', 'subtotal', 'discount_amount', 'vat_amount', 'total_amount', 'paid_amount', 'status', 'payment_status', 'payment_method', 'bank_id', 'notes', 'created_by', 'posted_by', 'posted_at'];
 
-    protected $casts = ['invoice_date' => 'date', 'due_date' => 'date', 'total_amount' => 'decimal:2', 'paid_amount' => 'decimal:2', 'posted_at' => 'datetime', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2', 'balance' => 'decimal:2'];
+    protected $casts = ['invoice_date' => 'date:Y-m-d', 'due_date' => 'date:Y-m-d', 'total_amount' => 'decimal:2', 'paid_amount' => 'decimal:2', 'posted_at' => 'datetime', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2', 'balance' => 'decimal:2'];
 
     public function customer(): BelongsTo
     {

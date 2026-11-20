@@ -11,7 +11,7 @@ class Receivable extends Model
 
     protected $fillable = ['partner_id', 'journal_id', 'invoice_no', 'invoice_date', 'due_date', 'amount', 'received_amount', 'status'];
 
-    protected $casts = ['invoice_date' => 'date', 'due_date' => 'date', 'amount' => 'decimal:2', 'received_amount' => 'decimal:2', 'balance' => 'decimal:2'];
+    protected $casts = ['invoice_date' => 'date:Y-m-d', 'due_date' => 'date:Y-m-d', 'amount' => 'decimal:2', 'received_amount' => 'decimal:2', 'balance' => 'decimal:2'];
 
     public function journal(): BelongsTo
     {

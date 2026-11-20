@@ -19,7 +19,7 @@ class GoodsReceipt extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['receipt_date' => 'date', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2', 'total_amount' => 'decimal:2', 'posted_at' => 'datetime'];
+    protected $casts = ['receipt_date' => 'date:Y-m-d', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2', 'total_amount' => 'decimal:2', 'posted_at' => 'datetime'];
 
     public function order(): BelongsTo
     {

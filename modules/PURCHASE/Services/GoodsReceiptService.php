@@ -59,6 +59,18 @@ class GoodsReceiptService
 
         return DB::transaction(function () use ($receipt): GoodsReceipt {
             $receipt->load(['items.product', 'order']);
+
+            // Refuse to receive more than the order still owes, before a single unit moves.
+            //
+            // The create form already offers only the outstanding quantity, but the form is not the
+            // rule: two people with the form open see the same remaining 50, and whoever posts second
+            // would put another 50 on the shelf and another 50 in GRNI, against goods that were never
+            // delivered. The same goes for a replayed request. So the check lives here, inside the
+            // transaction, where nothing can slip between reading the remaining quantity and taking it.
+            if ($receipt->order_id) {
+                $this->assertNotOverReceiving($receipt);
+            }
+
             if (app()->bound(InventoryStockProviderInterface::class)) {
                 $provider = app(InventoryStockProviderInterface::class);
                 $items = $receipt->items->map(fn ($it) => ['product_id' => $it->product_id, 'variant_id' => $it->variant_id, 'warehouse_id' => $receipt->warehouse_id, 'qty' => (float) $it->qty, 'unit_cost' => (float) $it->unit_price])->toArray();
@@ -155,6 +167,11 @@ class GoodsReceiptService
             if ($receipt->order_id) {
                 $order = PurchaseOrder::find($receipt->order_id);
                 if ($order) {
+                    // Only the lines that were incremented on post(). A receipt line with no
+                    // `order_item_id` — an ad-hoc line typed onto the GRN — never incremented
+                    // anything, so voiding it must not subtract from another line's received
+                    // quantity. It used to: cancelling one such receipt knocked a fully received
+                    // order back to zero while its goods stayed on the shelf.
                     foreach ($receipt->items as $ri) {
                         if ($ri->order_item_id) {
                             PurchaseOrderItem::where('id', $ri->order_item_id)->decrement('qty_received', (float) $ri->qty);
@@ -170,6 +187,44 @@ class GoodsReceiptService
 
             return $receipt->fresh();
         });
+    }
+
+    /**
+     * Refuse a receipt that would put more on the shelf than the order asked for.
+     *
+     * Over-receipt is not a rounding error to be tolerated: the surplus stock is real but nobody
+     * ordered it, the GRNI accrual credits a liability for goods that were never delivered, and the
+     * extra units sit in inventory at a cost the vendor never billed. If a delivery genuinely is
+     * larger than the order, the order is what is wrong — raise the PO, then receive against it.
+     */
+    private function assertNotOverReceiving(GoodsReceipt $receipt): void
+    {
+        foreach ($receipt->items as $line) {
+            if (! $line->order_item_id) {
+                continue; // not tied to an order line, so there is nothing to over-receive against
+            }
+
+            $ordered = PurchaseOrderItem::find($line->order_item_id);
+
+            if ($ordered === null) {
+                throw new \DomainException(sprintf(
+                    'Line "%s" points at an order line that no longer exists — reload the order before receiving.',
+                    $line->product_name,
+                ));
+            }
+
+            $outstanding = round((float) $ordered->qty - (float) $ordered->qty_received, 4);
+            $arriving = round((float) $line->qty, 4);
+
+            if ($arriving > $outstanding + 0.0001) {
+                throw new \DomainException(sprintf(
+                    'Cannot receive %.2f of "%s": the order still owes %.2f. Receive the outstanding quantity, or raise the order first if a bigger delivery was agreed.',
+                    $arriving,
+                    $line->product_name,
+                    max(0.0, $outstanding),
+                ));
+            }
+        }
     }
 
     private function enrichTotals(array $data): array

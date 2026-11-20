@@ -20,7 +20,7 @@ class VendorBill extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['bill_date' => 'date', 'due_date' => 'date', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2', 'total_amount' => 'decimal:2', 'paid_amount' => 'decimal:2', 'posted_at' => 'datetime'];
+    protected $casts = ['bill_date' => 'date:Y-m-d', 'due_date' => 'date:Y-m-d', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'vat_amount' => 'decimal:2', 'total_amount' => 'decimal:2', 'paid_amount' => 'decimal:2', 'posted_at' => 'datetime'];
 
     public function vendor(): BelongsTo
     {

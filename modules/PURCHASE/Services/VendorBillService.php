@@ -57,6 +57,26 @@ class VendorBillService
             throw new \DomainException('Only draft can be posted.');
         }
 
+        // One invoice per delivery. A bill raised against a receipt already billed elsewhere would
+        // reverse the same GRNI a second time: the accrual would go negative, AP would carry two
+        // liabilities for one delivery, and both documents would look perfectly ordinary. The check
+        // is by `receipt_id` and ignores cancelled bills, so voiding the wrong one re-opens the way.
+        if ($bill->receipt_id) {
+            $sibling = VendorBill::query()
+                ->where('receipt_id', $bill->receipt_id)
+                ->whereKeyNot($bill->id)
+                ->whereNotIn('status', ['cancelled'])
+                ->first();
+
+            if ($sibling !== null) {
+                throw new \DomainException(sprintf(
+                    'GRN %s is already billed on %s. One delivery gets one vendor invoice — void that bill first if it was wrong.',
+                    $bill->receipt?->receipt_no ?: ('#'.$bill->receipt_id),
+                    $sibling->bill_no,
+                ));
+            }
+        }
+
         // Generic approval matrix (Phase 1) — before the transaction so the
         // pending request survives a refusal. No-op without an active policy.
         app(ApprovalService::class)

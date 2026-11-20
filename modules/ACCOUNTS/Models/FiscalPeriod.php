@@ -11,7 +11,7 @@ class FiscalPeriod extends Model
 
     protected $fillable = ['fiscal_year_id', 'name', 'month_no', 'start_date', 'end_date', 'status'];
 
-    protected $casts = ['start_date' => 'date', 'end_date' => 'date', 'month_no' => 'integer'];
+    protected $casts = ['start_date' => 'date:Y-m-d', 'end_date' => 'date:Y-m-d', 'month_no' => 'integer'];
 
     public $timestamps = true;
 

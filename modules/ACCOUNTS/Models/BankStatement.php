@@ -11,7 +11,7 @@ class BankStatement extends Model
 
     protected $fillable = ['bank_id', 'txn_date', 'description', 'reference_no', 'amount', 'balance', 'matched_bank_txn_id', 'is_reconciled', 'reconciled_at', 'import_batch'];
 
-    protected $casts = ['txn_date' => 'date', 'amount' => 'decimal:2', 'balance' => 'decimal:2', 'is_reconciled' => 'boolean', 'reconciled_at' => 'datetime'];
+    protected $casts = ['txn_date' => 'date:Y-m-d', 'amount' => 'decimal:2', 'balance' => 'decimal:2', 'is_reconciled' => 'boolean', 'reconciled_at' => 'datetime'];
 
     public function bank(): BelongsTo
     {

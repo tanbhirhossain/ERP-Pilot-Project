@@ -11,7 +11,7 @@ import { computed, ref } from 'vue';
 import { ClipboardList, Send, Check, X, Trash2, FileText, Calculator, Handshake, ExternalLink } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { confirmDialog, promptDialog } from '@core/Composables/useConfirm';
-import { formatCurrency } from '@core/Utils/format';
+import { formatCurrency, formatDate } from '@core/Utils/format';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
@@ -37,6 +37,15 @@ const isDraft = computed(() => req.value.status === 'draft');
 /** A budget block makes "submit" impossible; the approver's way round it is a recorded override. */
 const blockedByBudget = computed(() => Boolean(props.budget?.over));
 
+/** `2026-11` is a database key, not a month a person reads. */
+function formatPeriod(value: string | null | undefined): string {
+    if (!value) return '—';
+    const [year, month] = value.split('-');
+    const date = new Date(Number(year), Number(month) - 1, 1);
+
+    return Number.isNaN(date.getTime()) ? value : formatDate(date.toISOString(), false, 'long');
+}
+
 const tone = computed(() => {
     const s = req.value.status;
 
@@ -51,8 +60,16 @@ const tone = computed(() => {
  * Serialised date casts are ISO strings (`2026-11-20T00:00:00.000000Z`); a date on a document is a day,
  * and `<input type="date">` only accepts `YYYY-MM-DD` — so both the label and the form go through here.
  */
+/**
+ * The calendar day of a date column, the way a person reads it.
+ *
+ * Slicing the first ten characters off the serialised value looked right and was wrong: a date cast
+ * leaves PHP as `2026-11-19T18:00:00.000000Z` (midnight in Dhaka, six hours earlier in UTC), so the
+ * slice printed the day *before* the one stored. `formatDate` recovers the day in the zone it was
+ * written in; this keeps the null-vs-'not stated' distinction the callers rely on.
+ */
 function day(value: unknown): string | null {
-    return value ? String(value).slice(0, 10) : null;
+    return value ? formatDate(String(value)) : null;
 }
 
 function remaining(line: any) {
@@ -271,12 +288,12 @@ const showOverrideHelp = ref(false);
             <EnterpriseCard title="Budget" :icon="Calculator">
                 <div v-if="!budget" class="text-sm text-muted-foreground">
                     No budget line governs this requisition — either it names no account, or the month
-                    {{ req.need_by ?? 'of need' }} has no approved plan. That is not a violation; it is an
+                    of {{ req.need_by ? formatDate(req.need_by, false, 'long') : 'need' }} has no approved plan. That is not a violation; it is an
                     uncontrolled spend, and the difference matters at reporting time.
                 </div>
                 <div v-else class="space-y-2 text-sm">
                     <DetailItem label="Account" :value="budget.account ?? '—'" />
-                    <DetailItem label="Period" :value="budget.period" />
+                    <DetailItem label="Period" :value="formatPeriod(budget.period)" />
                     <div class="grid grid-cols-2 gap-2">
                         <div class="rounded-lg bg-muted/40 px-3 py-2">
                             <p class="text-xs text-muted-foreground">Plan</p>

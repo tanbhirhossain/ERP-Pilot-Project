@@ -18,7 +18,7 @@ class StockCount extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['count_date' => 'date', 'reconciled_at' => 'datetime'];
+    protected $casts = ['count_date' => 'date:Y-m-d', 'reconciled_at' => 'datetime'];
 
     public function warehouse(): BelongsTo
     {

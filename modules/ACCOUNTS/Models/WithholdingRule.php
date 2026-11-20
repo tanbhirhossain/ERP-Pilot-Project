@@ -19,7 +19,7 @@ class WithholdingRule extends Model
         'rate' => 'decimal:2',
         'threshold' => 'decimal:2',
         'is_active' => 'boolean',
-        'effective_from' => 'date',
+        'effective_from' => 'date:Y-m-d',
     ];
 
     public function withholdings(): HasMany
