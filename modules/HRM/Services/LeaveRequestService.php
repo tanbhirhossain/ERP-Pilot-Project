@@ -228,7 +228,30 @@ final class LeaveRequestService
                 continue;
             }
 
-            $daily = AttendanceDaily::firstOrNew(['employee_id' => $leave->employee_id, 'duty_date' => $date->toDateString()]);
+            /*
+             * `duty_date` is a `date` column by declaration and a free string in fact: the attendance
+             * pipeline writes `2026-10-22 00:00:00` while rows created elsewhere are stored as
+             * `2026-10-22`. `firstOrNew()` compares the model's cast value — which Laravel serialises
+             * back to the `Y-m-d H:i:s` form — against that raw string, so the row that exists is not
+             * found, a duplicate is inserted, the unique index rejects it, and the *whole* approval
+             * transaction rolls back. The application then stays `Pending` for ever, and resubmitting
+             * fails the same way. Found on the clean rebuild: approving a one-day leave for F-0009
+             * (22 October, a day the pipeline had already recorded) could not be approved at all.
+             *
+             * Matching on the date itself rather than on the stored string is the fix; `whereDate`
+             * finds the row whichever shape it was written in.
+             */
+            $daily = AttendanceDaily::query()
+                ->where('employee_id', $leave->employee_id)
+                ->whereDate('duty_date', $date->toDateString())
+                ->first();
+
+            if ($daily === null) {
+                $daily = new AttendanceDaily([
+                    'employee_id' => $leave->employee_id,
+                    'duty_date' => $date->toDateString(),
+                ]);
+            }
 
             // Somebody who punched in was at work; leave does not overwrite a real attendance record.
             if ($daily->exists && ($daily->primary_punch_in || $daily->primary_punch_out)) {
@@ -257,7 +280,7 @@ final class LeaveRequestService
         foreach ($marks as $mark) {
             $daily = AttendanceDaily::query()
                 ->where('employee_id', $mark->employee_id)
-                ->where('duty_date', $mark->duty_date)
+                ->whereDate('duty_date', $mark->duty_date)
                 ->first();
 
             if ($daily !== null && $daily->status === 'On Leave' && ! $daily->primary_punch_in && ! $daily->primary_punch_out) {

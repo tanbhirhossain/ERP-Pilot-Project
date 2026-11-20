@@ -315,6 +315,38 @@ it('puts the attendance calendar back when an approved leave is deleted', functi
     expect($restored->status)->toBe('Absent');
 });
 
+/* ---------------- G7: the pipeline's date shape must not block approval ------------- */
+
+it('approves leave for a day whose attendance row was written by the pipeline', function (): void {
+    lvEmployee('E-15');
+    $type = lvType('Sick Leave', 16);
+    lvPolicy($type);
+
+    /*
+     * The attendance pipeline stores `2026-10-22 00:00:00` in `attendance_dailies.duty_date`, and
+     * `firstOrNew(['duty_date' => '2026-10-22'])` serialises its argument back to that same longer
+     * string — but only when Eloquent sees a value it can cast, and the lookup on the raw string
+     * missed the row. A duplicate insert then hit the unique index, the approval transaction rolled
+     * back, and the application sat at Pending for ever (seen on the clean rebuild).
+     */
+    DB::table('attendance_dailies')->insert([
+        ['employee_id' => 'E-15', 'duty_date' => '2026-10-22 00:00:00', 'status' => 'Present',
+         'primary_punch_in' => '2026-10-22 09:00:00', 'primary_punch_out' => '2026-10-22 17:00:00',
+         'created_at' => now(), 'updated_at' => now()],
+    ]);
+
+    $leave = lvRequest('E-15', $type, '2026-10-22', '2026-10-22', 1, 'Pending');
+    $approved = app(LeaveRequestService::class)->approve($leave);
+
+    expect($approved->status)->toBe('Approved');
+
+    // The day already has punches, so the attendance row keeps its real status...
+    $row = DB::table('attendance_dailies')->where('employee_id', 'E-15')->whereDate('duty_date', '2026-10-22')->first();
+    expect($row->status)->toBe('Present')
+        // ...and no duplicate row was created.
+        ->and(DB::table('attendance_dailies')->where('employee_id', 'E-15')->count())->toBe(1);
+});
+
 /* --------------------- G6 + the 227-day register: long leave is separate ----------- */
 
 it('reports long leave apart from the ordinary days an employee can spend', function (): void {
