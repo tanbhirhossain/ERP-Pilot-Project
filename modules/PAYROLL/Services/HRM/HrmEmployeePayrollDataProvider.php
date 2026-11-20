@@ -17,7 +17,37 @@ use Modules\PAYROLL\Interfaces\HRM\EmployeePayrollDataProviderInterface;
 
 final class HrmEmployeePayrollDataProvider implements EmployeePayrollDataProviderInterface
 {
+    /*
+     * The statuses a person can be paid in.
+     *
+     * `Resigned` belongs here even though it reads like a leaver: it is written the day a resignation
+     * is *agreed*, which can be months before the last working day, and until that day the person is
+     * still on the roster and still owed a salary. Whether they are paid is decided by the date —
+     * `$servingNotice()` / `hasLeftOnOrBefore()` — never by the label. Leaving `Resigned` out of this
+     * list would silently stop paying somebody for their notice period.
+     *
+     * `Inactive`, `Suspended` and `Terminated` stay out: those are written by hand precisely to say
+     * "do not pay this person", and nothing in the resignation flow writes them.
+     */
+    private const EMPLOYABLE = ['Active', 'On Leave', 'Resigned'];
+
     public function __construct(private readonly EmployeeService $employees) {}
+
+    /**
+     * `is_active = false` used to mean "gone" outright. It now also means "the last working day has
+     * arrived and the employment was switched off" — which is the same statement, — but a leaver whose
+     * last day is still ahead of the period end is paid regardless, because they are still serving
+     * their notice. The date, not the flag, decides.
+     */
+    private function servingNotice(string $periodEnd): Closure
+    {
+        return fn ($query) => $query
+            ->where('is_active', false)
+            ->whereExists(fn ($q) => $q->selectRaw('1')->from('employee_resignations as er')
+                ->whereColumn('er.employee_id', 'employees.employee_id')
+                ->where('er.status', 'Approved')
+                ->whereDate('er.last_working_date', '>', $periodEnd));
+    }
 
     public function employeesForPayroll(string $periodStart, string $periodEnd, array $excludedEmployeeIds = []): LazyCollection
     {
@@ -25,9 +55,9 @@ final class HrmEmployeePayrollDataProvider implements EmployeePayrollDataProvide
 
         return Employee::query()
             ->when($excludedEmployeeIds !== [], fn ($query) => $query->whereNotIn('employees.employee_id', $excludedEmployeeIds))
-            ->where('is_active', true)
-            ->whereIn('status', ['Active', 'On Leave'])
+            ->whereIn('status', self::EMPLOYABLE)
             ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('employee_resignations as er')->whereColumn('er.employee_id', 'employees.employee_id')->where('er.status', 'Approved')->whereDate('er.last_working_date', '<=', $periodEnd))
+            ->where(fn ($q) => $q->where('is_active', true)->orWhere($this->servingNotice($periodEnd)))
             ->where($this->payrollable($periodStart, $periodEnd))
             // `mapEmployee()` returns null for anyone who joins after the period ends; stating the same
             // rule in SQL keeps the count and the batch equal by construction, not by coincidence.
@@ -48,9 +78,9 @@ final class HrmEmployeePayrollDataProvider implements EmployeePayrollDataProvide
     public function countEmployeesForPayroll(string $periodStart, string $periodEnd): int
     {
         return Employee::query()
-            ->where('is_active', true)
-            ->whereIn('status', ['Active', 'On Leave'])
+            ->whereIn('status', self::EMPLOYABLE)
             ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('employee_resignations as er')->whereColumn('er.employee_id', 'employees.employee_id')->where('er.status', 'Approved')->whereDate('er.last_working_date', '<=', $periodEnd))
+            ->where(fn ($q) => $q->where('is_active', true)->orWhere($this->servingNotice($periodEnd)))
             ->where($this->payrollable($periodStart, $periodEnd))
             ->where(fn ($q) => $q->whereNull('joining_date')->orWhereDate('joining_date', '<=', $periodEnd))
             ->count();
@@ -93,9 +123,9 @@ final class HrmEmployeePayrollDataProvider implements EmployeePayrollDataProvide
     public function unpayableForPeriod(string $periodStart, string $periodEnd, int $limit = 200): Collection
     {
         return Employee::query()
-            ->where('is_active', true)
-            ->whereIn('status', ['Active', 'On Leave'])
+            ->whereIn('status', self::EMPLOYABLE)
             ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('employee_resignations as er')->whereColumn('er.employee_id', 'employees.employee_id')->where('er.status', 'Approved')->whereDate('er.last_working_date', '<=', $periodEnd))
+            ->where(fn ($q) => $q->where('is_active', true)->orWhere($this->servingNotice($periodEnd)))
             ->whereNot($this->payrollable($periodStart, $periodEnd))
             ->with(['department:id,name', 'salaries' => fn ($q) => $q->select('employee_id', 'basic_salary', 'gross_salary', 'effective_from', 'effective_to')->orderBy('effective_from')])
             ->orderBy('employee_id')
@@ -129,7 +159,12 @@ final class HrmEmployeePayrollDataProvider implements EmployeePayrollDataProvide
     public function employeeForPayroll(string $employeeId, string $periodStart, string $periodEnd): ?EmployeePayrollData
     {
         $employee = $this->employees->findByEmployeeId($employeeId);
-        if ($employee === null || ! $employee->is_active || ! in_array($employee->status, ['Active', 'On Leave'], true) || EmployeeResignation::query()->where('employee_id', $employeeId)->where('status', 'Approved')->whereDate('last_working_date', '<=', $periodEnd)->exists()) {
+        if ($employee === null
+            || ! in_array((string) $employee->status, self::EMPLOYABLE, true)
+            // "Employed at some point during the period": the same question the roster query asks.
+            // A month is paid if any of it was worked, and `mapEmployee()` pro-rates to the last day.
+            || ! $employee->isStillEmployedOn($periodStart)
+            || (! $employee->is_active && ! $employee->hasLeftOnOrBefore($periodStart))) {
             return null;
         }
 

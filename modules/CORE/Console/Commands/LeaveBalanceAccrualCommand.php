@@ -37,7 +37,20 @@ class LeaveBalanceAccrualCommand extends Command
         }
 
         $created = 0;
-        $employees = Employee::where('status', 'Active')->get(['employee_id']);
+        /*
+         * Everyone who will still be employed when the leave year opens.
+         *
+         * This used to read `status = 'Active'`, which quietly excluded anybody whose resignation had
+         * already been agreed — including the ones still working a notice period, who accrue leave in
+         * law and in practice. The question a year's accrual asks is not "what is the label today" but
+         * "will this person be here at all", so a future-dated leaver accrues and an actual leaver does
+         * not. `Resigned` is in the list for the same reason it is in payroll's: the label is written
+         * early, the employment ends late.
+         */
+        $employees = Employee::query()
+            ->whereIn('status', ['Active', 'On Leave', 'Resigned'])
+            ->whereDoesntHave('resignations', fn ($q) => $q->where('status', 'Approved')->whereDate('last_working_date', '<=', now()->toDateString()))
+            ->get(['employee_id']);
 
         foreach ($employees as $employee) {
             foreach ($types as $type) {

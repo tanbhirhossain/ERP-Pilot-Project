@@ -24,7 +24,18 @@ final class HrmReportsService
         $byStatus = DB::table('employees')->selectRaw('status, COUNT(*) as cnt')->groupBy('status')->get();
         $byType = DB::table('employees')->selectRaw('employment_type, COUNT(*) as cnt')->groupBy('employment_type')->get();
         $total = DB::table('employees')->count();
-        $active = DB::table('employees')->where('status', 'Active')->count();
+        /*
+         * "Active" on a headcount screen means *on the books today*: somebody serving notice is still
+         * staff, and somebody whose last working day has passed is not, whatever their label says.
+         * The count therefore follows the approved last working day rather than the status column.
+         */
+        $active = DB::table('employees')
+            ->whereIn('status', ['Active', 'On Leave', 'Resigned'])
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('employee_resignations as er')
+                ->whereColumn('er.employee_id', 'employees.employee_id')
+                ->where('er.status', 'Approved')
+                ->whereDate('er.last_working_date', '<=', now()->toDateString()))
+            ->count();
 
         return compact('byDept', 'byDesig', 'byStatus', 'byType', 'total', 'active');
     }

@@ -189,7 +189,16 @@ final class ProvidentFundService
         $policy = PfPolicy::query()->where('is_active', true)->findOrFail($policyId);
 
         $ids = $allActive
-            ? Employee::query()->where('is_active', true)->whereIn('status', ['Active', 'On Leave'])
+            /*
+             * Who can be given a fund account: everyone still employed. `is_active` is false only once a
+             * leaver's last working day has arrived (the resignation service writes it then), so the
+             * date check below is what keeps somebody serving notice in — the `Resigned` label alone
+             * used to be enough to skip them, which meant a person on three months' notice accrued no
+             * fund for three months.
+             */
+            ? Employee::query()
+                ->whereIn('status', ['Active', 'On Leave', 'Resigned'])
+                ->whereDoesntHave('resignations', fn ($q) => $q->where('status', 'Approved')->whereDate('last_working_date', '<=', now()->toDateString()))
                 ->orderBy('employee_id')->pluck('employee_id')->all()
             : array_values(array_unique(array_map('strval', $employeeIds)));
 

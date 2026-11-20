@@ -3,7 +3,9 @@
 namespace Modules\HRM\Services;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Modules\HRM\Models\Employee\Employee;
 use Modules\HRM\Models\Employee\EmployeeResignation;
 
 final class EmployeeResignationService
@@ -53,9 +55,58 @@ final class EmployeeResignationService
              */
             if ($decision === 'Approved') {
                 $this->clearance->seedForResignation($record->employee_id, $record->id);
+                $this->endEmployment($record);
             }
 
             return $record->refresh();
         });
+    }
+
+    /**
+     * Make the employee record agree with the resignation that was just approved.
+     *
+     * Approving a resignation never wrote `employees.status`. The employee stayed `Active` for ever:
+     * HR screens said "Active" about somebody whose last day had passed, the directory listed them as
+     * current staff, and the only place that knew better was payroll, which excludes them by a
+     * separate `NOT EXISTS` on `employee_resignations`. Two sources of truth, and the visible one was
+     * wrong. The correction is to write the record here, in the same transaction as the approval, so
+     * the two cannot disagree.
+     *
+     * **When** it is written is the whole subtlety, and it is deliberately *not* "now":
+     *
+     *   - Approval happens before the last working day, not on it. A three-month notice period means
+     *     ninety days in which this person is still employed, still rostered, still paid.
+     *     Flipping `is_active` on approval day would remove them from payroll at once and they would
+     *     stop being paid for the notice period they are still working. That is a payroll error, not
+     *     a tidy-up, so the flag only moves on the day it is true.
+     *   - The status itself is written on approval, because it is a *label* read by screens, and HR
+     *     wants to see "Resigned, leaving 20 January" from the moment it is agreed. Payroll does not
+     *     read the label alone, it reads {@see Employee::hasLeftOnOrBefore()} which compares the date —
+     *     so a future-dated leaver is still paid, and still dockable, until their last day passes.
+     *
+     * A `last_working_date` that has already gone, or is today, is settled immediately: there is no
+     * notice period left to protect.
+     */
+    private function endEmployment(EmployeeResignation $resignation): void
+    {
+        $employee = Employee::query()->where('employee_id', $resignation->employee_id)->lockForUpdate()->first();
+
+        if ($employee === null) {
+            return;
+        }
+
+        $lastWorkingDay = $resignation->last_working_date instanceof \DateTimeInterface
+            ? Carbon::instance($resignation->last_working_date)->toDateString()
+            : ($resignation->last_working_date !== null ? Carbon::parse($resignation->last_working_date)->toDateString() : null);
+
+        $updates = ['status' => 'Resigned'];
+
+        // Only switch the employment off once the last day has actually arrived. Before that the
+        // person still works here and payroll must keep paying them.
+        if ($lastWorkingDay === null || $lastWorkingDay <= now()->toDateString()) {
+            $updates['is_active'] = false;
+        }
+
+        $employee->update($updates);
     }
 }

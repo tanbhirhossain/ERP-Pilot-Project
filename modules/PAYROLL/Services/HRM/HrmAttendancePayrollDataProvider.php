@@ -86,10 +86,18 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
          * The last working day is the fact that decides this, not a status somebody has to remember
          * to change, so it is read from the resignation record itself.
          */
+        /*
+         * Read *every* approved last working day, not only the ones already in the past.
+         *
+         * The `<= $periodEnd` filter that used to be here was wrong in the other direction from the
+         * P32 bug it was added with: somebody whose last day is still ahead of the period end is
+         * *still employed*, so the date has to be known to the absence loop — `$day > $lastWorkingDay`
+         * is what stops the docking, and with no date the loop docks them as if they were staying for
+         * ever. Their month then reads as absent for days they have not even worked yet.
+         */
         $lastWorkingDays = DB::table('employee_resignations')
             ->whereIn('employee_id', $employeeIds)
             ->where('status', 'Approved')
-            ->whereDate('last_working_date', '<=', $periodEnd)
             ->orderBy('last_working_date')
             ->get(['employee_id', 'last_working_date'])
             ->mapWithKeys(fn ($row): array => [(string) $row->employee_id => Carbon::parse($row->last_working_date)->toDateString()])
@@ -197,12 +205,32 @@ final class HrmAttendancePayrollDataProvider implements AttendancePayrollDataPro
             // Default 5 = Friday. Never null: "no weekly off" is not a state an employee can be in.
             $fallbackDay = (int) ($fallbackOffDays[$employeeId] ?? self::DEFAULT_WEEKLY_OFF_DAY);
 
-            // Only somebody who still works here can be absent. A resigned or terminated employee is
-            // settled by their final settlement, not by docking days from a salary they are no longer
-            // earning — and an employee record created ahead of a joining date has nothing to deduct
-            // for days that predate them.
+            /*
+             * Only somebody who still works here can be absent. An employee who has actually left is
+             * settled by their final settlement, not by docking days from a salary they are no longer
+             * earning — and an employee record created ahead of a joining date has nothing to deduct
+             * for days that predate them.
+             *
+             * "Has actually left" is a date, not a label. `employees.status` reads `Resigned` from the
+             * moment a resignation is agreed, which can be a three-month notice period before the last
+             * working day; treating that label as "gone" here would silently stop docking — and, worse,
+             * make the whole absence block unreachable — for somebody who is still at work. So the test
+             * is `hasLeftOnOrBefore(periodEnd)`, which compares the approved last working day and falls
+             * back to the label only for records that predate the resignation table.
+             *
+             * `On Leave` is still employed: a person on three months of leave is docked for the days
+             * their leave does not cover, exactly as before.
+             *
+             * The date asked about is the day *before the period starts*, not the period end. Somebody
+             * who left on the 20th was still employed for the first twenty days of that month, and
+             * those are exactly the days the loop below charges them for (it stops at the last working
+             * day). Asking about the period end instead would wipe the whole month the moment the last
+             * day fell inside it — the leaver would escape a month they had mostly worked.
+             */
             $employmentIsLive = $employee !== null
-                && ($employee->status === null || strcasecmp((string) $employee->status, 'Active') === 0);
+                && ($employee->status === null
+                    || in_array(strtolower((string) $employee->status), ['active', 'on leave', 'resigned'], true))
+                && ! $employee->hasLeftOnOrBefore(Carbon::parse($periodStart)->subDay()->toDateString());
 
             $punchedInPeriod = isset($punchedEmployeeIds[$employeeId]);
             $hasPunchEvidence = $punchedInPeriod || $missingAttendancePolicy === 'apply';

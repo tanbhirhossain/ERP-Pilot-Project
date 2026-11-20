@@ -19,6 +19,7 @@ use Modules\HRM\Models\Designation;
 use Modules\HRM\Models\DeviceUser;
 use Modules\HRM\Models\EmployeeAsset;
 use Modules\HRM\Models\EmployeeChecklist;
+use Modules\HRM\Models\Employee\EmployeeResignation;
 use Modules\HRM\Models\EmployeeDocument;
 use Modules\HRM\Models\EmployeeMovement;
 use Modules\HRM\Models\EmployeeProbation;
@@ -163,6 +164,51 @@ class Employee extends Model
     public function clearanceTasks(): HasMany
     {
         return $this->hasMany(ClearanceTask::class, 'employee_id', 'employee_id');
+    }
+
+    /**
+     * Has this person's employment ended on or before `$date`?
+     *
+     * `employees.status` is a *label* — HR writes "Resigned" the day a resignation is agreed, which
+     * can be three months before the last working day. Payroll must not read that label as "gone", or
+     * it stops paying somebody who is still working their notice. So the question payroll actually
+     * asks is this one: look at the approved resignation's date, and fall back to the label only for
+     * leavers whose record predates the resignation table.
+     *
+     * Deliberately *not* a query scope: it needs the resignation, which is one small eager load, and
+     * hiding it behind a scope made every caller that already held the employee re-query for it.
+     */
+    public function hasLeftOnOrBefore(?string $date = null): bool
+    {
+        if ($this->relationLoaded('resignations')) {
+            $resignation = $this->resignations
+                ->where('status', 'Approved')
+                ->sortByDesc(fn ($row) => $row->last_working_date?->toDateString() ?? '')
+                ->first();
+        } else {
+            $resignation = $this->resignations()->where('status', 'Approved')->orderByDesc('last_working_date')->first();
+        }
+
+        $lastDay = $resignation?->last_working_date;
+
+        if ($lastDay !== null) {
+            return $lastDay->toDateString() <= ($date ?? now()->toDateString());
+        }
+
+        // No resignation on record: the label is all there is, and it is only ever set by hand.
+        return in_array((string) $this->status, ['Resigned', 'Terminated'], true);
+    }
+
+    /** The same question from the other side, and the one a salary period asks. */
+    public function isStillEmployedOn(string $periodEnd): bool
+    {
+        return ! $this->hasLeftOnOrBefore($periodEnd);
+    }
+
+    /** Approved resignations only, newest last working day first — what `hasLeftOnOrBefore()` reads. */
+    public function resignations(): HasMany
+    {
+        return $this->hasMany(EmployeeResignation::class, 'employee_id', 'employee_id');
     }
 
     public function getActivitylogOptions(): LogOptions

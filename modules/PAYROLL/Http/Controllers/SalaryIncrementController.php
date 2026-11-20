@@ -63,7 +63,14 @@ final class SalaryIncrementController extends Controller
         $employeeIds = match ($data['scope']) {
             'single' => [$data['employee_id']],
             'selected' => $data['employee_ids'],
-            default => Employee::query()->where('is_active', true)->whereIn('status', ['Active', 'On Leave'])->orderBy('employee_id')->pluck('employee_id')->all(),
+            // "Everyone" on an increment run means everyone who will still be employed on the
+            // effective date. `Status = Resigned` is written when a resignation is *agreed*, which can
+            // be months before the last day, so the label alone would skip people still on the roster;
+            // the effective date decides. A manual `Inactive`/`Suspended` still opts a person out.
+            default => Employee::query()
+                ->whereIn('status', ['Active', 'On Leave', 'Resigned'])
+                ->whereDoesntHave('resignations', fn ($q) => $q->where('status', 'Approved')->whereDate('last_working_date', '<=', $data['effective_date']))
+                ->orderBy('employee_id')->pluck('employee_id')->all(),
         };
         if (! $employeeIds) {
             return back()->with('error', 'No payroll-eligible employees were found for this increment.');
