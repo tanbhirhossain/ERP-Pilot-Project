@@ -4,6 +4,7 @@ import type { PurchaseOrder } from '@purchase/types';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import ActivityTimeline from '@core/Components/ActivityTimeline.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import { FileText } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@core/Utils/format';
@@ -14,7 +15,11 @@ function tone(s:string){ if(s==='received') return 'success'; if(s==='confirmed'
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: order.order_no }]">
     <Head :title="order.order_no" />
-    <PageHeader title="Pages Detail" description="Vendor: {{ order.vendor?.name }} · WH: {{ order.warehouse?.name }} · {{ formatDate(order.order_date)" :icon="FileText">
+    <PageHeader
+      :title="`Purchase order ${order.order_no}`"
+      :description="`Vendor: ${order.vendor?.name ?? '—'} · WH: ${order.warehouse?.name ?? '—'} · ${formatDate(order.order_date)}`"
+      :icon="FileText"
+    >
     <div class="space-y-4">
       <div class="bg-card border rounded-xl shadow-sm p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">

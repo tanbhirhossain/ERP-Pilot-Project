@@ -6,6 +6,7 @@ import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import { formatDate } from '@core/Utils/format';
 import { useConfirm } from '@core/Composables/useConfirm';
 const { confirm } = useConfirm();
 const props = defineProps<{ swap: ShiftSwap }>();
@@ -16,7 +17,11 @@ async function reject(){ if(!await confirm({ description: 'Reject?', danger: tru
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Roster' }, { title: 'Roster Swaps', href: route('hrm.swaps.index') }, { title: `#${swap.id}` }]">
     <Head :title="`Swap #${swap.id}`"/>
-    <PageHeader title="Pages Detail" description="Swap Date" :icon="FileText">
+    <PageHeader
+      :title="`Roster swap #${rosterSwap.id}`"
+      :description="`Swap date: ${formatDate(rosterSwap.swap_date)}`"
+      :icon="FileText"
+    >
     <div class="space-y-4">
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-bold flex items-center gap-2"><ArrowLeftRight class="size-5"/> Swap #{{ swap.id }} <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" :class="swap.status==='Pending'?'bg-amber-100 text-amber-700': swap.status==='Approved'?'bg-emerald-100 text-emerald-700': swap.status==='Rejected'?'bg-red-100 text-red-700':'bg-muted'">{{ swap.status }}</span></h1>

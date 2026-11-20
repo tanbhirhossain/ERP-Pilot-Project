@@ -15,7 +15,11 @@ async function rej(){ if(!await confirm({ description: 'Reject?', danger: true }
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'HRM' }, { title: 'Informed Panel', href: route('hrm.informed.index') }, { title: `#${informed.id}` }]">
     <Head :title="`Informed #${informed.id}`"/>
-    <PageHeader title="Pages Detail" description="Employee" :icon="FileText">
+    <PageHeader
+      :title="`Informed panel entry #${informed.id}`"
+      :description="`Employee: ${informed.employee?.full_name ?? informed.employee_id ?? '—'}`"
+      :icon="FileText"
+    >
     <div class="space-y-4">
       <div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2"><Bell class="size-5"/> Notice #{{ informed.id }} <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" :class="informed.status==='Pending'?'bg-amber-100 text-amber-700': informed.status==='Acknowledged'?'bg-emerald-100 text-emerald-700': informed.status==='Rejected'?'bg-red-100 text-red-700':'bg-muted'">{{ informed.status }}</span></h1><Link :href="route('hrm.informed.index')"><Button variant="outline" size="sm"><ArrowLeft class="size-4"/> Back</Button></Link></div>
       <div class="bg-card border rounded-xl shadow-sm p-6 space-y-4">

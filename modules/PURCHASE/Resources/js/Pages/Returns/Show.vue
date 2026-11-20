@@ -3,6 +3,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import type { PurchaseReturn } from '@purchase/types';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import { FileText } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@core/Utils/format';
@@ -13,7 +14,11 @@ function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') retu
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: $props.ret.return_no }]">
     <Head :title="$props.ret.return_no" />
-    <PageHeader title="Pages Detail" description="Vendor: {{ $props.ret.vendor?.name }} · WH: {{ $props.ret.warehouse?.name }} · {{ formatDate($props." :icon="FileText">
+    <PageHeader
+      :title="`Purchase return ${$props.ret.return_no}`"
+      :description="`Vendor: ${$props.ret.vendor?.name ?? '—'} · WH: ${$props.ret.warehouse?.name ?? '—'} · ${formatDate($props.ret.return_date)}`"
+      :icon="FileText"
+    >
     <div class="space-y-4">
       <div class="bg-card border rounded-xl shadow-sm p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">

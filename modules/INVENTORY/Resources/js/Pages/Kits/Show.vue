@@ -4,6 +4,7 @@ import type { Kit } from '@inventory/types';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import { FileText } from 'lucide-vue-next';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import StaticTable from '@core/Components/StaticTable.vue';
 import { useConfirm } from '@core/Composables/useConfirm';
@@ -15,7 +16,11 @@ async function cancel(id:number){ if(await confirm({ description: 'Cancel kit?',
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Kits / BOM Production', href: route('inventory.kits.index') }, { title: kit.kit_no }]">
     <Head :title="kit.kit_no"/>
-    <PageHeader title="Pages Detail" description="Detail view — audit trail & actions" :icon="FileText">
+    <PageHeader
+      :title="`Kit ${kit.kit_no}`"
+      :description="`${kit.name ?? 'Kit'} · audit trail & actions`"
+      :icon="FileText"
+    >
     <div class="space-y-4">
       <div class="flex justify-between items-center"><h1 class="text-xl font-bold">{{ kit.kit_no }} <StatusBadge :label="kit.status" :tone="kit.status==='completed'?'success':kit.status==='draft'?'warning':'neutral'"/></h1>
         <div class="flex gap-2"><Button v-if="kit.status==='draft'" @click="complete(kit.id)" class="bg-emerald-600 hover:bg-emerald-700">Complete — Consume & Produce</Button><Button v-if="kit.status==='draft'" variant="outline" @click="cancel(kit.id)">Cancel</Button></div>

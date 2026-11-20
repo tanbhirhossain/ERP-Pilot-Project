@@ -4,6 +4,7 @@ import type { LandedCost } from '@purchase/types';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import { FileText } from 'lucide-vue-next';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import StaticTable from '@core/Components/StaticTable.vue';
 import { useConfirm } from '@core/Composables/useConfirm';
@@ -14,7 +15,11 @@ async function allocate(id:number){ if(await confirm({ description: 'Allocate la
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: 'Landed Costs', href: route('purchase.landed-costs.index') }, { title: landedCost.lc_no }]">
     <Head :title="landedCost.lc_no"/>
-    <PageHeader title="Pages Detail" description="Detail view — audit trail & actions" :icon="FileText">
+    <PageHeader
+      :title="`Landed cost ${landedCost.lc_no}`"
+      :description="`${landedCost.vendor?.name ?? '—'} · audit trail & actions`"
+      :icon="FileText"
+    >
     <div class="space-y-4">
       <div class="flex justify-between items-center"><h1 class="text-xl font-bold">{{ landedCost.lc_no }} <StatusBadge :label="landedCost.status" :tone="landedCost.status==='allocated'?'success':'warning'"/></h1>
         <div class="flex gap-2"><Button v-if="landedCost.status==='draft'" @click="allocate(landedCost.id)" class="bg-emerald-600 hover:bg-emerald-700">Allocate → Stock & Journal</Button><Link :href="route('purchase.receipts.show', landedCost.receipt_id)"><Button variant="outline" size="sm">View GRN</Button></Link></div>

@@ -18,7 +18,11 @@ async function printSlip(){ printDocument({ portrait: true }); }
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Leave' }, { title: 'Leaves', href: route('hrm.leaves.index') }, { title: `#${leave.id}` }]">
     <Head :title="`Leave #${leave.id}`"/>
-    <PageHeader title="Pages Detail" description="Employee" :icon="FileText">
+    <PageHeader
+      :title="`Leave request #${leave.id}`"
+      :description="`Employee: ${leave.employee?.full_name ?? leave.employee_id ?? '—'}`"
+      :icon="FileText"
+    >
     <div class="space-y-4 print-portrait" data-core-print>
       <div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2"><CalendarDays class="size-5"/> Leave Application #{{ leave.id }} <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" :class="leave.status==='Pending'?'bg-amber-100 text-amber-700': leave.status==='Approved'?'bg-emerald-100 text-emerald-700': leave.status==='Rejected'?'bg-red-100 text-red-700':'bg-muted'">{{ leave.status }}</span></h1><div class="no-print flex gap-2"><Button variant="outline" size="sm" @click="printSlip"><Printer class="size-4"/> Print Slip</Button><Link :href="route('hrm.leaves.index')"><Button variant="outline" size="sm"><ArrowLeft class="size-4"/> Back</Button></Link></div></div>
       <div class="bg-card border rounded-xl shadow-sm p-6 space-y-4">

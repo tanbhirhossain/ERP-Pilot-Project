@@ -28,7 +28,11 @@ async function reject(){
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'OT & ED' }, { title: 'Overtime Approval', href: route('hrm.overtimes.index') }, { title: `#${overtime.id}` }]">
     <Head :title="`Overtime #${overtime.id}`"/>
-    <PageHeader title="Pages Detail" description="Employee" :icon="FileText">
+    <PageHeader
+      :title="`Overtime entry #${overtime.id}`"
+      :description="`Employee: ${overtime.employee?.full_name ?? overtime.employee_id ?? '—'}`"
+      :icon="FileText"
+    >
     <div class="space-y-4">
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-bold flex items-center gap-2"><Timer class="size-5"/> Overtime #{{ overtime.id }} <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" :class="overtime.status==='Pending'?'bg-amber-100 text-amber-700': overtime.status==='Approved'?'bg-emerald-100 text-emerald-700': overtime.status==='Rejected'?'bg-red-100 text-red-700':'bg-muted'">{{ overtime.status }}</span></h1>

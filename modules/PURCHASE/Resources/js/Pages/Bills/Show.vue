@@ -18,7 +18,11 @@ function submitPay(){ router.post(route('purchase.bills.pay', props.bill.id), pa
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: 'Vendor Bills', href: route('purchase.bills.index') }, { title: bill.bill_no }]">
     <Head :title="bill.bill_no" />
-    <PageHeader title="Pages Detail" description="Vendor: {{ bill.vendor?.name }} · WH: {{ bill.warehouse?.name }} · {{ formatDate(bill.bill_date) }} " :icon="FileText">
+    <PageHeader
+      :title="`Vendor bill ${bill.bill_no}`"
+      :description="`Vendor: ${bill.vendor?.name ?? '—'} · WH: ${bill.warehouse?.name ?? '—'} · ${formatDate(bill.bill_date)}`"
+      :icon="FileText"
+    >
     <div class="space-y-4">
       <div class="bg-card border rounded-xl shadow-sm p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
@@ -51,7 +55,7 @@ function submitPay(){ router.post(route('purchase.bills.pay', props.bill.id), pa
       </div>
       <div v-if="bill.payments?.length" class="bg-card border rounded-xl shadow-sm p-4">
         <h3 class="font-semibold mb-2">Payments</h3>
-        <div v-for="p in bill.payments" :key="p.id" class="text-sm border-b py-1 flex justify-between"><span>{{ p.payment_no }} · {{ p.payment_date }} · {{ p.method }}</span><span class="font-mono font-bold">{{ formatCurrency(Number(p.amount)) }}</span></div>
+        <div v-for="p in bill.payments" :key="p.id" class="text-sm border-b py-1 flex justify-between"><span>{{ p.payment_no }} · {{ formatDate(p.payment_date) }} · {{ p.method }}</span><span class="font-mono font-bold">{{ formatCurrency(Number(p.amount)) }}</span></div>
       </div>
       <div v-if="bill.status==='posted' && bill.payment_status!=='paid'" class="bg-card border rounded-xl shadow-sm p-4">
         <h3 class="font-semibold mb-2 text-sm">Record Payment</h3>
