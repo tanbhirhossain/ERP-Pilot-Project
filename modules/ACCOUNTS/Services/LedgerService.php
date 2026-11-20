@@ -21,9 +21,17 @@ class LedgerService
     {
         $asOf = $asOf ?? now()->toDateString();
 
-        // aggregate ledger per account (posted only via ledger table)
+        // Aggregate the ledger per account, but only while the journal it came from still exists and
+        // is posted. A ledger row outliving its journal is a phantom posting: it moves every report
+        // that reads this table without appearing anywhere a human can inspect, and there is no way
+        // to trace it back. Joining the journal keeps such rows out of the trial balance and every
+        // report derived from it, so a half-deleted journal shows up as a missing posting (visible)
+        // instead of an untraceable balance (invisible).
         return DB::table('acc_account_ledger as l')
             ->join('acc_accounts as a', 'a.id', '=', 'l.account_id')
+            ->join('acc_journals as j', function ($join) {
+                $join->on('j.id', '=', 'l.journal_id')->where('j.status', '=', 'posted');
+            })
             ->whereDate('l.posting_date', '<=', $asOf)
             ->groupBy('l.account_id', 'a.code', 'a.name', 'a.account_type', 'a.nature')
             ->selectRaw('l.account_id, a.code, a.name, a.account_type, a.nature, SUM(l.debit) as total_debit, SUM(l.credit) as total_credit')
@@ -49,8 +57,12 @@ class LedgerService
         $to = $to ?? now()->toDateString();
         $tb = $this->trialBalance($to);
         // filter to income/expense and respect date window via ledger query
-        $income = $tb->where('account_type', 'income')->sum(fn ($r) => abs($r['balance']));
-        $expense = $tb->where('account_type', 'expense')->sum(fn ($r) => abs($r['balance']));
+        // Signed, not abs(). `balance` is already normalised against the account's nature, so an
+        // income account that has ended up with a debit balance is a negative income, not a positive
+        // one. Taking the absolute value here silently turns a mis-posted credit into revenue and an
+        // over-refunded expense into cost, and the two errors then cancel into a plausible profit.
+        $income = $tb->where('account_type', 'income')->sum(fn ($r) => (float) $r['balance']);
+        $expense = $tb->where('account_type', 'expense')->sum(fn ($r) => (float) $r['balance']);
         $gross = $income - $expense;
 
         return [
@@ -64,9 +76,13 @@ class LedgerService
     {
         $asOf = $asOf ?? now()->toDateString();
         $tb = $this->trialBalance($asOf);
-        $assets = $tb->where('account_type', 'asset')->sum(fn ($r) => abs($r['balance']));
-        $liabilities = $tb->where('account_type', 'liability')->sum(fn ($r) => abs($r['balance']));
-        $equity = $tb->where('account_type', 'equity')->sum(fn ($r) => abs($r['balance']));
+        // Signed sums. An overdrawn bank account is a negative asset, not a positive one: abs() here
+        // used to report 407,303.38 of assets when the bank was 390,141.63 overdrawn, and the sheet
+        // then announced an imbalance of exactly twice the overdraft — a figure that looked like a
+        // data problem but was an arithmetic one. A credit-balance asset must pull the total down.
+        $assets = $tb->where('account_type', 'asset')->sum(fn ($r) => (float) $r['balance']);
+        $liabilities = $tb->where('account_type', 'liability')->sum(fn ($r) => (float) $r['balance']);
+        $equity = $tb->where('account_type', 'equity')->sum(fn ($r) => (float) $r['balance']);
         // retained earnings = P&L to date
         $pl = $this->profitAndLoss(null, $asOf);
         $retained = $pl['net_profit'];
