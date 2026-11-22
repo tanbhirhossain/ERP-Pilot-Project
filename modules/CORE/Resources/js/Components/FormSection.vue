@@ -68,15 +68,14 @@ const gridClass = computed(() => {
     <section
         :class="
             cn(
-                'w-full overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow',
-                'hover:shadow-md',
+                'w-full overflow-hidden rounded-xl border border-border/80 bg-card shadow-[0_1px_2px_hsl(var(--foreground)/0.04)]',
                 props.class,
             )
         "
     >
         <header
             v-if="title || description || icon || $slots.actions || badge !== undefined"
-            class="flex items-start justify-between gap-3 border-b bg-muted/25 px-5 py-3.5"
+            class="flex items-start justify-between gap-3 border-b border-border/70 bg-muted/20 px-4 py-3 sm:px-5"
         >
             <button
                 v-if="collapsible"

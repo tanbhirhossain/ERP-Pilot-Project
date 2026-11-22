@@ -272,9 +272,8 @@ onMounted(() => {
         <div
             class="d-rise relative overflow-hidden rounded-2xl border bg-gradient-to-br from-card via-card to-primary/[0.06] p-6 shadow-sm md:p-7"
         >
-            <div class="d-grid pointer-events-none absolute inset-0 opacity-[0.5]" aria-hidden="true" />
-            <div class="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-primary/12 blur-3xl" />
-            <div class="pointer-events-none absolute -bottom-24 right-24 size-44 rounded-full bg-violet-500/10 blur-3xl" />
+            <div class="d-grid pointer-events-none absolute inset-0 opacity-[0.35]" aria-hidden="true" />
+            <div class="pointer-events-none absolute -right-24 -top-28 size-72 rounded-full bg-primary/10 blur-3xl" />
 
             <div class="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
                 <div>
@@ -324,7 +323,7 @@ onMounted(() => {
                 <div
                     v-for="(card, index) in businessCards"
                     :key="card.key"
-                    class="group relative rounded-lg border bg-card p-4 transition-colors hover:border-border/80"
+                    class="group relative rounded-lg border bg-card p-4 transition-all hover:border-primary/30 hover:shadow-md"
                 >
                     <div class="flex items-center justify-between">
                         <span class="grid size-8 place-items-center rounded-md" :class="cardTone(card.tone).tile">
@@ -365,7 +364,7 @@ onMounted(() => {
                 v-for="(card, index) in cards"
                 :key="card.key"
                 :href="can(card.permission) ? route(card.routeName) : undefined"
-                class="group relative rounded-lg border bg-card p-5 transition-colors hover:border-primary/30"
+                class="group relative rounded-lg border bg-card p-5 transition-all hover:border-primary/30 hover:shadow-md"
                 :class="[!can(card.permission) && 'pointer-events-none opacity-60']"
             >
                 <div class="flex items-start justify-between">
@@ -387,7 +386,7 @@ onMounted(() => {
                 <div v-if="card.key === 'users'" class="mt-3 flex items-center gap-2">
                     <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                         <div
-                            class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-[width] duration-1000 ease-out"
+                            class="h-full rounded-full bg-emerald-500 transition-[width] duration-1000 ease-out"
                             :style="{ width: `${verifiedPct * progress}%` }"
                         />
                     </div>
@@ -541,7 +540,7 @@ onMounted(() => {
                     </div>
                     <div class="h-2 overflow-hidden rounded-full bg-muted">
                         <div
-                            class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-[width] duration-1000 ease-out"
+                            class="h-full rounded-full bg-emerald-500 transition-[width] duration-1000 ease-out"
                             :style="{ width: `${verifiedPct * progress}%` }"
                         />
                     </div>

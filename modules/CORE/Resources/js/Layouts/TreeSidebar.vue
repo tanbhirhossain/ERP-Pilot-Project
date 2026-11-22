@@ -166,6 +166,8 @@ function itemQuery(item: SidebarItem): string | null {
 function isActive(item: SidebarItem): boolean {
     const path = itemPath(item); if (path === null) return false;
     const url = page.url; const urlPath = url.split('?')[0]; const urlQuery = url.includes('?') ? '?' + url.split('?')[1] : '';
+    // The dashboard is /core, not the parent of every /core/* screen.
+    if (item.route === 'core.dashboard' && urlPath !== path) return false;
     if (urlPath !== path && !urlPath.startsWith(path + '/')) return false;
     const q = itemQuery(item);
     if (q) { try { const qp = new URLSearchParams(q); const up = new URLSearchParams(urlQuery); for (const [k,v] of qp.entries()) if (up.get(k) !== v) return false; } catch {} return true; }
@@ -233,6 +235,24 @@ onMounted(async () => {
     sidebarScroll.settle();
 });
 
+/**
+ * The shell is rebuilt on every Inertia visit, so `onMounted` covers ordinary navigation. A change
+ * that swaps only the page's query string can still land on the same mounted shell — and a menu whose
+ * current branch closes itself because nothing re-opened it is the "sidebar is not stable" complaint in
+ * its other form. Same two steps, on every URL change: open the branch the page lives in, then keep the
+ * active row on screen.
+ */
+watch(
+    () => page.url,
+    async () => {
+        if (!hydrated) return;
+
+        expandActiveBranches();
+        await nextTick();
+        sidebarScroll.settle();
+    },
+);
+
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 </script>
 
@@ -240,7 +260,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
     <Sidebar collapsible="icon" class="border-sidebar-border">
         <SidebarHeader class="border-b border-sidebar-border/60 px-3 py-3.5 gap-0">
             <Link :href="route('core.dashboard')" class="group flex items-center gap-3 rounded-xl px-1 py-0.5 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
-                <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-hero-from via-hero-via to-hero-to text-hero-ink shadow-sm ring-1 ring-hero-ink/25">
+                <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm ring-1 ring-inset ring-primary/20">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="size-[18px]" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z"/></svg>
                 </span>
                 <span class="flex min-w-0 flex-col leading-tight group-data-[collapsible=icon]:hidden">
@@ -273,12 +293,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
             </div>
         </SidebarHeader>
 
-        <SidebarContent ref="contentEl" class="premium-scrollbar px-2 py-3 gap-0" style="scrollbar-gutter: stable">
+        <SidebarContent ref="contentEl" class="premium-scrollbar px-2 py-3 gap-0" style="scrollbar-gutter: stable; scroll-behavior: auto">
             <SidebarGroup class="p-0">
                 <SidebarMenu class="gap-0.5">
                     <template v-for="(item, index) in visibleMenu" :key="item.key">
-                        <li v-if="groupHeaderAt(index)" class="px-2 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden first:pt-1">
-                            {{ groupHeaderAt(index) }}
+                        <li v-if="groupHeaderAt(index)" class="group-data-[collapsible=icon]:hidden flex items-center gap-2 px-2 pb-1 pt-3 first:pt-1">
+                            <span class="size-1 rounded-full bg-primary/50 shrink-0" aria-hidden="true"></span>
+                            <span class="text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/50">{{ groupHeaderAt(index) }}</span>
                         </li>
 
                         <SidebarMenuItem v-if="!item.children?.length">
@@ -361,7 +382,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 </template>
 
 <style scoped>
-.tree-content[data-state='open'] { animation: tree-expand 0.22s cubic-bezier(0.32,0.72,0,1); }
+/* Opening synchronously keeps the restored scroll offset from being clamped while branches grow. */
+.tree-content[data-state='open'] { animation: none; }
 .tree-content[data-state='closed'] { animation: tree-collapse 0.18s cubic-bezier(0.32,0,0,1); }
 @keyframes tree-expand { from { height: 0; opacity: 0.4; } to { height: var(--radix-collapsible-content-height); opacity: 1; } }
 @keyframes tree-collapse { from { height: var(--radix-collapsible-content-height); opacity: 1; } to { height: 0; opacity: 0.4; } }

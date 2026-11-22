@@ -11,11 +11,12 @@
  */
 import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { Banknote, CalendarDays, CreditCard, FileText, HandCoins, Landmark, Printer, ReceiptText, TriangleAlert, Users } from 'lucide-vue-next';
+import { FileDown, Banknote, CalendarDays, CreditCard, FileText, HandCoins, Landmark, Printer, ReceiptText, TriangleAlert, Users } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatCurrency } from '@core/Utils/format';
@@ -128,6 +129,27 @@ function printPage(): void {
     printDocument();
 }
 
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: 'POS Day-End & Collections',
+    subtitle: `${from.value || '—'} → ${to.value || '—'} · by cashier`,
+    permission: 'pos.reports.view',
+    orientation: 'landscape',
+    meta: {
+        'From': from.value || '—',
+        'To': to.value || '—',
+        'Drawers': String(rows.value.length),
+        'Takings': formatCurrency(money(totals.value.takings)),
+        'Cash': formatCurrency(money(totals.value.cash)),
+        'Card / bank': formatCurrency(money(totals.value.bank)),
+        'Credit sold': formatCurrency(money(totals.value.due)),
+    },
+    headings: ['Cashier', 'Drawers', 'Sales', 'Voids', 'Net sales', 'VAT', 'Cash', 'Card / bank', 'Credit sold', 'Collected', 'Takings', 'Variance'],
+    rows: byUser.value.map((u: any) => [u.cashier, u.sessions, u.transactions, u.voids, money(u.net), money(u.vat), money(u.cash), money(u.bank), money(u.due), money(u.collected), money(u.takings), u.variance === null ? 'not counted' : money(u.variance)]),
+    footer: 'POS Day-End · Sales & POS',
+}));
+
 </script>
 
 <template>
@@ -144,6 +166,7 @@ function printPage(): void {
           </p>
         </div>
         <div class="flex gap-2">
+          <Button variant="default" size="sm" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" />Download PDF</Button>
           <Button variant="outline" size="sm" @click="printPage"><Printer class="size-4" />Print</Button>
           <Link :href="route('sales.pos.sessions')"><Button variant="outline" size="sm"><CalendarDays class="size-4" />Sessions</Button></Link>
         </div>

@@ -271,6 +271,7 @@ class PosService
                 'bank_amount' => round($bankCents / 100, 2),
                 'cost_total' => round($costCents / 100, 2),
                 'bank_id' => $dto->bankId,
+                'transaction_ref' => $dto->transactionRef,
                 'status' => 'completed',
                 'items' => $items,
             ]);

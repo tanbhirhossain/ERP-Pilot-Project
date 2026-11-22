@@ -2,7 +2,9 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import type { Delivery } from '@sales/types';
 import { Button } from '@/components/ui/button';
+import { Truck } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatDate } from '@core/Utils/format';
 import StaticTable from '@core/Components/StaticTable.vue';
@@ -15,14 +17,18 @@ async function cancel(id:number){ if(await confirm({ description: 'Cancel delive
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Deliveries (Challan)', href: route('sales.deliveries.index') }, { title: delivery.delivery_no }]">
     <Head :title="delivery.delivery_no" />
-    <div class="space-y-4 ">
-      <div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2">{{ delivery.delivery_no }} <StatusBadge :label="delivery.status" :tone="delivery.status==='shipped'?'success':delivery.status==='draft'?'warning':'neutral'" /></h1>
+    <PageHeader :title="delivery.delivery_no" :description="`${delivery.customer?.name || '—'} · ${delivery.warehouse?.name || '—'} · ${formatDate(delivery.delivery_date)}`" :icon="Truck">
+      <template #badge>
+        <StatusBadge :label="delivery.status" :tone="delivery.status==='shipped'?'success':delivery.status==='draft'?'warning':'neutral'" />
+      </template>
+      <template #actions>
         <div class="flex gap-2">
-          <Button v-if="delivery.status==='draft'" @click="ship(delivery.id)" size="sm">🚚 Ship — Deduct Stock</Button>
+          <Button v-if="delivery.status==='draft'" @click="ship(delivery.id)" size="sm"><Truck class="size-4" /> Ship — Deduct Stock</Button>
           <Button v-if="delivery.status==='draft'" variant="outline" @click="cancel(delivery.id)" size="sm">Cancel</Button>
           <Link :href="route('sales.deliveries.edit', delivery.id)"><Button variant="outline" size="sm">Edit</Button></Link>
         </div>
-      </div>
+      </template>
+
       <div class="bg-card border rounded-xl p-4">
         <div class="grid md:grid-cols-3 gap-3 text-sm">
           <div><span class="text-muted-foreground">Customer</span><div class="font-medium">{{ delivery.customer?.name }}</div></div>
@@ -43,6 +49,6 @@ async function cancel(id:number){ if(await confirm({ description: 'Cancel delive
         ><thead class="bg-muted/40 text-xs uppercase"><tr><th class="px-3 py-2 text-left">Product</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-left">Lot/Serial</th></tr></thead>
         <tbody class="divide-y"><tr v-for="it in delivery.items" :key="it.id"><td class="px-3 py-2">{{ it.product_name }} <span class="text-xs text-muted-foreground">{{ it.sku }}</span></td><td class="px-3 py-2 text-center font-mono font-bold">{{ it.qty }}</td><td class="px-3 py-2 text-xs">{{ it.lot_no || '—' }} {{ it.serial_no }}</td></tr></tbody></StaticTable>
       </div>
-    </div>
+    </PageHeader>
   </AdminLayout>
 </template>

@@ -15,6 +15,7 @@ use Modules\CORE\Http\Controllers\LocaleController;
 use Modules\CORE\Http\Controllers\NotificationController;
 use Modules\CORE\Http\Controllers\OptionsController;
 use Modules\CORE\Http\Controllers\PermissionController;
+use Modules\CORE\Http\Controllers\ReportPdfController;
 use Modules\CORE\Http\Controllers\RoleController;
 use Modules\CORE\Http\Controllers\SavedViewController;
 use Modules\CORE\Http\Controllers\SsoController;
@@ -167,6 +168,12 @@ Route::middleware(['web', 'auth'])->prefix('core')->name('core.')->group(functio
         ->where('resource', 'users|roles|permissions|activities')
         ->where('format', 'excel|pdf')
         ->name('exports');
+
+    // --------------------------------------- Report PDFs (item 52)
+    // Renders a report page's own headings/rows/meta as a branded PDF document
+    // server-side, so report pages get a real printable document (not a printed
+    // screenshot) plus a downloadable file. Permission is verified server-side.
+    Route::post('reports/pdf', ReportPdfController::class)->name('reports.pdf');
 
     // ------------------------------------------------- Notifications (Phase 1 F2)
     // The bell inbox. Reads are scoped to the signed-in user by the Notifiable

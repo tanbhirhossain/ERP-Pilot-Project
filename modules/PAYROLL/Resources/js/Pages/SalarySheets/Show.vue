@@ -18,6 +18,7 @@ import {
   Wallet,
 } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
@@ -186,22 +187,15 @@ const slipColumns: DataTableColumn[] = [
       <ModuleNav />
 
       <!-- Header -->
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 class="flex items-center gap-2.5 text-xl font-bold tracking-tight">
-            <span class="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm">
-              <CalendarDays class="size-5" />
-            </span>
-            {{ context.period }}
-            <StatusBadge :label="sheet.status" :tone="statusTone" dot />
-          </h1>
-          <p class="mt-1 text-sm text-muted-foreground">
-            {{ agg.slips.toLocaleString() }} payslip(s) · {{ context.period_start }} to {{ context.period_end }} ·
-            {{ sheet.include_punishments ? 'punishments included' : 'punishments excluded' }}
-            <template v-if="context.released_at"> · released {{ formatDateTime(context.released_at) }}</template>
-          </p>
-        </div>
-        <div class="flex flex-wrap gap-2">
+      <PageHeader
+        :title="context.period"
+        :icon="CalendarDays"
+        :description="`${agg.slips.toLocaleString()} payslip(s) · ${context.period_start} to ${context.period_end} · ${sheet.include_punishments ? 'punishments included' : 'punishments excluded'}${context.released_at ? ' · released ' + formatDateTime(context.released_at) : ''}`"
+      >
+        <template #badge>
+          <StatusBadge :label="sheet.status" :tone="statusTone" dot />
+        </template>
+        <template #actions>
           <Button size="sm" variant="outline" @click="router.visit(route('payroll.sheets.departments', sheet.id))">
             <PieChart class="size-4" />Departments
           </Button>
@@ -223,8 +217,8 @@ const slipColumns: DataTableColumn[] = [
           >
             <ClipboardCheck class="size-4" />Release month
           </Button>
-        </div>
-      </div>
+        </template>
+      </PageHeader>
 
       <div v-if="sheet.failure_message" class="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/5 p-3 text-sm text-danger">
         <AlertTriangle class="mt-0.5 size-4 shrink-0" />

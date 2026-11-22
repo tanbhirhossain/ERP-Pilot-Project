@@ -35,6 +35,8 @@ class JournalController extends Controller
     {
         return Inertia::render('ACCOUNTS::Journals/Create', [
             'accountOptions' => $this->accounts->options(null, 100),
+            'todaysJournals' => Journal::query()->whereDate('journal_date', today())->latest('id')->limit(25)
+                ->get(['id', 'journal_no', 'type', 'status', 'total_debit', 'narration']),
         ]);
     }
 

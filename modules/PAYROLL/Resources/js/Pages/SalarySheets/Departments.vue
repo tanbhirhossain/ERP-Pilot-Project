@@ -19,6 +19,7 @@ import StatusBadge from '@core/Components/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import ModuleNav from './ModuleNav.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { formatCurrency, formatNumber } from '@core/Utils/format';
 
 /**
@@ -135,6 +136,23 @@ const chartOption = computed(() => {
 
 const drilldownTotal = computed(() => props.drilldown.reduce((sum, row) => sum + row.net, 0));
 
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: `Payroll by department — ${props.context.period}`,
+    permission: 'payroll.sheets.manage',
+    orientation: 'landscape',
+    meta: {
+        'Pay period': props.context.period,
+        'Departments': String(totals.value.departments),
+        'Slips': String(totals.value.slips),
+        'Gross': money(totals.value.gross),
+        'Net payable': money(totals.value.net),
+    },
+    headings: ['Department', 'Slips', 'Gross', 'Deductions', 'Net', 'Tax'],
+    rows: rows.value.map((r: any) => [r.department, r.slips, r.gross, r.deductions, r.net, r.tax]),
+    footer: 'Payroll by department · Payroll',
+}));
+
 const print = (): void => {
   printDocument({
     title: `Payroll by department — ${props.context.period}`,
@@ -180,6 +198,7 @@ const print = (): void => {
           </p>
         </div>
         <div class="flex flex-wrap gap-2">
+          <Button size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" />Download PDF</Button>
           <Button size="sm" variant="outline" @click="print"><Printer class="size-4" />Print</Button>
           <Button size="sm" variant="outline" @click="router.visit(route('payroll.sheets.release-check', sheet.id))">
             <FileStack class="size-4" />Release desk

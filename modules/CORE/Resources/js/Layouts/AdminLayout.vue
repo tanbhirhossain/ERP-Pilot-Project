@@ -252,7 +252,7 @@ watch(mode, () => {
             </div>
 
             <div class="flex-1 p-4 md:p-6 bg-gradient-to-b from-muted/[0.35] to-transparent">
-                <div class="page-enter mx-auto w-full max-w-[1500px] space-y-6">
+                <div class="page-enter w-full space-y-6">
                     <!--
                         Print furniture. Hidden on screen (`display: none` in
                         print.css until the media matches), and kept visible

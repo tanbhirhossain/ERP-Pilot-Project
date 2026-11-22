@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Scale, ShieldCheck, AlertTriangle, Wallet, Building2, Landmark, PiggyBank, Calendar, Printer } from 'lucide-vue-next';
+import { FileDown, Scale, ShieldCheck, AlertTriangle, Wallet, Building2, Landmark, PiggyBank, Calendar, Printer } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import PageHeader from '@core/Components/PageHeader.vue';
 import { formatCurrency } from '@core/Utils/format';
 import AcctKpi from '../../Components/AcctKpi.vue';
 import AcctSection from '../../Components/AcctSection.vue';
 import AcctEmpty from '../../Components/AcctEmpty.vue';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps<{ report:any }>();
 const asOf = ref(new URLSearchParams(window.location.search).get('as_of') || props.report.as_of || new Date().toISOString().slice(0,10));
@@ -23,6 +24,28 @@ const retained = props.report.retained_earnings ?? 0;
 const totalEquity = props.report.total_equity ?? (equityCore + retained);
 const rightSide = liabilities + totalEquity;
 const diff = Math.abs(assets - rightSide);
+
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => {
+    const details = props.report.details ?? [];
+    return {
+        title: 'Balance Sheet',
+        subtitle: `As of ${props.report.as_of} · Assets = Liabilities + Equity`,
+        permission: 'accounts.reports.view',
+        orientation: 'landscape',
+        meta: {
+            'As of': props.report.as_of,
+            'Assets': formatCurrency(assets),
+            'Liabilities': formatCurrency(liabilities),
+            'Equity (incl. RE)': formatCurrency(totalEquity),
+            'Status': props.report.balanced ? 'Balanced' : `Out by ${formatCurrency(diff)}`,
+        },
+        headings: ['Account', 'Type', 'Nature', 'Balance'],
+        rows: details.map((r: any) => [`${r.code} ${r.name}`, r.account_type, r.nature, Number(Math.abs(r.balance)) || 0]),
+        footer: 'Balance Sheet · Accounts',
+    };
+});
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{title:'Accounts'},{title:'Balance Sheet'}]">
@@ -31,7 +54,7 @@ const diff = Math.abs(assets - rightSide);
       title="Balance Sheet"
       description="Financial position — Assets = Liabilities + Equity (incl. retained earnings to date). Posting-date ledger."
       :icon="Scale"
-      :actions="[{ label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label:'Assets', value: formatCurrency(assets), sub: 'Dr nature' },
         { label:'Liabilities', value: formatCurrency(liabilities), sub: 'Cr nature' },

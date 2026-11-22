@@ -143,4 +143,35 @@ describe('collapsible sidebar', () => {
 
         expect(document.cookie).toContain('sidebar:state=false');
     });
+
+    /**
+     * Collapse-stretch contract (fix #2).
+     *
+     * When the rail collapses to icon mode, the desktop gap div must shrink from
+     * the full `--sidebar-width` to `--sidebar-width-icon`, so the inset (which is
+     * `flex-1`) grows and the main content stretches wide. The gap div carries
+     * both `w-(--sidebar-width)` (always) and the conditional
+     * `group-data-[collapsible=icon]:w-(--sidebar-width-icon)`; the collapsed rule
+     * has higher specificity and later source order, so it wins. This test pins
+     * the DOM contract that makes that true — the gap's classes and the inset's
+     * flex-1 — so a future edit can't silently re-introduce a fixed-width rail.
+     */
+    it('shrinks the desktop gap to icon width when collapsed', async () => {
+        const wrapper = mountSidebar();
+
+        // The gap div is the first child of the desktop `.group.peer` wrapper.
+        const gap = wrapper.find('.group.peer > div');
+
+        // Expanded: gap reserves the full sidebar width.
+        expect(wrapper.find('[data-state="expanded"]').exists()).toBe(true);
+        expect(gap.classes()).toContain('w-(--sidebar-width)');
+
+        await wrapper.find('[data-sidebar="trigger"]').trigger('click');
+        await nextTick();
+
+        // Collapsed: the icon-width rule is applied to the gap so the rail
+        // occupies only the icon column and the inset (flex-1) reclaims the rest.
+        expect(wrapper.find('[data-collapsible="icon"]').exists()).toBe(true);
+        expect(gap.classes()).toContain('group-data-[collapsible=icon]:w-(--sidebar-width-icon)');
+    });
 });

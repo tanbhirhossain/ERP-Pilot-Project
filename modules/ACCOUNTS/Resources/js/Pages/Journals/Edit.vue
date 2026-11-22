@@ -6,7 +6,7 @@ import { computed, nextTick } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, ArrowLeft, BookOpen, Eye, Lock, FileText, Plus, Scale, Trash2, Wand2 } from 'lucide-vue-next';
+import { AlertCircle, ArrowLeft, ArrowUpRight, ArrowDownRight, ArrowLeftRight, BookOpen, Eye, FileText, Landmark, Lock, Plus, Scale, Tag, Trash2, Wand2 } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
@@ -39,12 +39,12 @@ const MIN_LINES = 2;
 const MAX_LINES = 50;
 
 const voucherTypes = [
-    { code: 'JV', label: 'Journal', hint: 'General / adjusting entry' },
-    { code: 'PV', label: 'Payment', hint: 'Cash or bank payment' },
-    { code: 'RV', label: 'Receipt', hint: 'Cash or bank receipt' },
-    { code: 'CV', label: 'Contra', hint: 'Cash ↔ bank transfer' },
-    { code: 'BV', label: 'Bank', hint: 'Bank voucher' },
-    { code: 'SV', label: 'Sales', hint: 'Sales voucher' },
+    { code: 'JV', label: 'Journal', hint: 'General / adjusting entry', icon: BookOpen },
+    { code: 'PV', label: 'Payment', hint: 'Cash or bank payment', icon: ArrowUpRight },
+    { code: 'RV', label: 'Receipt', hint: 'Cash or bank receipt', icon: ArrowDownRight },
+    { code: 'CV', label: 'Contra', hint: 'Cash ↔ bank transfer', icon: ArrowLeftRight },
+    { code: 'BV', label: 'Bank', hint: 'Bank voucher', icon: Landmark },
+    { code: 'SV', label: 'Sales', hint: 'Sales voucher', icon: Tag },
 ];
 
 const typeRefs: Record<string, HTMLElement | null> = {};
@@ -172,7 +172,7 @@ function submit() {
     <AdminLayout :breadcrumbs="[{ title: 'Accounts' }, { title: 'Journals', href: route('accounts.journals.index') }, { title: 'Create' }]">
         <Head :title="`Edit ${props.journal.journal_no}`" />
 
-        <div class="space-y-5">
+        <div class="space-y-4">
             <PageHeader
                 :title="`Edit ${props.journal.journal_no}`"
                 :description="`${props.journal.type ?? ''} · ${String(props.journal.journal_date ?? '').slice(0, 10)}${props.journal.reference_no ? ' · ref ' + props.journal.reference_no : ''}`"
@@ -206,7 +206,7 @@ function submit() {
                 @keydown.ctrl.enter.prevent="addLine"
                 @keydown.meta.enter.prevent="addLine"
             >
-                <fieldset :disabled="locked" class="m-0 space-y-5 border-0 p-0">
+                <fieldset :disabled="locked" class="m-0 space-y-3 border-0 p-0">
                 <div
                     v-if="errorCount"
                     role="alert"
@@ -226,6 +226,7 @@ function submit() {
                     description="The type drives which printed voucher layout is used."
                     :icon="FileText"
                     :cols="3"
+                    dense
                 >
                     <FormField span="full">
                         <div
@@ -242,24 +243,27 @@ function submit() {
                                 role="radio"
                                 :aria-checked="form.type === t.code"
                                 :tabindex="form.type === t.code ? 0 : -1"
-                                class="rounded-xl border px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                                class="group flex flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                                 :class="
                                     form.type === t.code
-                                        ? 'border-primary bg-primary/10 shadow-sm'
+                                        ? 'border-primary bg-primary/[0.06] ring-1 ring-inset ring-primary/20 shadow-sm'
                                         : 'border-border bg-card hover:border-primary/40 hover:bg-muted/40'
                                 "
                                 @click="form.type = t.code"
                             >
-                                <span class="flex items-baseline gap-2">
-                                    <span
-                                        class="font-mono text-xs font-bold tracking-wider"
-                                        :class="form.type === t.code ? 'text-primary' : 'text-muted-foreground'"
-                                    >
-                                        {{ t.code }}
-                                    </span>
-                                    <span class="text-sm font-semibold">{{ t.label }}</span>
+                                <span
+                                    class="grid size-8 place-items-center rounded-lg transition"
+                                    :class="form.type === t.code ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary'"
+                                >
+                                    <component :is="t.icon" class="size-4" />
                                 </span>
-                                <span class="mt-0.5 block text-xs leading-tight text-muted-foreground">{{ t.hint }}</span>
+                                <span class="flex items-center gap-1.5">
+                                    <span
+                                        class="font-mono text-[11px] font-bold tracking-wider"
+                                        :class="form.type === t.code ? 'text-primary' : 'text-muted-foreground'"
+                                    >{{ t.code }}</span>
+                                    <span class="text-[11px] font-semibold">{{ t.label }}</span>
+                                </span>
                             </button>
                         </div>
                         <p v-if="form.errors.type" class="mt-2 text-sm text-destructive">{{ form.errors.type }}</p>
@@ -324,6 +328,7 @@ function submit() {
                     description="Each line posts to one COA account. Tip: press Ctrl + Enter anywhere to append a line."
                     :icon="Scale"
                     plain
+                    dense
                     :badge="`${form.lines.length} / ${MAX_LINES}`"
                 >
                     <template #actions>
@@ -497,26 +502,26 @@ function submit() {
                     </div>
 
                     <template #footer>
-                        <div class="grid gap-3 sm:grid-cols-3">
-                            <div class="rounded-lg bg-sky-500/10 px-3 py-2">
-                                <p class="text-xs font-medium text-muted-foreground">Total debit</p>
-                                <p class="font-mono text-base font-bold text-sky-700 dark:text-sky-400">
+                        <div class="grid gap-2 sm:grid-cols-3">
+                            <div class="rounded-lg bg-sky-500/10 px-3 py-1.5">
+                                <p class="text-[11px] font-medium text-muted-foreground">Total debit</p>
+                                <p class="font-mono text-sm font-bold text-sky-700 dark:text-sky-400">
                                     {{ totalDebit.toFixed(2) }}
                                 </p>
                             </div>
-                            <div class="rounded-lg bg-violet-500/10 px-3 py-2">
-                                <p class="text-xs font-medium text-muted-foreground">Total credit</p>
-                                <p class="font-mono text-base font-bold text-violet-700 dark:text-violet-400">
+                            <div class="rounded-lg bg-violet-500/10 px-3 py-1.5">
+                                <p class="text-[11px] font-medium text-muted-foreground">Total credit</p>
+                                <p class="font-mono text-sm font-bold text-violet-700 dark:text-violet-400">
                                     {{ totalCredit.toFixed(2) }}
                                 </p>
                             </div>
                             <div
-                                class="rounded-lg px-3 py-2"
+                                class="rounded-lg px-3 py-1.5"
                                 :class="balanced ? 'bg-emerald-500/10' : 'bg-amber-500/10'"
                             >
-                                <p class="text-xs font-medium text-muted-foreground">Difference</p>
+                                <p class="text-[11px] font-medium text-muted-foreground">Difference</p>
                                 <p
-                                    class="font-mono text-base font-bold"
+                                    class="font-mono text-sm font-bold"
                                     :class="balanced ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'"
                                 >
                                     {{ balanced ? '0.00 — balanced' : diff.toFixed(2) }}

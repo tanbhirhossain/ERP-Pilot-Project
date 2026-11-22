@@ -20,13 +20,14 @@ function tone(s:string){ if(s==='received') return 'success'; if(s==='confirmed'
       :description="`Vendor: ${order.vendor?.name ?? '—'} · WH: ${order.warehouse?.name ?? '—'} · ${formatDate(order.order_date)}`"
       :icon="FileText"
     >
+    <template #badge><StatusBadge :label="order.status" :tone="tone(order.status)" /></template>
     <div class="space-y-4">
       <div class="bg-card border rounded-xl shadow-sm p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 class="text-xl font-bold font-mono">{{ order.order_no }} <StatusBadge :label="order.status" :tone="tone(order.status)" class="ml-2"/></h1>
-            <p class="text-sm text-muted-foreground">Vendor: {{ order.vendor?.name }} · WH: {{ order.warehouse?.name }} · {{ formatDate(order.order_date) }}</p>
-            <p class="text-sm">Total: <span class="font-mono font-bold">{{ formatCurrency(Number(order.total_amount)) }}</span> <span class="text-xs text-muted-foreground">VAT {{ formatCurrency(Number(order.vat_amount)) }}</span></p>
+            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Order total</p>
+            <p class="mt-1 font-mono text-xl font-semibold tabular-nums">{{ formatCurrency(Number(order.total_amount)) }}</p>
+            <p class="mt-1 text-xs text-muted-foreground">Includes VAT {{ formatCurrency(Number(order.vat_amount)) }}</p>
           </div>
           <div class="flex flex-wrap gap-2">
             <Link :href="route('purchase.orders.edit', order.id)"><Button variant="outline" size="sm">Edit</Button></Link>

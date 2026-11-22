@@ -9,10 +9,11 @@
  */
 import { Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
-import { ArrowLeft, Banknote, CalendarClock, FileText, HandCoins, Landmark, Printer, ReceiptText, TriangleAlert } from 'lucide-vue-next';
+import { FileDown, ArrowLeft, Banknote, CalendarClock, FileText, HandCoins, Landmark, Printer, ReceiptText, TriangleAlert } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@core/Utils/format';
 import StaticTable from '@core/Components/StaticTable.vue';
@@ -46,6 +47,28 @@ function printPage(): void {
     printDocument();
 }
 
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: `Day-end ${props.session.session_no}`,
+    subtitle: `${props.session.warehouse ?? '—'} · ${props.session.cashier ?? '—'} · ${formatDate(props.session.opened_at)}`,
+    permission: 'pos.reports.view',
+    orientation: 'portrait',
+    meta: {
+        'Session': props.session.session_no,
+        'Warehouse': props.session.warehouse ?? '—',
+        'Cashier': props.session.cashier ?? '—',
+        'Status': props.session.status,
+        'Transactions': String(props.session.transactions_count ?? 0),
+        'Net sales': formatCurrency(money(props.session.net_sales_total)),
+        'VAT': formatCurrency(money(props.session.vat_total)),
+        'Total sold': formatCurrency(money(props.session.net_sales_total) + money(props.session.vat_total)),
+    },
+    headings: ['Account', 'Description', 'Debit', 'Credit'],
+    rows: (props.journal?.lines ?? []).map((line: any) => [`${line.code ?? '—'} ${line.account ?? ''}`, line.description, money(line.debit), money(line.credit)]),
+    footer: `Day-end ${props.session.session_no} · Sales & POS`,
+}));
+
 </script>
 
 <template>
@@ -67,6 +90,7 @@ function printPage(): void {
         </div>
         <div class="flex gap-2">
           <Link :href="route('sales.pos.reports.dayEnd')"><Button variant="outline" size="sm"><ArrowLeft class="size-4" />Report</Button></Link>
+          <Button variant="default" size="sm" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" />Download PDF</Button>
           <Button variant="outline" size="sm" @click="printPage"><Printer class="size-4" />Print</Button>
         </div>
       </div>

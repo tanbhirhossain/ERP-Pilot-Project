@@ -25,12 +25,12 @@ withDefaults(defineProps<Props>(), { description: undefined, icon: undefined, ac
       on the page, and the figures sit on a surface, where a reader can scan them.
     -->
     <div v-if="stats?.length" class="space-y-4">
-      <div class="relative overflow-hidden rounded-lg border bg-card shadow-[0_1px_2px_hsl(var(--foreground)/0.04)]">
-        <span aria-hidden="true" class="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-hero-from via-hero-via to-hero-to"></span>
+      <div class="relative overflow-hidden rounded-xl border border-border/80 bg-card shadow-[0_1px_2px_hsl(var(--foreground)/0.04)]">
+        <span aria-hidden="true" class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-hero-from via-hero-via to-hero-to"></span>
         <div class="flex flex-wrap items-start justify-between gap-3 p-4 pt-5">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2.5">
-              <h1 class="flex items-center gap-2.5 text-[19px] font-semibold tracking-tight">
+              <h1 class="flex items-center gap-2.5 text-[19px] font-semibold leading-tight tracking-tight text-foreground">
                 <span v-if="icon" class="grid size-8 place-items-center rounded-md bg-brand-tint text-brand-tint-ink ring-1 ring-inset ring-primary/10">
                   <component :is="icon" class="size-4" />
                 </span>
@@ -59,17 +59,17 @@ withDefaults(defineProps<Props>(), { description: undefined, icon: undefined, ac
       </div>
     </div>
     <!-- Simple header — premium minimal -->
-    <div v-else class="relative flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-lg border bg-card p-4 pt-5 shadow-[0_1px_2px_hsl(var(--foreground)/0.04)]">
-      <span aria-hidden="true" class="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-hero-from via-hero-via to-hero-to opacity-80"></span>
+    <div v-else class="relative flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-xl border border-border/80 bg-card px-4 py-3.5 shadow-[0_1px_2px_hsl(var(--foreground)/0.04)] sm:px-5">
+      <span aria-hidden="true" class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-hero-from via-hero-via to-hero-to opacity-80"></span>
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-2.5">
-            <h1 class="flex items-center gap-2.5 text-[19px] font-semibold tracking-tight">
+            <h1 class="flex items-center gap-2.5 text-[19px] font-semibold leading-tight tracking-tight text-foreground">
               <span v-if="icon" class="grid size-8 place-items-center rounded-md bg-brand-tint text-brand-tint-ink ring-1 ring-inset ring-primary/10"><component :is="icon" class="size-4" /></span>
               {{ title }}
             </h1>
             <slot name="badge" />
           </div>
-        <p v-if="description" class="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-muted-foreground">{{ description }}</p>
+        <p v-if="description" class="mt-1 max-w-3xl text-[13px] leading-relaxed text-muted-foreground">{{ description }}</p>
       </div>
       <div class="flex flex-wrap gap-2 shrink-0">
         <template v-for="(a, i) in actions" :key="i">

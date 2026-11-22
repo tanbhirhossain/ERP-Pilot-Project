@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
@@ -215,30 +216,23 @@ const anyEarning = (row: Row): number => Number(row.overtime_pay ?? 0) + Number(
       <ModuleNav />
 
       <!-- Header -->
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 class="flex items-center gap-2.5 text-xl font-bold tracking-tight">
-            <span class="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm">
-              <ClipboardCheck class="size-5" />
-            </span>
-            {{ context.period }}
-            <StatusBadge :label="cutlist.status" :tone="cutlist.status === 'approved' ? 'success' : cutlist.status === 'generated' ? 'warning' : 'neutral'" dot />
-          </h1>
-          <p class="mt-1 text-sm text-muted-foreground">
-            {{ formatNumber(agg.items) }} proposal row(s) from HRM attendance
-            · generated {{ formatDate(cutlist.generated_at) }}
-            <template v-if="cutlist.approved_at"> · approved {{ formatDate(cutlist.approved_at) }}</template>
-          </p>
-        </div>
-        <div class="flex flex-wrap gap-2">
+      <PageHeader
+        :title="context.period"
+        :icon="ClipboardCheck"
+        :description="`${formatNumber(agg.items)} proposal row(s) from HRM attendance · generated ${formatDate(cutlist.generated_at)}${cutlist.approved_at ? ' · approved ' + formatDate(cutlist.approved_at) : ''}`"
+      >
+        <template #badge>
+          <StatusBadge :label="cutlist.status" :tone="cutlist.status === 'approved' ? 'success' : cutlist.status === 'generated' ? 'warning' : 'neutral'" dot />
+        </template>
+        <template #actions>
           <Link :href="route('payroll.cutlists.index')">
             <Button size="sm" variant="outline"><ArrowLeft class="size-4" />All periods</Button>
           </Link>
           <Button size="sm" @click="router.visit(route('payroll.cutlists.sign-off', cutlist.id))">
             <Check class="size-4" />Sign-off desk
           </Button>
-        </div>
-      </div>
+        </template>
+      </PageHeader>
 
       <!-- The one sentence that was missing from the old screen -->
       <div v-if="agg.chargeable < agg.flagged" class="flex items-start gap-2.5 rounded-xl border border-info/30 bg-info/5 p-3.5">

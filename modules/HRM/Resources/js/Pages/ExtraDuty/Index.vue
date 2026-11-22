@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Printer } from 'lucide-vue-next';
+import { FileDown, Printer } from 'lucide-vue-next';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { computed, reactive } from 'vue';
 import { Check, CheckCheck, X, UserCheck, Clock3 } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
@@ -144,6 +145,17 @@ function printSheet() {
   }
 }
 
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: 'Extra duty report',
+    permission: 'hrm.overtimes.view',
+    orientation: 'landscape',
+    meta: Object.fromEntries(props.sheet.filters.map((f: any) => [f.label, f.value])),
+    headings: ['Employee', 'Date', 'Type', 'Approved hrs', 'Source hrs', 'Worked hrs', 'Attendance'],
+    rows: props.sheet.rows.map((r: any) => [r.employee, r.overtime_date, r.overtime_type, r.hours, r.source_hours, r.worked_hours, r.attendance_status]),
+    footer: 'Extra duty report · HR',
+}));
+
 const printedOn = computed(() => new Date().toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short' }));
 const rangeLabel = computed(() => {
   const from = props.sheet.filters.find((f) => f.label === 'From')?.value;
@@ -174,6 +186,7 @@ async function syncAttendance() {
         <p class="mt-1 text-sm text-muted-foreground">Attendance days classified as Extra Duty are loaded automatically for the recent period. Review/edit payable hours; only approved hours enter payroll.</p>
       </div>
       <div class="flex gap-2">
+        <Button class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" /> Download PDF</Button>
         <Button variant="outline" @click="printSheet"><Printer class="size-4" /> Print report</Button>
         <Button v-if="canApprove" variant="outline" @click="syncAttendance">Backfill older attendance</Button>
         <Link :href="route('hrm.attendance.dailies.index')"><Button variant="outline">Daily attendance</Button></Link>

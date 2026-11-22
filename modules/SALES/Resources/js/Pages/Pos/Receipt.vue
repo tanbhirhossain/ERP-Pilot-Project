@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { Printer, ArrowLeft, Ban } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { Printer, ArrowLeft, Ban, FileDown } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { formatCurrency } from '@core/Utils/format';
 import StaticTable from '@core/Components/StaticTable.vue';
 defineProps<{ sale: any }>();
@@ -15,6 +17,27 @@ function printReceipt(): void {
 }
 
 function payLabel(m: string) { return ({ cash: 'Cash', bank: 'Bank', bkash: 'bKash', card: 'Card', split: 'Split (Cash+Bank)', due: 'Due (credit sale)' } as any)[m] ?? m; }
+
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: `Receipt ${props.sale.pos_no}`,
+    subtitle: `${props.sale.sale_date} · ${props.sale.customer_name}`,
+    permission: 'pos.terminal.sell',
+    orientation: 'portrait',
+    meta: {
+        'Receipt': props.sale.pos_no,
+        'Date': props.sale.sale_date,
+        'Customer': props.sale.customer_name,
+        'Payment': payLabel(props.sale.payment_method),
+        'Status': props.sale.status.toUpperCase(),
+        'Grand total': formatCurrency(Number(props.sale.total_amount)),
+    },
+    headings: ['Item', 'Qty', 'Price', 'Total'],
+    rows: props.sale.items.map((it: any) => [`${it.product_name} (${it.sku})`, Number(it.qty), Number(it.unit_price), Number(it.line_total)]),
+    footer: `Receipt ${props.sale.pos_no} · Sales & POS`,
+}));
+
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'POS', href: route('sales.pos.terminal') }, { title: sale.pos_no }]">
@@ -51,6 +74,9 @@ function payLabel(m: string) { return ({ cash: 'Cash', bank: 'Bank', bkash: 'bKa
           <tr v-if="Number(sale.vat_amount)>0"><td colspan="3" class="text-right">VAT (2110 VAT Payable)</td><td class="text-right">{{ formatCurrency(Number(sale.vat_amount)) }}</td></tr>
           <tr class="border-t"><td colspan="3" class="text-right text-sm">Grand Total</td><td class="text-right text-sm">{{ formatCurrency(Number(sale.total_amount)) }}</td></tr>
           <tr><td colspan="3" class="text-right">Paid ({{ payLabel(sale.payment_method) }})</td><td class="text-right">{{ formatCurrency(Number(sale.paid_amount)) }}</td></tr>
+          <!-- The gateway receipt: the number the customer was handed, printed where it can be
+               matched against the bKash / bank / card statement line for line. -->
+          <tr v-if="sale.transaction_ref"><td colspan="3" class="text-right text-[10px]">Ref</td><td class="text-right text-[10px] font-bold">{{ sale.transaction_ref }}</td></tr>
           <tr v-if="sale.payment_method==='split'"><td colspan="3" class="text-right text-[10px]">↳ Cash {{ formatCurrency(Number(sale.cash_amount)) }} + Bank {{ formatCurrency(Number(sale.bank_amount)) }}</td><td class="text-right"></td></tr>
           <tr v-if="sale.change_amount>0"><td colspan="3" class="text-right">Change</td><td class="text-right">{{ formatCurrency(Number(sale.change_amount)) }}</td></tr>
           <!-- A credit sale has to say what is owed and what has been paid against it since. -->
@@ -66,7 +92,8 @@ function payLabel(m: string) { return ({ cash: 'Cash', bank: 'Bank', bkash: 'bKa
         <p>{{ sale.pos_no }} · {{ new Date().toLocaleString('en-BD') }}</p>
       </div>
       <div class="flex gap-2 mt-4 print:hidden">
-        <Button class="flex-1" @click="printReceipt()"><Printer class="size-4" />Print Receipt</Button>
+        <Button class="flex-1" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" />Download PDF</Button>
+        <Button variant="outline" class="flex-1" @click="printReceipt()"><Printer class="size-4" />Print Receipt</Button>
         <!-- Hidden once the drawer has closed: the day is in the ledger, and the correction is a sales return. -->
         <Link v-if="sale.status!=='void' && sale.session?.status!=='closed'" :href="route('sales.pos.void', sale.id)" method="post" as="button"><Button variant="destructive"><Ban class="size-4"/>Void</Button></Link>
       </div>

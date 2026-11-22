@@ -185,7 +185,7 @@ class PosController extends Controller
 
         try {
             $lines = array_map(fn ($it) => new InvoiceLineData(productId: (int) $it['product_id'], qty: (float) $it['qty'], unitPrice: (float) $it['unit_price'], variantId: $it['variant_id'] ?? null, discountPct: (float) ($it['discount_pct'] ?? 0), vatRate: (float) ($it['vat_rate'] ?? 0)), $r->input('items'));
-            $dto = new PosSaleData(warehouseId: (int) $r->input('warehouse_id'), lines: $lines, paymentMethod: $r->input('payment_method'), customerId: $r->input('customer_id'), customerName: $r->input('customer_name', 'Walk-in Customer'), bankId: $r->input('bank_id'), cashAmount: (float) ($r->input('cash_amount', 0)), bankAmount: (float) ($r->input('bank_amount', 0)), sessionId: $r->input('session_id'), paidAmount: (float) ($r->input('paid_amount', 0)), tenderedAmount: (float) ($r->input('tendered_amount', 0)), clientRef: $ref);
+            $dto = new PosSaleData(warehouseId: (int) $r->input('warehouse_id'), lines: $lines, paymentMethod: $r->input('payment_method'), customerId: $r->input('customer_id'), customerName: $r->input('customer_name', 'Walk-in Customer'), bankId: $r->input('bank_id'), cashAmount: (float) ($r->input('cash_amount', 0)), bankAmount: (float) ($r->input('bank_amount', 0)), sessionId: $r->input('session_id'), paidAmount: (float) ($r->input('paid_amount', 0)), tenderedAmount: (float) ($r->input('tendered_amount', 0)), clientRef: $ref, transactionRef: $r->input('transaction_ref'));
             $sale = $this->svc->sell($dto);
 
             $message = match (true) {

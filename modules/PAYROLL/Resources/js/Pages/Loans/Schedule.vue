@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
-import { CalendarRange, Layers, Printer, TrendingUp } from 'lucide-vue-next';
+import { FileDown, CalendarRange, Layers, Printer, TrendingUp } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import EmployeeMultiSearchSelect from '../../Components/EmployeeMultiSearchSelec
 import { confirmDialog } from '@core/Composables/useConfirm';
 import { useToast } from '@core/Composables/useToast';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { formatCurrency } from '@core/Utils/format';
 
 /**
@@ -130,6 +131,21 @@ async function stage(): Promise<void> {
 
 /* -------------------------------- output -------------------------------- */
 
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: `Advance schedule — ${props.period.label}`,
+    permission: 'payroll.loans.manage',
+    orientation: 'landscape',
+    meta: {
+        'Payroll month': props.period.label,
+        'Installments': String(props.totals.count),
+        'Total amount': money(props.totals.amount),
+    },
+    headings: ['Employee', 'Installment', 'Due date', 'Amount', 'Status'],
+    rows: props.installments.map((i: any) => [i.employee_name ?? i.employee_id ?? '—', `${i.installment_number}/${i.installment_count}`, i.due_date ?? '—', i.amount, i.status]),
+    footer: 'Advance schedule · Payroll',
+}));
+
 const print = (): void => {
   printDocument({
     title: `Advance schedule — ${props.period.label}`,
@@ -174,6 +190,7 @@ const statusTone = (status: string): string => ({
           <Button size="sm" variant="outline" @click="shiftMonth(-1)">Previous</Button>
           <Input v-model="periodValue" type="month" class="h-9 w-[150px]" />
           <Button size="sm" variant="outline" @click="shiftMonth(1)">Next</Button>
+          <Button size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" />Download PDF</Button>
           <Button size="sm" variant="outline" @click="print"><Printer class="size-4" />Print</Button>
         </div>
       </div>

@@ -183,6 +183,10 @@ final class PosOfflineSyncService
         // The sibling-field rule the static list cannot carry, reconstructed from the row's own array.
         $rules['customer_id'][] = Rule::requiredIf(fn (): bool => ($row['payment_method'] ?? null) === 'due');
 
+        // The electronic tender's reference, required for bank/bkash/card/split rows.
+        // Same sibling-field rule the instance request applies; reconstructed from the row.
+        $rules['transaction_ref'][] = Rule::requiredIf(fn (): bool => in_array($row['payment_method'] ?? null, ['bank', 'bkash', 'card', 'split'], true));
+
         $errors = Validator::make($row, $rules)->errors()->toArray();
 
         // `items.0.product_id` reads as a field path, which is noise to a cashier. Keep the shape, but
@@ -227,6 +231,7 @@ final class PosOfflineSyncService
             tenderedAmount: (float) ($row['tendered_amount'] ?? 0),
             clientRef: $ref,
             rangUpAt: $rangUpAt?->toDateTimeString(),
+            transactionRef: $row['transaction_ref'] ?? null,
         );
     }
 

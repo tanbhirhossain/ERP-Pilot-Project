@@ -18,11 +18,13 @@ import {
   X,
 } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import EnterpriseCard from '@core/Components/EnterpriseCard.vue';
 import ModuleNav from './ModuleNav.vue';
 import { Button } from '@/components/ui/button';
 import { formatDate, formatDateTime, formatNumber } from '@core/Utils/format';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { confirmDialog } from '@core/Composables/useConfirm';
 
 /**
@@ -157,6 +159,36 @@ const remove = async (): Promise<void> => {
   router.delete(route('hrm.leaves.destroy', request.value.id));
 };
 
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => {
+    const r = props.detail.request;
+    return {
+        title: `Leave application #${r.id}`,
+        subtitle: `${r.employee} · ${r.leave_type ?? 'Leave'}`,
+        permission: 'hrm.leaves.view',
+        orientation: 'portrait',
+        meta: {
+            'Employee': r.employee,
+            'Employee ID': r.employee_id,
+            'Leave type': r.leave_type ?? '—',
+            'Status': r.status,
+            'Days': String(r.days),
+        },
+        headings: ['Field', 'Value'],
+        rows: [
+            ['Department', r.department ?? '—'],
+            ['From', r.from_date ?? '—'],
+            ['To', r.to_date ?? '—'],
+            ['Days', String(r.days)],
+            ['Half day', r.is_half_day ? 'Yes' : 'No'],
+            ['Reason', r.reason ?? '—'],
+            ['Status', r.status],
+            ['Created', r.created_at ?? '—'],
+            ['Approved', r.approved_at ?? '—'],
+        ],
+        footer: `Leave application #${r.id} · HR`,
+    };
+});
 const printSlip = (): void => printDocument({ portrait: true });
 </script>
 
@@ -167,30 +199,25 @@ const printSlip = (): void => printDocument({ portrait: true });
     <div class="space-y-4">
       <ModuleNav />
 
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div class="flex flex-wrap items-center gap-2">
-            <h1 class="flex items-center gap-2.5 text-xl font-bold tracking-tight">
-              <span class="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm">
-                <CalendarCheck2 class="size-5" />
-              </span>
-              Leave application #{{ request.id }}
-            </h1>
-            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset" :class="statusTone">
-              {{ request.status }}
-            </span>
-            <span v-if="pending && detail.next_stage" class="inline-flex items-center gap-1 rounded-full bg-info/10 px-2.5 py-1 text-[11px] font-medium text-info">
-              <CircleDot class="size-3" /> awaiting {{ detail.next_stage }}
-            </span>
-          </div>
-          <p class="mt-1 text-sm text-muted-foreground">
-            {{ request.employee }} · {{ request.employee_id }}<template v-if="request.department"> · {{ request.department }}</template>
-            · submitted {{ formatDateTime(request.created_at, 'short') }}
-          </p>
-        </div>
-        <div class="flex flex-wrap gap-2">
+      <PageHeader
+        :title="`Leave application #${request.id}`"
+        :icon="CalendarCheck2"
+        :description="`${request.employee} · ${request.employee_id}${request.department ? ' · ' + request.department : ''} · submitted ${formatDateTime(request.created_at, 'short')}`"
+      >
+        <template #badge>
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset" :class="statusTone">
+            {{ request.status }}
+          </span>
+          <span v-if="pending && detail.next_stage" class="inline-flex items-center gap-1 rounded-full bg-info/10 px-2.5 py-1 text-[11px] font-medium text-info">
+            <CircleDot class="size-3" /> awaiting {{ detail.next_stage }}
+          </span>
+        </template>
+        <template #actions>
           <Button size="sm" variant="outline" @click="router.visit(route('hrm.leaves.requests'))">
             <ArrowLeft class="size-4" /> Back
+          </Button>
+          <Button size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)">
+            <FileDown class="size-4" /> Download PDF
           </Button>
           <Button size="sm" variant="outline" @click="printSlip">
             <Printer class="size-4" /> Print slip
@@ -201,8 +228,8 @@ const printSlip = (): void => printDocument({ portrait: true });
           <Button v-if="canManage" size="sm" variant="ghost" class="text-danger" @click="remove">
             <Trash2 class="size-4" /> Delete
           </Button>
-        </div>
-      </div>
+        </template>
+      </PageHeader>
 
       <div class="grid gap-4 lg:grid-cols-3">
         <!-- The application -->

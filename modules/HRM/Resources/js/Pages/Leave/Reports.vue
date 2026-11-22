@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { Building2, CalendarDays, Download, FileBarChart2, Info, Printer, Timer, Users } from 'lucide-vue-next';
+import { FileDown, Building2, CalendarDays, Download, FileBarChart2, Info, Printer, Timer, Users } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import EnterpriseCard from '@core/Components/EnterpriseCard.vue';
 import ModuleNav from './ModuleNav.vue';
 import { Button } from '@/components/ui/button';
 import { formatNumber } from '@core/Utils/format';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 
 /**
  * Leave reports.
@@ -48,6 +49,24 @@ interface TakerRow {
   days: number;
   requests: number;
 }
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: `Leave report — ${props.report.year}`,
+    subtitle: 'Entitlement, utilisation and pending by leave type',
+    permission: 'hrm.leaves.view',
+    orientation: 'landscape',
+    meta: {
+        'Year': String(props.report.year),
+        'Active employees': String(props.report.totals.active_employees),
+        'Approved days': String(props.report.totals.approved_days),
+        'Pending days': String(props.report.totals.pending_days),
+        'Decisions': String(props.report.totals.decisions),
+    },
+    headings: ['Type', 'Code', 'Paid', 'Days/yr', 'Entitlement', 'Approved', 'Pending', 'Requests'],
+    rows: props.report.types.map((r: any) => [r.name, r.code ?? '—', r.is_paid ? 'Yes' : 'No', r.days_per_year, r.entitlement_pool, r.approved, r.pending, r.requests]),
+    footer: `Leave report ${props.report.year} · HR`,
+}));
 
 const props = defineProps<{
   report: {
@@ -141,6 +160,7 @@ const exportCsv = (): void => {
             <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
           </select>
           <Button v-if="canExport" size="sm" variant="outline" :disabled="busy" @click="exportCsv"><Download class="size-4" /> CSV</Button>
+          <Button size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" /> Download PDF</Button>
           <Button size="sm" variant="outline" @click="printDocument()"><Printer class="size-4" /> Print</Button>
         </div>
       </div>

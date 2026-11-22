@@ -50,17 +50,35 @@ function submit(){ form.put(route('purchase.orders.update', props.order.id)); }
       <h1 class="text-xl font-bold">Edit {{ order.order_no }} — <span class="text-muted-foreground text-sm">{{ order.status }}</span></h1>
       <form @submit.prevent="submit" class="space-y-4">
         <p v-if="Object.keys(form.errors).length" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ Object.values(form.errors)[0] as string }}</p>
+        <FormSection title="Details" :cols="2">
 
-        <div class="bg-card border rounded-xl p-4 space-y-4">
+
+        <div class="bg-card border rounded-xl p-4 space-y-4 col-span-full">
           <div class="grid grid-cols-1 sm:grid-cols-3 2xl:grid-cols-4 gap-4">
-            <div class="space-y-2"><Label>Vendor *</Label><SearchableSelect v-model="form.vendor_id" endpoint="/partner/api/options/vendors" placeholder="Search vendor"/></div>
-            <div class="space-y-2"><Label>Warehouse *</Label><SearchableSelect v-model="form.warehouse_id" endpoint="/inventory/api/options/warehouses" placeholder="Receiving warehouse"/></div>
-            <div class="space-y-2"><Label>Order Date *</Label><Input v-model="form.order_date" type="date"/></div>
+            <FormField label="Vendor" required>
+    <template #default="{ id, invalid }">
+        <SearchableSelect :id="id" v-model="form.vendor_id" endpoint="/partner/api/options/vendors" placeholder="Search vendor"/>
+    </template>
+</FormField>
+            <FormField label="Warehouse" required>
+    <template #default="{ id, invalid }">
+        <SearchableSelect :id="id" v-model="form.warehouse_id" endpoint="/inventory/api/options/warehouses" placeholder="Receiving warehouse"/>
+    </template>
+</FormField>
+            <FormField label="Order Date" required>
+    <template #default="{ id, invalid }">
+        <Input :id="id" :aria-invalid="invalid" v-model="form.order_date" type="date"/>
+    </template>
+</FormField>
           </div>
-          <div class="space-y-2"><Label>Notes</Label><Textarea v-model="form.notes" rows="2"/></div>
+          <FormField label="Notes">
+    <template #default="{ id, invalid }">
+        <Textarea :id="id" :aria-invalid="invalid" v-model="form.notes" rows="2"/>
+    </template>
+</FormField>
         </div>
 
-        <div class="bg-card border rounded-xl overflow-hidden">
+        <div class="bg-card border rounded-xl overflow-hidden col-span-full">
           <div class="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-3">
             <ReceiptText class="size-4 text-primary" aria-hidden="true" />
             <h3 class="font-semibold text-sm">Items</h3>
@@ -123,7 +141,7 @@ function submit(){ form.put(route('purchase.orders.update', props.order.id)); }
           </div>
         </div>
 
-        <div class="bg-card border rounded-xl p-4">
+        <div class="bg-card border rounded-xl p-4 col-span-full">
           <div class="ml-auto w-full max-w-sm space-y-2 text-sm">
             <div class="flex items-baseline justify-between gap-3">
               <span class="text-muted-foreground">Subtotal (gross)</span>
@@ -145,10 +163,9 @@ function submit(){ form.put(route('purchase.orders.update', props.order.id)); }
           </div>
         </div>
 
-        <Button type="submit" size="lg" :disabled="form.processing">
-          Update PO — {{ money(grandTotal) }} BDT
-        </Button>
-      </form>
+        <FormActions submit-label="Update PO — {{ money(grandTotal) }} BDT" :processing="form.processing" :dirty="form.isDirty" />
+          </FormSection>
+    </form>
     </div>
   </AdminLayout>
 </template>

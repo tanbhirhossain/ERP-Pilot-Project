@@ -4,6 +4,7 @@ import { ArrowLeft, Fingerprint, Globe, Monitor, ScrollText } from 'lucide-vue-n
 import { computed } from 'vue';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import PageHeader from '../../Components/PageHeader.vue';
 import { eventTone, formatDateTime, timeAgo } from '../../Utils/format';
 import StaticTable from '../../Components/StaticTable.vue';
 
@@ -60,30 +61,31 @@ const extraProperties = computed(() => {
     >
         <Head :title="`Audit entry #${activity.id}`" />
 
-        <div class="flex items-center gap-3 print:hidden">
-            <Link
-                :href="route('core.activities.index')"
-                class="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
-                aria-label="Back to audit trail"
-            >
-                <ArrowLeft class="size-4" />
-            </Link>
-            <div class="min-w-0">
-                <h1 class="flex flex-wrap items-center gap-2 text-xl font-bold tracking-tight">
-                    Entry
-                    <span class="font-mono text-lg">#{{ activity.id }}</span>
-                    <span
-                        class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium capitalize"
-                        :class="eventTone(activity.event).chip"
-                    >
-                        <span class="size-1.5 rounded-full" :class="eventTone(activity.event).dot" />
-                        {{ (activity.event ?? 'unknown').replace('_', ' ') }}
-                    </span>
-                </h1>
-                <p class="mt-0.5 text-sm text-muted-foreground">
-                    {{ activity.description }}
-                </p>
-            </div>
+        <div class="print:hidden">
+        <PageHeader
+            :title="`Entry #${activity.id}`"
+            :icon="ScrollText"
+            :description="activity.description"
+        >
+            <template #badge>
+                <span
+                    class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium capitalize"
+                    :class="eventTone(activity.event).chip"
+                >
+                    <span class="size-1.5 rounded-full" :class="eventTone(activity.event).dot" />
+                    {{ (activity.event ?? 'unknown').replace('_', ' ') }}
+                </span>
+            </template>
+            <template #actions>
+                <Link
+                    :href="route('core.activities.index')"
+                    class="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+                    aria-label="Back to audit trail"
+                >
+                    <ArrowLeft class="size-4" />
+                </Link>
+            </template>
+        </PageHeader>
         </div>
 
         <!-- Overview -->

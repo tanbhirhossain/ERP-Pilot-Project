@@ -136,7 +136,7 @@ function submit() {
 </script>
 
 <template>
-    <div class="space-y-5">
+    <div class="space-y-4">
         <PageHeader
             :title="isEdit ? `Edit ${qu.quotation_no ?? 'quotation'}` : 'New Quotation'"
             description="A quotation does not touch stock or the ledger. Sending it locks editing; converting it raises a sales order."
@@ -163,8 +163,8 @@ function submit() {
             </div>
         </div>
 
-        <form class="space-y-5" @submit.prevent="submit">
-            <fieldset :disabled="locked" class="m-0 space-y-5 border-0 p-0">
+        <form class="space-y-4" @submit.prevent="submit">
+            <fieldset :disabled="locked" class="m-0 space-y-4 border-0 p-0">
                 <div
                     v-if="errorCount"
                     role="alert"
@@ -267,7 +267,7 @@ function submit() {
                         <div
                             v-for="(it, i) in form.items"
                             :key="i"
-                            class="rounded-xl border bg-card p-4 transition hover:border-primary/30 hover:shadow-sm"
+                            class="rounded-xl border bg-card p-3 transition hover:border-primary/30 hover:shadow-sm"
                             :class="form.errors[`items.${i}.product_id`] ? 'border-destructive/50' : 'border-border'"
                         >
                             <div class="grid items-end gap-x-5 gap-y-3 xl:grid-cols-12">

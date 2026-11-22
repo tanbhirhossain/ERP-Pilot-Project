@@ -2,11 +2,12 @@
 import { Head, router } from '@inertiajs/vue3';
 import type { Account } from '@accounts/types';
 import type { SelectOption } from '@core/types';
-import { BookMarked, ArrowUpRight, ArrowDownRight, Scale, Search, Calendar, Printer } from 'lucide-vue-next';
+import { FileDown, BookMarked, ArrowUpRight, ArrowDownRight, Scale, Search, Calendar, Printer } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import PageHeader from '@core/Components/PageHeader.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { formatCurrency } from '@core/Utils/format';
@@ -22,6 +23,25 @@ const to=ref(props.to ?? '');
 function apply(){ router.get(route('accounts.reports.ledger'), {account_id: accId.value, from: from.value || undefined, to: to.value || undefined}, {preserveState:true}); }
 const totalDr = computed(()=> props.entries.reduce((s,e)=> s + Number(e.debit||0), 0));
 const totalCr = computed(()=> props.entries.reduce((s,e)=> s + Number(e.credit||0), 0));
+
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: 'General Ledger',
+    subtitle: props.account ? `${props.account.code} · ${props.account.name}` : 'No account selected',
+    permission: 'accounts.reports.view',
+    orientation: 'landscape',
+    meta: {
+        'Account': props.account ? `${props.account.code} ${props.account.name}` : '—',
+        'From': from.value || '—',
+        'To': to.value || 'now',
+        'Total Debit': formatCurrency(totalDr.value),
+        'Total Credit': formatCurrency(totalCr.value),
+    },
+    headings: ['Date', 'Reference', 'Journal', 'Debit', 'Credit', 'Balance after'],
+    rows: props.entries.map((e: any) => [e.posting_date, e.reference_no || e.journal?.journal_no || '—', e.journal?.narration || '—', Number(e.debit) || 0, Number(e.credit) || 0, Number(e.balance_after) || 0]),
+    footer: 'General Ledger · Accounts',
+}));
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{title:'Accounts'},{title:'General Ledger'}]">
@@ -30,7 +50,7 @@ const totalCr = computed(()=> props.entries.reduce((s,e)=> s + Number(e.credit||
       title="General Ledger"
       description="Account-wise drill-down — posting_date, reference, debit / credit and running balance. Paginated 200."
       :icon="BookMarked"
-      :actions="[{ label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label:'Filters', value: account ? `${account.code} · ${account.name}` : 'Pick an account', sub: `${entries.length} entries` },
         { label:'Total Debit', value: formatCurrency(totalDr), sub: 'In window' },

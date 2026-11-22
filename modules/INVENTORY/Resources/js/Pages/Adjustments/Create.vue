@@ -8,6 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import {Plus, Trash2, Package} from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import FormSection from '@core/Components/FormSection.vue';
+import FormField from '@core/Components/FormField.vue';
+import FormActions from '@core/Components/FormActions.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 defineProps<{ warehouseOptions:SelectOption[] }>();
@@ -25,15 +28,33 @@ function submit(){ form.post(route('inventory.adjustments.store')); }
       <p class="text-sm text-muted-foreground">Draft → Approve → Post. Posting creates stock moves.</p>
       <form @submit.prevent="submit" class="space-y-4">
         <p v-if="Object.keys(form.errors).length" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ Object.values(form.errors)[0] }}</p>
-        <div class="bg-card border rounded-xl shadow-sm p-4 space-y-4">
+        <FormSection title="Details" :cols="2">
+
+        <div class="bg-card border rounded-xl shadow-sm p-4 space-y-4 col-span-full">
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            <div class="space-y-2"><Label>Warehouse *</Label><SearchableSelect v-model="form.warehouse_id" :options="warehouseOptions" placeholder="Select warehouse" /></div>
-            <div class="space-y-2"><Label>Type *</Label><select v-model="form.type" class="w-full h-9 rounded-md border bg-background px-3 text-sm"><option value="correction">Correction</option><option value="increase">Increase</option><option value="decrease">Decrease</option><option value="damage">Damage</option><option value="expired">Expired</option><option value="found">Found</option></select></div>
+            <FormField label="Warehouse" required>
+    <template #default="{ id, invalid }">
+        <SearchableSelect :id="id" v-model="form.warehouse_id" :options="warehouseOptions" placeholder="Select warehouse" />
+    </template>
+</FormField>
+            <FormField label="Type" required>
+    <template #default="{ id, invalid }">
+        <FormSelect :id="id" :invalid="invalid" v-model="form.type" ><option value="correction">Correction</option><option value="increase">Increase</option><option value="decrease">Decrease</option><option value="damage">Damage</option><option value="expired">Expired</option><option value="found">Found</option></FormSelect>
+    </template>
+</FormField>
           </div>
-          <div class="space-y-2"><Label>Reason *</Label><Textarea v-model="form.reason" rows="2" placeholder="Why adjusting?"/></div>
-          <div class="space-y-2"><Label>Notes</Label><Textarea v-model="form.notes" rows="2"/></div>
+          <FormField label="Reason" required>
+    <template #default="{ id, invalid }">
+        <Textarea :id="id" :aria-invalid="invalid" v-model="form.reason" rows="2" placeholder="Why adjusting?"/>
+    </template>
+</FormField>
+          <FormField label="Notes">
+    <template #default="{ id, invalid }">
+        <Textarea :id="id" :aria-invalid="invalid" v-model="form.notes" rows="2"/>
+    </template>
+</FormField>
         </div>
-        <div class="bg-card border rounded-xl shadow-sm p-4 space-y-3">
+        <div class="bg-card border rounded-xl shadow-sm p-4 space-y-3 col-span-full">
           <h3 class="font-semibold text-sm">Items — qty always positive; type determines in/out</h3>
           <div v-for="(it,i) in form.items" :key="i" class="border rounded-lg p-3 space-y-3 relative">
             <Button type="button" variant="ghost" size="icon" class="absolute top-2 right-2 size-6" @click="removeItem(i)"><Trash2 class="size-3"/></Button>
@@ -47,8 +68,9 @@ function submit(){ form.post(route('inventory.adjustments.store')); }
           </div>
           <Button type="button" variant="outline" size="sm" @click="addItem"><Plus class="size-4"/> Add Item</Button>
         </div>
-        <Button type="submit" :disabled="form.processing">Create Adjustment</Button>
-      </form>
+        <FormActions submit-label="Create Adjustment" :processing="form.processing" :dirty="form.isDirty" cancel-href="route('inventory.adjustments.index')" />
+          </FormSection>
+    </form>
     </div>
       </PageHeader>
   </AdminLayout>

@@ -22,6 +22,12 @@ class PosSaleRequest extends FormRequest
         // applies the same rule per row from the row's own array — see `PosOfflineSyncService`.
         $rules['customer_id'][] = Rule::requiredIf(fn (): bool => $this->input('payment_method') === 'due');
 
+        // The electronic tender's reference, required for the methods whose money can
+        // only be reconciled against it. Same shape as customer_id: a sibling-field rule
+        // that cannot live in the static rowRules() list, so it is applied here where $this
+        // is available. The offline sync applies the same rule from the row's own array.
+        $rules['transaction_ref'][] = Rule::requiredIf(fn (): bool => in_array($this->input('payment_method'), ['bank', 'bkash', 'card', 'split'], true));
+
         return $rules;
     }
 
@@ -46,6 +52,11 @@ class PosSaleRequest extends FormRequest
             'customer_name' => ['nullable', 'string', 'max:255'],
             'payment_method' => ['required', 'in:cash,bank,bkash,card,split,due'],
             'bank_id' => ['nullable', 'exists:acc_banks,id'],
+            // The electronic tender's own reference — the bKash transaction id, the bank slip
+            // number, the card authorisation. Required for the methods whose money can only be
+            // reconciled against it; open for cash and credit. The sync path validates rows
+            // through `rowRules()`, so this rule covers the offline queue as well.
+            'transaction_ref' => ['nullable', 'string', 'max:100'],
             'cash_amount' => ['nullable', 'numeric', 'min:0'],
             'bank_amount' => ['nullable', 'numeric', 'min:0'],
             // Part payment on a credit sale, and the note handed over for change. Both are clamped

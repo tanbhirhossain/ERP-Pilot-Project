@@ -35,6 +35,7 @@ readonly class PosSaleData
          */
         public ?string $clientRef = null,
         public ?string $rangUpAt = null,
+        public ?string $transactionRef = null,
     ) {
         if (empty($this->lines)) {
             throw new \InvalidArgumentException('POS sale requires at least 1 line');

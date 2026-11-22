@@ -14,6 +14,8 @@ import { onBeforeUnmount } from 'vue';
  * navigation (the module is evaluated once per load) and reset on a real reload, which is the one case
  * where scrolling back to the top is correct. Anything persisted would also mean a fresh morning opens at
  * wherever yesterday's session happened to stop.
+ *
+ * Restore the prior offset without moving the window. The scroll host must use instant scrolling.
  */
 let rememberedScrollTop = 0;
 
@@ -23,7 +25,7 @@ export function resetSidebarScroll(): void {
 }
 
 export interface SidebarScroll {
-    /** Restore the offset and bring the current item back into view. Call once the list has its final height. */
+    /** Restore the offset as the list grows after mounting. */
     settle: () => void;
     /** Save the final offset and stop listening. Call on unmount, before the new shell takes over. */
     teardown: () => void;
@@ -32,21 +34,27 @@ export interface SidebarScroll {
 /**
  * @param host        Resolves the scrolling element; the sidebar renders it inside a kit component, so it
  *                    is not always mounted yet when this is set up.
- * @param activeSelector The link that represents the page you are on, so the nudge knows what to keep visible.
  */
 export function useSidebarScroll(
     host: () => HTMLElement | null,
-    activeSelector = '[data-nav-target][data-active="true"]',
 ): SidebarScroll {
     let frame = 0;
     let listening: HTMLElement | null = null;
+    let restoring = false;
+    let timers: number[] = [];
+    function cancelRestore() {
+        timers.forEach(clearTimeout);
+        timers = [];
+        restoring = false;
+    }
+    function onUserInteraction() { cancelRestore(); }
 
     // Coalesced into one animation frame: `scroll` fires far more often than the list moves meaningfully,
     // and this listener sits on an element people drag a thumb across.
     function onScroll(event: Event) {
         const el = event.target as HTMLElement | null;
 
-        if (!el || frame) return;
+        if (!el || frame || restoring) return;
 
         frame = requestAnimationFrame(() => {
             frame = 0;
@@ -59,6 +67,9 @@ export function useSidebarScroll(
 
         listening = el;
         el.addEventListener('scroll', onScroll, { passive: true });
+        el.addEventListener('wheel', onUserInteraction, { passive: true });
+        el.addEventListener('pointerdown', onUserInteraction, { passive: true });
+        el.addEventListener('keydown', onUserInteraction);
     }
 
     function settle() {
@@ -66,28 +77,20 @@ export function useSidebarScroll(
 
         if (!el) return;
 
-        el.scrollTop = rememberedScrollTop;
+        cancelRestore();
+        const target = rememberedScrollTop;
+        if (frame) { cancelAnimationFrame(frame); frame = 0; }
         listen(el);
-
-        // Restoring alone is not enough when the click *opened* a branch above the target — reaching
-        // `Administration › Audit Trail` from a closed section draws rows that push the item down by its
-        // own height, and an offset that was right a moment ago now shows the wrong part of the list. So
-        // nudge by the minimum that brings the current item inside the box. That is why this is hand-rolled
-        // rather than `scrollIntoView`, which would also scroll the *window* when the sidebar is not fully
-        // in view — the page jump belongs to Inertia, not to the menu.
-        const active = el.querySelector<HTMLElement>(activeSelector);
-
-        if (!active) return;
-
-        const box = el.getBoundingClientRect();
-        const item = active.getBoundingClientRect();
-
-        if (item.height === 0 || box.height === 0) return;
-
-        if (item.top < box.top) {
-            el.scrollTop -= box.top - item.top + 8;
-        } else if (item.bottom > box.bottom) {
-            el.scrollTop += item.bottom - box.bottom + 8;
+        if (target === 0) { el.scrollTop = 0; return; }
+        restoring = true;
+        el.scrollTop = target;
+        // Radix mounts nested branches asynchronously: an early write can be clamped against a
+        // temporarily short list. Retry after it grows, without recording those temporary offsets.
+        for (const delay of [100, 350, 700]) {
+            timers.push(window.setTimeout(() => {
+                el.scrollTop = target;
+                if (delay === 700) { restoring = false; timers = []; rememberedScrollTop = el.scrollTop; }
+            }, delay));
         }
     }
 
@@ -98,16 +101,22 @@ export function useSidebarScroll(
             // The frame above may not have fired yet — a click that navigates can land in the same frame as
             // the scroll before it — so read the element one last time. This is also the write that matters:
             // Vue unmounts the old page before it mounts the new one, so the next shell reads this value.
-            rememberedScrollTop = el.scrollTop;
+            if (!restoring) rememberedScrollTop = el.scrollTop;
             el.removeEventListener('scroll', onScroll);
+            el.removeEventListener('wheel', onUserInteraction);
+            el.removeEventListener('pointerdown', onUserInteraction);
+            el.removeEventListener('keydown', onUserInteraction);
         }
 
+        cancelRestore();
         listening = null;
 
         if (frame) {
             cancelAnimationFrame(frame);
             frame = 0;
         }
+
+
     }
 
     onBeforeUnmount(teardown);

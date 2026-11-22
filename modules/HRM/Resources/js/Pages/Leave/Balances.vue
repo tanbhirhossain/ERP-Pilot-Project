@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatDate, formatNumber } from '@core/Utils/format';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 
 /**
  * Leave Balances — the register.
@@ -94,6 +95,21 @@ interface Focused {
     is_half_day: boolean;
   }>;
 }
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: `Leave balances — ${props.year}`,
+    subtitle: 'Per-employee leave ledger',
+    permission: 'hrm.leaves.balance.view',
+    orientation: 'landscape',
+    meta: {
+        'Year': String(props.year),
+        'Employees': String(props.register.meta.total),
+    },
+    headings: ['Employee', 'Department', 'Designation', 'Years', 'Available', 'Used', 'Pending'],
+    rows: props.register.rows.map((r: any) => [r.employee, r.department ?? '—', r.designation ?? '—', r.years_of_service ?? 0, r.available, r.used, r.pending]),
+    footer: `Leave balances ${props.year} · HR`,
+}));
 
 const props = defineProps<{
   register: Register;
@@ -183,6 +199,7 @@ const exportCsv = (): void => {
             <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
           </select>
           <Button size="sm" variant="outline" @click="exportCsv"><Download class="size-4" /> CSV</Button>
+          <Button size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" /> Download PDF</Button>
           <Button size="sm" variant="outline" @click="printDocument()"><Printer class="size-4" /> Print</Button>
         </div>
       </div>

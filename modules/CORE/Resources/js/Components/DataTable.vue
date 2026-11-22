@@ -92,6 +92,8 @@ interface Props {
     title?: string;
     filterDefs?: FilterDef[];
     searchPlaceholder?: string;
+    /** Keep dense operational tables readable on narrow screens; the table scrolls inside its card. */
+    minTableWidth?: string;
     defaultSort?: { key: string; direction: 'asc' | 'desc' };
     emptyTitle?: string;
     emptyDescription?: string;
@@ -117,6 +119,7 @@ const props = withDefaults(defineProps<Props>(), {
     title: 'Records',
     filterDefs: () => [],
     searchPlaceholder: 'Search…',
+    minTableWidth: undefined,
     defaultSort: () => ({ key: 'created_at', direction: 'desc' }),
     emptyTitle: 'No records found',
     emptyDescription: 'Try adjusting your search or filters to widen the results.',
@@ -1005,7 +1008,7 @@ onMounted(() => {
                   Fixed layout distributes the row predictably, and each column's declared width (or a
                   proportional share when it declares none) is respected.
                 -->
-                <table class="w-full table-fixed caption-bottom text-sm">
+                <table class="w-full table-fixed caption-bottom text-sm" :style="{ minWidth: minTableWidth }">
                     <thead>
                         <tr class="border-b">
                             <th v-if="selectable" scope="col" class="dt-th bg-card sticky top-0 z-[1] w-10 px-3 py-3 print:hidden">

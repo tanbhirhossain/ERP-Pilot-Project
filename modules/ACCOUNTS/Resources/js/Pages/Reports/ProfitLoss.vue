@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { TrendingUp, TrendingDown, Sparkles, Wallet, Receipt, Calendar, Printer, ArrowRight } from 'lucide-vue-next';
+import { FileDown, TrendingUp, TrendingDown, Sparkles, Wallet, Receipt, Calendar, Printer, ArrowRight } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import PageHeader from '@core/Components/PageHeader.vue';
 import { formatCurrency } from '@core/Utils/format';
 import AcctSection from '../../Components/AcctSection.vue';
@@ -20,6 +21,32 @@ const incomeRows = computed(()=> (props.report.details ?? []).filter((r:any)=> r
 const expenseRows = computed(()=> (props.report.details ?? []).filter((r:any)=> r.account_type==='expense'));
 const net = computed(()=> props.report.net_profit ?? 0);
 const margin = computed(()=> props.report.income > 0 ? (net.value/props.report.income)*100 : 0);
+
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => {
+    const rows = [
+        ...incomeRows.value.map((r: any) => [`${r.code} ${r.name}`, 'Income', Number(Math.abs(r.balance)) || 0]),
+        ...expenseRows.value.map((r: any) => [`${r.code} ${r.name}`, 'Expense', Number(Math.abs(r.balance)) || 0]),
+    ];
+    return {
+        title: 'Profit & Loss',
+        subtitle: `Period ${props.report.from} → ${props.report.to} · Accrual basis`,
+        permission: 'accounts.reports.view',
+        orientation: 'landscape',
+        meta: {
+            'From': props.report.from,
+            'To': props.report.to,
+            'Income': formatCurrency(props.report.income),
+            'Expense': formatCurrency(props.report.expense),
+            'Net': formatCurrency(Math.abs(net.value)),
+            'Result': props.report.is_profit ? 'Net profit' : 'Net loss',
+        },
+        headings: ['Account', 'Section', 'Amount'],
+        rows,
+        footer: 'Profit & Loss · Accounts',
+    };
+});
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{title:'Accounts'},{title:'Profit & Loss'}]">
@@ -28,7 +55,7 @@ const margin = computed(()=> props.report.income > 0 ? (net.value/props.report.i
       title="Profit & Loss"
       :description="`Period ${report.from} → ${report.to} · Accrual basis from posted ledgers. BDT`"
       :icon="TrendingUp"
-      :actions="[{ label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label: 'Income', value: formatCurrency(report.income), sub: `${incomeRows.length} ${incomeRows.length === 1 ? 'account' : 'accounts'}` },
         { label: 'Expense', value: formatCurrency(report.expense), sub: `${expenseRows.length} ${expenseRows.length === 1 ? 'account' : 'accounts'}` },
@@ -82,7 +109,7 @@ const margin = computed(()=> props.report.income > 0 ? (net.value/props.report.i
               <span class="font-mono text-sm font-bold text-emerald-600 shrink-0">{{ formatCurrency(Math.abs(r.balance)) }}</span>
             </div>
           </div>
-          <div v-if="incomeRows.length" class="px-4 py-3 bg-emerald-500/[0.06] border-t flex justify-between text-sm font-bold">
+          <div v-if="incomeRows.length" class="px-4 py-3 bg-emerald-500/[0.06] border-t-2 border-emerald-500/25 flex justify-between text-sm font-bold">
             <span>Total Income</span><span class="font-mono text-emerald-600">{{ formatCurrency(report.income) }}</span>
           </div>
         </AcctSection>
@@ -95,7 +122,7 @@ const margin = computed(()=> props.report.income > 0 ? (net.value/props.report.i
               <span class="font-mono text-sm font-bold text-rose-600 shrink-0">{{ formatCurrency(Math.abs(r.balance)) }}</span>
             </div>
           </div>
-          <div v-if="expenseRows.length" class="px-4 py-3 bg-rose-500/[0.06] border-t flex justify-between text-sm font-bold">
+          <div v-if="expenseRows.length" class="px-4 py-3 bg-rose-500/[0.06] border-t-2 border-rose-500/25 flex justify-between text-sm font-bold">
             <span>Total Expense</span><span class="font-mono text-rose-600">{{ formatCurrency(report.expense) }}</span>
           </div>
         </AcctSection>

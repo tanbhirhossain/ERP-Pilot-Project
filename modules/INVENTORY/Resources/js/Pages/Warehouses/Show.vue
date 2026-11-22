@@ -4,22 +4,27 @@ import type { Warehouse as WarehouseEntity } from '@inventory/types';
 import { Warehouse, MapPin, Boxes } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 defineProps<{ warehouse:WarehouseEntity; stockSummary:any }>();
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Warehouses', href: route('inventory.warehouses.index') }, { title: warehouse.code }]">
-    <Head :title="warehouse.code" />
-    <div class="space-y-4">
-      <div class="bg-card border rounded-xl p-4">
-        <div class="flex justify-between"><div><h1 class="text-xl font-bold flex items-center gap-2"><Warehouse class="size-5"/> {{ warehouse.name }} <span class="font-mono text-sm px-2 py-0.5 rounded bg-amber-500/10 text-amber-600">{{ warehouse.code }}</span> <StatusBadge :label="warehouse.type" tone="primary"/></h1><p class="text-sm text-muted-foreground">{{ warehouse.address_line || '' }} {{ warehouse.city }} {{ warehouse.district }}</p></div><Link :href="route('inventory.warehouses.edit', warehouse.id)"><Button variant="outline" size="sm">Edit</Button></Link></div>
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+    <Head :title="warehouse.code" />    <PageHeader :title="warehouse.name" :description="`${warehouse.address_line || ''} ${warehouse.city} ${warehouse.district}`" :icon="Warehouse">
+      <template #badge>
+        <span class="font-mono text-sm px-2 py-0.5 rounded bg-amber-500/10 text-amber-600">{{ warehouse.code }}</span> <StatusBadge :label="warehouse.type" tone="primary"/>
+      </template>
+      <template #actions>
+        <Link :href="route('inventory.warehouses.edit', warehouse.id)"><Button variant="outline" size="sm">Edit</Button></Link>
+      </template>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
           <div class="bg-muted/40 rounded-lg p-3 border"><p class="text-xs text-muted-foreground">Locations</p><p class="text-lg font-bold">{{ warehouse.locations?.length ?? 0 }}</p></div>
           <div class="bg-muted/40 rounded-lg p-3 border"><p class="text-xs text-muted-foreground">Stock Lines</p><p class="text-lg font-bold">{{ warehouse.stocks?.length ?? 0 }}</p></div>
           <div class="bg-muted/40 rounded-lg p-3 border"><p class="text-xs text-muted-foreground">Manager</p><p class="font-bold">{{ warehouse.manager?.name || '—' }}</p></div>
           <div class="bg-muted/40 rounded-lg p-3 border"><p class="text-xs text-muted-foreground">Status</p><StatusBadge :label="warehouse.is_active?'Active':'Inactive'" :tone="warehouse.is_active?'success':'neutral'" /></div>
         </div>
-      </div>
+
       <div class="bg-card border rounded-xl p-4">
         <h3 class="font-semibold flex items-center gap-2 mb-2"><MapPin class="size-4"/> Locations — {{ warehouse.locations?.length ?? 0 }}</h3>
         <div v-if="!warehouse.locations?.length" class="text-sm text-muted-foreground py-4 text-center">No locations — add bins/shelves.</div>
@@ -30,6 +35,6 @@ defineProps<{ warehouse:WarehouseEntity; stockSummary:any }>();
         <div v-if="!warehouse.stocks?.length" class="text-sm text-muted-foreground py-4 text-center">No stock.</div>
         <div v-for="s in warehouse.stocks" :key="s.id" class="flex justify-between text-sm border-b py-1"><span>{{ s.product?.name || 'Product #'+s.product_id }}</span><span class="font-mono">{{ s.qty_on_hand }} @ {{ s.avg_cost }}</span></div>
       </div>
-    </div>
+    </PageHeader>
   </AdminLayout>
 </template>

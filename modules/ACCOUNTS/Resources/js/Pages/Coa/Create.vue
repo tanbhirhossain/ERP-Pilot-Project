@@ -7,6 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import FormSection from '@core/Components/FormSection.vue';
+import FormField from '@core/Components/FormField.vue';
+import FormActions from '@core/Components/FormActions.vue';
+import FormCheckbox from '@core/Components/FormCheckbox.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 defineProps<{ parentOptions:SelectOption[] }>();
@@ -19,24 +23,51 @@ function submit(){ form.post(route('accounts.coa.store')); }
     <Head title="Create Account" />
     <PageHeader title="Add Account" description="Complete the form — required *" :icon="Package">
     <div class="max-w-4xl space-y-4">
-      <form @submit.prevent="submit" class="bg-card border rounded-xl shadow-sm p-4 space-y-4">
+      <form @submit.prevent="submit" class="space-y-4">
         <p v-if="Object.keys(form.errors).length" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ Object.values(form.errors)[0] }}</p>
+        <FormSection title="Details" :cols="2">
+
         <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          <div class="space-y-2"><Label>Code *</Label><Input v-model="form.code" placeholder="100101"/></div>
-          <div class="space-y-2"><Label>Type *</Label><select v-model="form.account_type" class="w-full h-9 rounded-md border bg-background px-3 text-sm" @change="form.nature=(['asset','expense'].includes(form.account_type)?'debit':'credit')"><option value="asset">Asset</option><option value="liability">Liability</option><option value="equity">Equity</option><option value="income">Income</option><option value="expense">Expense</option></select></div>
+          <FormField label="Code" required>
+    <template #default="{ id, invalid }">
+        <Input :id="id" :aria-invalid="invalid" v-model="form.code" placeholder="100101"/>
+    </template>
+</FormField>
+          <FormField label="Type" required>
+    <template #default="{ id, invalid }">
+        <FormSelect :id="id" :invalid="invalid" v-model="form.account_type"  @change="form.nature=(['asset','expense'].includes(form.account_type)?'debit':'credit')"><option value="asset">Asset</option><option value="liability">Liability</option><option value="equity">Equity</option><option value="income">Income</option><option value="expense">Expense</option></FormSelect>
+    </template>
+</FormField>
         </div>
-        <div class="space-y-2"><Label>Name *</Label><Input v-model="form.name" placeholder="Cash in Hand — Chattogram"/></div>
+        <FormField label="Name" required>
+    <template #default="{ id, invalid }">
+        <Input :id="id" :aria-invalid="invalid" v-model="form.name" placeholder="Cash in Hand — Chattogram"/>
+    </template>
+</FormField>
         <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          <div class="space-y-2"><Label>Nature *</Label><select v-model="form.nature" class="w-full h-9 rounded-md border bg-background px-3 text-sm"><option value="debit">Debit</option><option value="credit">Credit</option></select></div>
-          <div class="space-y-2"><Label>Parent (Group)</Label><SearchableSelect v-model="form.parent_id" :options="parentOptions" placeholder="Root (no parent)" clearable /></div>
+          <FormField label="Nature" required>
+    <template #default="{ id, invalid }">
+        <FormSelect :id="id" :invalid="invalid" v-model="form.nature" ><option value="debit">Debit</option><option value="credit">Credit</option></FormSelect>
+    </template>
+</FormField>
+          <FormField label="Parent (Group)">
+    <template #default="{ id, invalid }">
+        <SearchableSelect :id="id" v-model="form.parent_id" :options="parentOptions" placeholder="Root (no parent)" clearable />
+    </template>
+</FormField>
         </div>
-        <div class="space-y-2"><Label>Description</Label><Textarea v-model="form.description" rows="2"/></div>
+        <FormField label="Description">
+    <template #default="{ id, invalid }">
+        <Textarea :id="id" :aria-invalid="invalid" v-model="form.description" rows="2"/>
+    </template>
+</FormField>
         <div class="flex gap-4">
-          <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.is_group" class="rounded"/> Group (no postings)</label>
-          <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.is_active" class="rounded"/> Active</label>
+          <FormCheckbox v-model="form.is_group" label="Group (no postings)" />
+          <FormCheckbox v-model="form.is_active" label="Active" />
         </div>
-        <Button type="submit" :disabled="form.processing">Create Account</Button>
-      </form>
+        <FormActions submit-label="Create Account" :processing="form.processing" :dirty="form.isDirty" cancel-href="route('accounts.coa.index')" />
+          </FormSection>
+    </form>
     </div>
       </PageHeader>
   </AdminLayout>

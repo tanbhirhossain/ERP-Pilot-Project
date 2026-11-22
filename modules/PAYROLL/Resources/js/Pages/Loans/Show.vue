@@ -15,11 +15,13 @@ import {
   X,
 } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import ModuleNav from './ModuleNav.vue';
 import { confirmDialog, promptDialog } from '@core/Composables/useConfirm';
 import { useToast } from '@core/Composables/useToast';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { formatCurrency } from '@core/Utils/format';
 
 /**
@@ -137,6 +139,25 @@ async function reject(): Promise<void> {
   });
 }
 
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: `Advance statement — ${props.loan.employee_name || props.loan.employee_id}`,
+    subtitle: props.loan.purpose ?? undefined,
+    permission: 'payroll.loans.manage',
+    orientation: 'portrait',
+    meta: {
+        'Employee': props.loan.employee_name || props.loan.employee_id,
+        'Advance': money(props.loan.principal_amount),
+        'Recovered': money(props.loan.recovered),
+        'Outstanding': money(props.loan.remaining),
+        'Status': props.loan.status,
+        'Installments': String(props.loan.installment_count),
+    },
+    headings: ['Installment', 'Due date', 'Amount', 'Status', 'Paid at'],
+    rows: props.loan.installments.map((i: any) => [i.installment_number, i.due_date ?? '—', i.amount, i.status, i.paid_at ?? '—']),
+    footer: 'Advance statement · Payroll',
+}));
+
 const print = (): void => {
   printDocument({
     title: `Advance statement — ${props.loan.employee_name || props.loan.employee_id}`,
@@ -180,24 +201,17 @@ const loanTone = (status: string): string => ({
     <div class="space-y-4">
       <ModuleNav :can-manage="canManage" />
 
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <button type="button" class="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" @click="router.visit(route('payroll.loans.register'))">
-            <ArrowLeft class="size-3" />Register
-          </button>
-          <h1 class="flex items-center gap-2.5 text-xl font-bold tracking-tight">
-            <span class="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm">
-              <HandCoins class="size-5" />
-            </span>
-            {{ loan.employee_name || loan.employee_id }}
-            <span class="rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide" :class="loanTone(loan.status)">{{ loan.status }}</span>
-          </h1>
-          <p class="mt-1 text-sm text-muted-foreground">
-            {{ loan.employee_id }}<template v-if="loan.designation"> · {{ loan.designation }}</template><template v-if="loan.department"> · {{ loan.department }}</template>
-            · advance #{{ loan.id }}, raised {{ loan.created_at }}
-          </p>
-        </div>
-        <div class="flex flex-wrap gap-2">
+      <PageHeader
+        :title="loan.employee_name || loan.employee_id"
+        :icon="HandCoins"
+        :description="`${loan.employee_id}${loan.designation ? ' · ' + loan.designation : ''}${loan.department ? ' · ' + loan.department : ''} · advance #${loan.id}, raised ${loan.created_at}`"
+      >
+        <template #badge>
+          <span class="rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide" :class="loanTone(loan.status)">{{ loan.status }}</span>
+        </template>
+        <template #actions>
+          <Button size="sm" variant="ghost" @click="router.visit(route('payroll.loans.register'))"><ArrowLeft class="size-3" />Register</Button>
+          <Button size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" />Download PDF</Button>
           <Button size="sm" variant="outline" @click="print"><Printer class="size-4" />Print</Button>
           <template v-if="isPending && canApproveLoans">
             <Button size="sm" variant="outline" :disabled="busy || isOwnRequest" @click="reject"><X class="size-4" />Reject</Button>
@@ -205,8 +219,8 @@ const loanTone = (status: string): string => ({
               <Check class="size-4" />Approve {{ nextStep?.label || 'advance' }}
             </Button>
           </template>
-        </div>
-      </div>
+        </template>
+      </PageHeader>
 
       <p v-if="error" role="alert" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ error }}</p>
       <p v-if="isPending && isOwnRequest" class="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">

@@ -39,6 +39,12 @@ export interface TillSaleInput {
    */
   paidNowCents?: number;
   tenderedCents?: number;
+  /**
+   * The electronic tender's reference: the bKash transaction id, the bank slip number, the card
+   * authorisation. Carried verbatim so the ledger row and the printed receipt both show the number
+   * the customer was handed — the one number that reconciles the takings to the gateway.
+   */
+  transactionRef?: string | null;
 }
 
 /** One line of a cart, in the units the server expects. */
@@ -64,6 +70,7 @@ export function buildSalePayload(input: TillSaleInput): SalePayload {
     bank_id: input.bankId,
     session_id: input.sessionId,
     items: input.lines.map(line),
+    transaction_ref: input.transactionRef?.trim() || null,
   };
 
   if (input.paymentMethod === 'split') {

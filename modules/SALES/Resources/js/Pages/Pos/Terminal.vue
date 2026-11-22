@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   ShoppingCart, Scan, Trash2, CreditCard, Banknote, Wallet, Smartphone, Percent, AlertCircle,
-  CheckCircle, Package, Search, Plus, Minus, X, Coins, Split, ArrowLeftRight,
+  CheckCircle, Package, Search, Plus, Minus, X, Coins, Split, ArrowLeftRight, Receipt, Loader2,
 } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
@@ -65,6 +65,10 @@ const stockWarning = ref('');
  */
 const tendered = ref<number | null>(null);
 const paidNow = ref<number | null>(null);
+// The electronic tender's reference: bKash transaction id, bank slip number, card
+// authorisation. It goes on the sale, the receipt and the day-end report — the number the
+// customer was handed is the only number that reconciles the takings to the gateway.
+const transactionRef = ref('');
 
 // Catalogue grid
 const catalog = ref<any[]>([]);
@@ -97,6 +101,20 @@ const offline = useOfflineTill({
 });
 const submissionRef = ref<string | null>(null);
 const queuedNote = ref('');
+const sellError = ref('');
+const selling = ref(false);
+
+/**
+ * Surfaces a failed sale submission. The Charge button used to fire `router.post` with no
+ * `onError`/`onInvalid`, so a 422 validation rejection (or a 500) left the page exactly as it
+ * was — the cashier pressed Charge, nothing visibly happened, and the sale was lost with no word
+ * about why. Every refusal now lands in `sellError` and is shown on the button panel.
+ */
+function announceSellError(message: string) {
+  sellError.value = message;
+  window.clearTimeout(feedbackTimer);
+  feedbackTimer = window.setTimeout(() => { sellError.value = ''; }, 8000);
+}
 
 function nextSubmissionRef(): string {
   if (!submissionRef.value) {
@@ -153,6 +171,9 @@ const splitValid = computed(() => {
   return Math.abs((c + b) - grandTotal.value) < 0.02;
 });
 const needsBank = computed(() => ['bank','bkash','card','split'].includes(paymentMethod.value));
+/** The methods whose money is only reconcilable against a gateway receipt need its reference. */
+const needsTransactionRef = computed(() => ['bank','bkash','card','split'].includes(paymentMethod.value));
+const transactionRefMissing = computed(() => needsTransactionRef.value && !transactionRef.value.trim());
 // A credit sale has to be owed by somebody: the day-end posting raises a receivable per customer, and
 // a debt against "Walk-in Customer" can never be aged, chased or collected.
 const dueNeedsCustomer = computed(() => paymentMethod.value === 'due' && !customerId.value);
@@ -210,6 +231,7 @@ const canSell = computed(() =>
   && (paymentMethod.value !== 'split' || splitValid.value)
   && !dueNeedsCustomer.value
   && !tenderIncomplete.value
+  && !transactionRefMissing.value
   // A sale needs a drawer: the day-end posting is the only path into the ledger, and it reads
   // sales through their session. Without this the till rang up a sale whose stock left and whose
   // cash was taken, and neither the revenue nor its VAT ever reached the books.
@@ -241,6 +263,9 @@ function setPayment(id: string) {
   paymentMethod.value = id;
   if (id !== 'cash') tendered.value = null;
   if (id !== 'due') paidNow.value = null;
+  // The reference belongs to the electronic tender: switching back to cash or credit has no
+  // gateway receipt to reconcile, and leaving a stale one behind would print it on a cash sale.
+  if (id === 'cash' || id === 'due') transactionRef.value = '';
 }
 function setTendered(v: number) { tendered.value = v; }
 function payHalf() { paidNow.value = Math.round(grandTotal.value * 100 / 2) / 100; }
@@ -439,6 +464,7 @@ function sell() {
     bankAmount: bankAmt.value,
     paidNowCents: paidNowCents.value,
     tenderedCents: tenderedCents.value,
+    transactionRef: transactionRef.value,
   });
   payload.client_ref = nextSubmissionRef();
 
@@ -448,11 +474,22 @@ function sell() {
     return;
   }
 
+  selling.value = true;
+  sellError.value = '';
   router.post(route('sales.pos.sell'), payload, {
     // The key survives a failed submission on purpose: the till re-sends the *same* sale, and the
     // server answers with the one it already has. `onSuccess` never fires on a redirect away from this
     // page, so nothing else has to reset it — the cart watcher above covers a corrected sale.
     preserveScroll: true,
+    // A 422 means the server refused the sale on a validation rule. Surface the first message so the
+    // cashier knows why it did not go through instead of staring at an unchanged screen.
+    onError: (errors) => {
+      const first = Object.values(errors ?? {}).flat().find(Boolean);
+      announceSellError(first ? `Charge refused: ${first}` : 'Charge refused — check the sale details and try again.');
+    },
+    // A domain refusal redirects back with flash.error and counts as a successful Inertia visit.
+    // Always re-enable the button, including on network cancellation or a same-page redirect.
+    onFinish: () => { selling.value = false; },
   });
 }
 
@@ -482,6 +519,7 @@ async function queueOfflineSale(payload: any) {
   // After the cart is emptied, not before: emptying it trips the watcher that clears this very note,
   // and a sale the cashier cannot see confirmation of is a sale they will ring up twice.
   clearCart();
+  transactionRef.value = '';
   announceSuccess('');
   queuedNote.value = note;
 }
@@ -565,22 +603,26 @@ onMounted(() => {
       <a :href="route('sales.pos.offline')" class="ml-auto font-semibold underline decoration-dotted hover:opacity-80">Queue desk</a>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_26rem] 2xl:grid-cols-[minmax(0,1fr)_29rem]">
+    <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_26rem] 2xl:grid-cols-[minmax(0,1fr)_28rem]">
       <!-- ══ Left: scan, then pick from the grid ══════════════════════════ -->
-      <div class="space-y-4">
-        <div class="rounded-xl border bg-card p-4 shadow-sm">
+      <div class="space-y-3">
+        <div class="relative overflow-hidden rounded-xl border bg-card p-4 shadow-[0_1px_2px_hsl(var(--foreground)/0.04)]">
+          <span aria-hidden="true" class="absolute inset-x-0 top-0 h-[3px] bg-primary/70"></span>
           <div class="flex flex-wrap items-start gap-3">
             <div class="min-w-0">
-              <h1 class="flex items-center gap-2 text-lg font-bold tracking-tight">
-                <ShoppingCart class="size-5 text-primary" aria-hidden="true" /> POS Terminal
+              <h1 class="flex items-center gap-2.5 text-lg font-bold tracking-tight">
+                <span class="grid size-8 place-items-center rounded-lg bg-brand-tint text-brand-tint-ink ring-1 ring-inset ring-primary/10">
+                  <ShoppingCart class="size-4" aria-hidden="true" />
+                </span>
+                POS Terminal
               </h1>
-              <p class="mt-0.5 text-xs text-muted-foreground">
+              <p class="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                 Scan, tap a tile, tender. Stock leaves the shelf at once; the day's takings, VAT and cost post in one journal when the drawer closes.
               </p>
             </div>
             <div class="ml-auto flex flex-wrap items-center gap-2">
-              <div class="w-44"><Label class="sr-only">Warehouse</Label><SearchableSelect v-model="warehouseId" :options="warehouses" placeholder="Warehouse *" /></div>
-              <div class="w-44"><Label class="sr-only">Customer</Label><SearchableSelect v-model="customerId" :options="customers" placeholder="Walk-in" clearable /></div>
+              <div class="w-48"><Label class="sr-only">Warehouse</Label><SearchableSelect v-model="warehouseId" :options="warehouses" placeholder="Warehouse *" /></div>
+              <div class="w-48"><Label class="sr-only">Customer</Label><SearchableSelect v-model="customerId" :options="customers" placeholder="Walk-in" clearable /></div>
             </div>
           </div>
 
@@ -620,8 +662,10 @@ onMounted(() => {
         <!-- ── Product grid: six across on a wide till, scrollable ──────── -->
         <div class="flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div class="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-3">
-            <Package class="size-4 text-primary" aria-hidden="true" />
-            <h2 class="text-sm font-semibold">Products</h2>
+            <span class="grid size-7 place-items-center rounded-lg bg-brand-tint text-brand-tint-ink ring-1 ring-inset ring-primary/10">
+              <Package class="size-3.5 text-primary" aria-hidden="true" />
+            </span>
+            <h2 class="text-sm font-bold tracking-tight">Products</h2>
             <span class="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
               {{ catalog.length }} shown
             </span>
@@ -636,8 +680,8 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="max-h-[34rem] min-h-[16rem] overflow-y-auto p-3 2xl:max-h-[calc(100vh-24rem)]">
-            <p v-if="catalogError" class="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">{{ catalogError }}</p>
+          <div class="max-h-[34rem] min-h-[16rem] overflow-y-auto premium-scrollbar p-4 2xl:max-h-[calc(100vh-24rem)]">
+            <p v-if="catalogError" class="mb-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">{{ catalogError }}</p>
             <div
               class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
               :class="catalogLoading && 'opacity-60 transition-opacity'"
@@ -645,25 +689,18 @@ onMounted(() => {
             >
               <button
                 v-for="p in catalog" :key="p.value" type="button"
-                class="group flex min-h-[104px] flex-col justify-between gap-2 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                class="group relative flex min-h-[100px] flex-col justify-between gap-2 overflow-hidden rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 :aria-label="`Add ${p.label}, ${p.meta} BDT`"
                 @click="addFromCatalog(p)"
               >
-                <!--
-                  Two lines, not one.
-                  The name was `truncate`d to a single line inside a fifth-of-the-screen tile, so every
-                  garment in the catalogue read "Cotton Panjabi …" — seven identical tiles, each
-                  hiding the one word that told them apart (Off White? Navy?). A cashier cannot sell
-                  what they cannot read. The name now gets two lines and the SKU stays as the
-                  tie-breaker underneath.
-                -->
+                <span aria-hidden="true" class="absolute inset-x-0 top-0 h-0.5 bg-primary/60 opacity-0 transition-opacity group-hover:opacity-100"></span>
                 <div class="min-w-0">
-                  <p class="line-clamp-2 text-[12.5px] font-medium leading-snug text-foreground">{{ p.label }}</p>
-                  <p class="mt-1 truncate text-[10.5px] uppercase tracking-wide text-muted-foreground">{{ p.sku }}</p>
+                  <p class="line-clamp-2 text-[12.5px] font-semibold leading-snug text-foreground">{{ p.label }}</p>
+                  <p class="mt-1 truncate font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground/70">{{ p.sku }}</p>
                 </div>
                 <div class="flex items-end justify-between gap-1">
-                  <span class="num-display text-[15px] font-semibold text-foreground">{{ p.meta }}</span>
-                  <span class="grid size-6 place-items-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <span class="num-display text-[15px] font-bold text-foreground">{{ p.meta }}</span>
+                  <span class="grid size-7 place-items-center rounded-lg bg-muted text-muted-foreground transition-all group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
                     <Plus class="size-3.5" aria-hidden="true" />
                   </span>
                 </div>
@@ -676,7 +713,7 @@ onMounted(() => {
         </div>
 
         <!-- ── Drawer ──────────────────────────────────────────────────── -->
-        <div class="rounded-xl border bg-card p-4 shadow-sm">
+        <div class="rounded-xl border bg-card p-3.5 shadow-sm">
           <div class="flex flex-wrap items-center gap-2">
             <h3 class="flex items-center gap-2 text-sm font-bold">
               <ArrowLeftRight class="size-4 text-primary" aria-hidden="true" /> Drawer
@@ -743,10 +780,13 @@ onMounted(() => {
       </div>
 
       <!-- ══ Right: the till ═════════════════════════════════════════════ -->
-      <div class="space-y-3 xl:sticky xl:top-3 xl:self-start">
+      <div class="space-y-3 xl:sticky xl:top-20 xl:self-start">
         <div class="flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div class="flex items-center gap-2 border-b bg-muted/30 px-4 py-3">
-            <h2 class="text-sm font-semibold">Current sale</h2>
+            <span class="grid size-7 place-items-center rounded-lg bg-brand-tint text-brand-tint-ink ring-1 ring-inset ring-primary/10">
+              <ShoppingCart class="size-3.5 text-primary" aria-hidden="true" />
+            </span>
+            <h2 class="text-sm font-bold tracking-tight">Current sale</h2>
             <span class="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
               {{ cart.length }} line{{ cart.length === 1 ? '' : 's' }} · {{ money(itemCount) }} unit{{ itemCount === 1 ? '' : 's' }}
             </span>
@@ -755,10 +795,10 @@ onMounted(() => {
             </Button>
           </div>
 
-          <div class="max-h-[22rem] min-h-[7rem] overflow-y-auto p-3">
-            <div v-if="!cart.length" class="grid place-items-center rounded-xl border-2 border-dashed py-9 text-center">
+          <div class="max-h-[22rem] min-h-[6rem] overflow-y-auto premium-scrollbar p-3">
+            <div v-if="!cart.length" class="grid place-items-center rounded-xl border border-dashed border-border bg-muted/20 px-3 py-4 text-center">
               <ShoppingCart class="size-7 text-muted-foreground/50" aria-hidden="true" />
-              <p class="mt-2 text-sm font-medium text-muted-foreground">No items yet</p>
+              <p class="mt-2 text-sm font-semibold text-muted-foreground">No items yet</p>
               <p class="mt-0.5 max-w-[16rem] text-xs text-muted-foreground/80">Scan a barcode or tap a product tile — totals and change update live.</p>
             </div>
 
@@ -766,12 +806,12 @@ onMounted(() => {
                  re-used the DOM node and left the next line showing stale input. -->
             <div
               v-for="(it, i) in cart" :key="it.product_id ?? i"
-              class="mb-2 rounded-xl border p-2.5 transition-colors last:mb-0"
-              :class="lineOverStock(it) ? 'border-amber-500/40 bg-amber-500/5' : 'bg-muted/10 hover:border-primary/30'"
+              class="mb-2 rounded-xl border p-3 transition-colors last:mb-0"
+              :class="lineOverStock(it) ? 'border-amber-500/40 bg-amber-500/5' : 'border-border bg-muted/[0.04] hover:border-primary/30'"
             >
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
-                  <p class="truncate text-[13px] font-semibold">{{ it.product_name || `Product #${it.product_id}` }}</p>
+                  <p class="truncate text-[13px] font-bold text-foreground">{{ it.product_name || `Product #${it.product_id}` }}</p>
                   <p class="truncate font-mono text-[11px] text-muted-foreground">
                     {{ it.sku || '' }}<span v-if="it.barcode"> · {{ it.barcode }}</span>
                     <span v-if="it.available !== undefined" :class="lineOverStock(it) ? 'font-semibold text-amber-700 dark:text-amber-400' : ''"> · avl {{ it.available }}</span>
@@ -780,55 +820,80 @@ onMounted(() => {
                 <div class="shrink-0 text-right">
                   <p class="font-mono text-sm font-bold tabular-nums">{{ money(lineTotal(it)) }}</p>
                   <button
-                    type="button" class="mt-0.5 rounded p-0.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                    type="button" class="mt-0.5 inline-flex size-7 place-items-center rounded-lg text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
                     :aria-label="`Remove ${it.product_name || 'line ' + (i + 1)}`" @click="remove(i)"
                   ><Trash2 class="size-3.5" /></button>
                 </div>
               </div>
               <div class="mt-2 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5">
-                <div class="flex items-center rounded-lg border bg-card">
-                  <button type="button" class="grid size-7 place-items-center rounded-l-lg text-muted-foreground transition hover:bg-muted hover:text-foreground" :aria-label="`Decrease quantity of ${it.product_name || 'line'}`" @click="bump(it, -1)"><Minus class="size-3.5" /></button>
-                  <Input v-model.number="it.qty" type="number" step="0.01" min="0.01" class="h-7 w-14 border-0 text-center font-mono shadow-none focus-visible:ring-0" :aria-label="`Quantity of ${it.product_name || 'line'}`" />
-                  <button type="button" class="grid size-7 place-items-center rounded-r-lg text-muted-foreground transition hover:bg-muted hover:text-foreground" :aria-label="`Increase quantity of ${it.product_name || 'line'}`" @click="bump(it, 1)"><Plus class="size-3.5" /></button>
+                <div class="flex items-center overflow-hidden rounded-lg border bg-card">
+                  <button type="button" class="grid size-8 place-items-center text-muted-foreground transition hover:bg-muted hover:text-foreground" :aria-label="`Decrease quantity of ${it.product_name || 'line'}`" @click="bump(it, -1)"><Minus class="size-3.5" /></button>
+                  <Input v-model.number="it.qty" type="number" step="0.01" min="0.01" class="h-8 w-16 border-0 text-center font-mono font-bold shadow-none focus-visible:ring-0" :aria-label="`Quantity of ${it.product_name || 'line'}`" />
+                  <button type="button" class="grid size-8 place-items-center text-muted-foreground transition hover:bg-muted hover:text-foreground" :aria-label="`Increase quantity of ${it.product_name || 'line'}`" @click="bump(it, 1)"><Plus class="size-3.5" /></button>
                 </div>
-                <Input v-model.number="it.unit_price" type="number" step="0.01" class="h-7 font-mono text-right" aria-label="Unit price" />
-                <div class="flex items-center gap-1">
-                  <Input v-model.number="it.discount_pct" type="number" step="0.01" min="0" max="100" class="h-7 w-14 font-mono text-right" aria-label="Discount percent" />
-                  <Input v-model.number="it.vat_rate" type="number" step="0.01" min="0" max="100" class="h-7 w-14 font-mono text-right" aria-label="VAT percent" />
+                <Input v-model.number="it.unit_price" type="number" step="0.01" class="h-8 font-mono text-right" aria-label="Unit price" />
+                <div class="flex items-center gap-1.5">
+                  <Input v-model.number="it.discount_pct" type="number" step="0.01" min="0" max="100" class="h-8 w-16 font-mono text-right" aria-label="Discount percent" />
+                  <Input v-model.number="it.vat_rate" type="number" step="0.01" min="0" max="100" class="h-8 w-16 font-mono text-right" aria-label="VAT percent" />
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="space-y-1.5 border-t bg-muted/20 px-4 py-3 text-sm">
-            <div class="flex justify-between"><span class="text-muted-foreground">Subtotal</span><span class="font-mono tabular-nums">{{ money(subtotal) }}</span></div>
-            <div class="flex justify-between">
-              <span class="flex items-center gap-1 text-muted-foreground"><Percent class="size-3" aria-hidden="true" /> Discount</span>
+                    <div class="space-y-1.5 border-t bg-muted/20 px-4 py-3 text-sm">
+            <div class="flex items-center justify-between"><span class="text-muted-foreground">Subtotal</span><span class="font-mono tabular-nums">{{ money(subtotal) }}</span></div>
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1.5 text-muted-foreground"><Percent class="size-3.5" aria-hidden="true" /> Discount</span>
               <span class="font-mono tabular-nums text-emerald-700 dark:text-emerald-400">−{{ money(discountTotal) }}</span>
             </div>
-            <div class="flex justify-between">
-              <span class="flex items-center gap-1 text-muted-foreground"><Coins class="size-3" aria-hidden="true" /> VAT (2110)</span>
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1.5 text-muted-foreground"><Coins class="size-3.5" aria-hidden="true" /> VAT (2110)</span>
               <span class="font-mono tabular-nums text-amber-700 dark:text-amber-400">+{{ money(vatTotal) }}</span>
             </div>
           </div>
         </div>
 
         <!-- ── Tender ─────────────────────────────────────────────────── -->
-        <div class="rounded-xl border bg-card p-4 shadow-sm">
-          <div class="grid grid-cols-3 gap-1.5" role="group" aria-label="Payment method">
+        <div class="rounded-xl border bg-card p-3.5 shadow-sm">
+          <div class="grid grid-cols-3 gap-2" role="group" aria-label="Payment method">
             <button
               v-for="m in METHODS" :key="m.id" type="button"
-              class="flex flex-col items-center gap-1 rounded-xl border px-2 py-2 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              :class="paymentMethod === m.id ? 'border-primary bg-primary text-primary-foreground shadow-sm' : 'bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'"
+              class="flex min-h-11 items-center justify-center gap-2 rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              :class="paymentMethod === m.id ? 'border-primary bg-primary/[0.06] text-primary ring-1 ring-inset ring-primary/20 shadow-sm' : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'"
               :aria-pressed="paymentMethod === m.id" @click="setPayment(m.id)"
             >
-              <component :is="m.icon" class="size-4" aria-hidden="true" />{{ m.label }}
+              <span class="grid size-7 shrink-0 place-items-center rounded-md transition" :class="paymentMethod === m.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'">
+                <component :is="m.icon" class="size-4" aria-hidden="true" />
+              </span>
+              {{ m.label }}
             </button>
           </div>
 
           <div v-if="needsBank" class="mt-3">
             <Label class="text-xs">Bank / Wallet</Label>
             <SearchableSelect v-model="bankId" :options="banks" placeholder="Select bank — optional for bKash" clearable />
+          </div>
+
+          <!-- The gateway receipt. Required for every electronic tender: the number the customer
+               was handed is what the takings are reconciled against — a bKash or bank sale without
+               it cannot be verified against the statement. -->
+          <div v-if="needsTransactionRef" class="mt-3">
+            <Label class="text-[11px] font-bold uppercase tracking-wide text-muted-foreground" for="pos-txn-ref">Transaction reference</Label>
+            <div class="relative">
+              <Receipt class="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Input
+                id="pos-txn-ref"
+                v-model="transactionRef"
+                placeholder="bKash / bank / card ref — e.g. TXN1234567890"
+                maxlength="100"
+                class="pl-8 font-mono"
+                :aria-invalid="transactionRefMissing"
+                @keydown.enter.prevent="sell"
+              />
+            </div>
+            <p v-if="transactionRefMissing" class="mt-1 flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+              <AlertCircle class="size-3" aria-hidden="true" /> Enter the transaction / slip number before charging.
+            </p>
           </div>
 
           <!-- split -->
@@ -902,28 +967,36 @@ onMounted(() => {
           panel used to be `bg-primary` too, but as one of four equally loud blocks it read as
           decoration; now it reads as the answer.
         -->
-        <div class="overflow-hidden rounded-lg border border-primary/20 bg-card shadow-[0_2px_12px_-2px_hsl(var(--primary)/0.18)]">
-          <div class="border-b bg-primary/[0.04] px-4 py-3">
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-[0_2px_10px_-4px_hsl(var(--foreground)/0.12)]">
+          <!-- Clean, single-tone total: a very light primary tint, not a gradient.
+               The figure earns its place through weight and the charge button, not colour noise. -->
+          <div class="border-b border-border bg-primary/[0.04] px-5 py-4">
             <p class="eyebrow">Total to pay</p>
-            <p class="num-display mt-1 text-[34px] font-semibold leading-none text-foreground">{{ money(grandTotal) }}<span class="ml-2 text-[13px] font-medium text-muted-foreground">BDT</span></p>
+            <p class="num-display mt-1.5 text-[32px] font-bold leading-tight tracking-tight text-foreground">{{ money(grandTotal) }}<span class="ml-2 text-[13px] font-medium text-muted-foreground">BDT</span></p>
             <p class="mt-1.5 text-[11.5px] text-muted-foreground">
               {{ cart.length }} line{{ cart.length === 1 ? '' : 's' }} · {{ money(itemCount) }} unit{{ itemCount === 1 ? '' : 's' }}
               <span v-if="changeDue > 0"> · change {{ money(changeDue) }}</span>
               <span v-else-if="isPartPaid"> · {{ money(balanceDue) }} due</span>
+              <span v-if="transactionRef.trim()" class="ml-1 truncate font-mono text-primary/80"> · ref {{ transactionRef.trim() }}</span>
             </p>
           </div>
-          <div class="p-4 pt-3">
+          <div class="p-3.5 pt-2.5">
             <Button
               class="h-11 w-full text-[14px] font-semibold"
-              size="lg" @click="sell" :disabled="!canSell || adding"
+              size="lg" @click="sell" :disabled="!canSell || adding || selling"
             >
-              <template v-if="paymentMethod === 'cash'"><Banknote class="size-5" />{{ changeDue > 0 ? `Take ${money(tenderedCents / 100)} · change ${money(changeDue)}` : 'Charge cash' }}</template>
+              <template v-if="selling"><Loader2 class="size-5 animate-spin" />Charging…</template>
+              <template v-else-if="paymentMethod === 'cash'"><Banknote class="size-5" />{{ changeDue > 0 ? `Take ${money(tenderedCents / 100)} · change ${money(changeDue)}` : 'Charge cash' }}</template>
               <template v-else-if="paymentMethod === 'bank'"><CreditCard class="size-5" />Charge to bank</template>
               <template v-else-if="paymentMethod === 'bkash'"><Smartphone class="size-5" />Charge bKash</template>
               <template v-else-if="paymentMethod === 'card'"><CreditCard class="size-5" />Charge card</template>
               <template v-else-if="paymentMethod === 'due'"><Wallet class="size-5" />{{ isPartPaid ? `Take ${money(paidNowCents / 100)} · ${money(balanceDue)} due` : 'Sell on credit' }}</template>
               <template v-else><Split class="size-5" />Charge split</template>
             </Button>
+
+            <div v-if="sellError" role="alert" class="mt-2 flex items-start gap-1.5 rounded-lg border border-destructive/30 bg-destructive/15 p-2 text-xs font-medium text-destructive">
+              <AlertCircle class="mt-px size-3.5 shrink-0" aria-hidden="true" />{{ sellError }}
+            </div>
 
             <p v-if="!warehouseId" class="mt-2 flex items-start gap-1.5 text-[11.5px] font-medium text-amber-600 dark:text-amber-400"><AlertCircle class="mt-px size-3.5 shrink-0" aria-hidden="true" />Select a warehouse to enable selling.</p>
             <p v-else-if="!cart.length" class="mt-2 text-[11.5px] text-muted-foreground">Add at least one item to enable selling.</p>

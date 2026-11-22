@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@core/Composables/useToast';
 import { confirmDialog } from '@core/Composables/useConfirm';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { formatCurrency } from '@core/Utils/format';
 
 /**
@@ -84,6 +85,23 @@ const props = defineProps<{
 
 const toast = useToast();
 const money = (value: number | string | null | undefined): string => formatCurrency(Number(value ?? 0));
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: 'Provident Fund — contributions',
+    subtitle: 'Chronological ledger of accruals and settlements',
+    permission: 'payroll.pf.view',
+    orientation: 'landscape',
+    meta: {
+        'Accounts': String(props.summary.accounts),
+        'Active': String(props.summary.active_accounts),
+        'Net position': money(props.summary.net),
+        'Last period': props.summary.last_period ?? '—',
+    },
+    headings: ['Period', 'Members', 'Employee share', 'Employer share', 'Accrued', 'Settled', 'Total'],
+    rows: props.activity.map((a: any) => [a.period, a.members, a.employee_side, a.employer_side, a.accrued, a.settled, a.total]),
+    footer: 'Provident Fund · Payroll',
+}));
 
 const monthLabel = (period: string): string => {
   if (!period) return '—';
@@ -201,6 +219,7 @@ async function backfill(): Promise<void> {
         <Button v-if="canManage" size="sm" variant="outline" :disabled="backfilling" @click="backfill">
           <History class="size-4" />{{ backfilling ? 'Posting…' : 'Post history' }}
         </Button>
+        <Button size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" />Download PDF</Button>
         <Button size="sm" variant="outline" @click="printDocument()"><Printer class="size-4" />Print</Button>
         <Button size="sm" variant="outline" @click="router.visit(route('payroll.pf.members'))">
           <Landmark class="size-4" />Members

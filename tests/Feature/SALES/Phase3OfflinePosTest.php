@@ -593,3 +593,18 @@ test('the offline door is reachable by name and never shadows a sale', function 
         ->and($wildcard)->not->toBeFalse()
         ->and($offline)->toBeLessThan($wildcard);
 });
+
+test('electronic tender references survive live and offline sales', function () {
+    [$warehouse, $product] = pofTill();
+    $session = pofSession($warehouse->id);
+    $bankId = \Illuminate\Support\Facades\DB::table('acc_banks')->value('id');
+    expect($bankId)->not->toBeNull();
+
+    $live = pofRow($product, $warehouse->id, ['session_id' => $session->id, 'payment_method' => 'bkash', 'bank_id' => $bankId, 'transaction_ref' => 'BK-LIVE-123']);
+    $this->post('/sales/pos/sell', $live)->assertRedirect()->assertSessionHasNoErrors();
+    expect(PosSale::where('client_ref', $live['client_ref'])->firstOrFail()->transaction_ref)->toBe('BK-LIVE-123');
+
+    $queued = pofRow($product, $warehouse->id, ['session_id' => $session->id, 'payment_method' => 'bank', 'bank_id' => $bankId, 'transaction_ref' => 'BANK-OFFLINE-456']);
+    pofSync([$queued])->assertOk()->assertJsonPath('synced', 1);
+    expect(PosSale::where('client_ref', $queued['client_ref'])->firstOrFail()->transaction_ref)->toBe('BANK-OFFLINE-456');
+});

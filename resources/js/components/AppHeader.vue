@@ -182,7 +182,15 @@ const rightNavItems: NavItem[] = [
 
         <div v-if="props.breadcrumbs.length > 1" class="border-sidebar-border/70 flex w-full border-b">
             <div class="mx-auto flex h-12 w-full items-center justify-start px-4 text-neutral-500 md:max-w-7xl">
-                <Breadcrumbs :breadcrumbs="breadcrumbs" />
+                <nav aria-label="Breadcrumb">
+                    <ol class="flex flex-wrap items-center gap-2 text-sm">
+                        <li v-for="(item, index) in breadcrumbs" :key="`${item.href}-${index}`" class="flex items-center gap-2">
+                            <span v-if="index > 0" aria-hidden="true">/</span>
+                            <span v-if="index === breadcrumbs.length - 1" aria-current="page" class="font-medium text-foreground">{{ item.title }}</span>
+                            <Link v-else :href="item.href" class="hover:text-foreground hover:underline">{{ item.title }}</Link>
+                        </li>
+                    </ol>
+                </nav>
             </div>
         </div>
     </div>

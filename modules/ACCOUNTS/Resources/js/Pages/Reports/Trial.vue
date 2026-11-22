@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Scale, ShieldCheck, ArrowUpRight, ArrowDownRight, Calendar, Printer, Search } from 'lucide-vue-next';
+import { FileDown, Scale, ShieldCheck, ArrowUpRight, ArrowDownRight, Calendar, Printer, Search } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import PageHeader from '@core/Components/PageHeader.vue';
 import { formatCurrency } from '@core/Utils/format';
 import AcctKpi from '../../Components/AcctKpi.vue';
@@ -27,6 +28,24 @@ const byType = computed(()=> {
   for(const r of props.rows){ g[r.account_type] = (g[r.account_type]||0) + Math.abs(r.balance); }
   return g;
 });
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: 'Trial Balance',
+    subtitle: `As of ${asOf.value}`,
+    permission: 'accounts.reports.view',
+    orientation: 'landscape',
+    meta: {
+        'As of': asOf.value,
+        'Accounts': String(filtered.value.length),
+        'Total Debit': formatCurrency(props.totals.debit),
+        'Total Credit': formatCurrency(props.totals.credit),
+        'Status': balanced.value ? 'Balanced' : 'Out of balance',
+    },
+    headings: ['Account', 'Type', 'Debit', 'Credit', 'Balance'],
+    rows: filtered.value.map((r: any) => [`${r.code} ${r.name}`, r.account_type, Number(r.total_debit) || 0, Number(r.total_credit) || 0, Number(r.balance) || 0]),
+    footer: 'Trial Balance · Accounts',
+}));
+
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{title:'Accounts'},{title:'Trial Balance'}]">
@@ -35,7 +54,7 @@ const byType = computed(()=> {
       title="Trial Balance"
       description="All ledgers aggregated to as_of — Σ Debit must equal Σ Credit. Basis for every other report."
       :icon="Scale"
-      :actions="[{ label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label:'Total Debit', value: formatCurrency(totals.debit), sub: rows.length + ' accounts' },
         { label:'Total Credit', value: formatCurrency(totals.credit), sub: 'Mirror of debit' },
@@ -86,7 +105,7 @@ const byType = computed(()=> {
               </tr>
               <tr v-if="!filtered.length"><td colspan="5" class="px-3 py-12 text-center text-muted-foreground">No accounts match “{{ q }}”.</td></tr>
             </tbody>
-            <tfoot class="sticky bottom-0 bg-primary text-primary-foreground font-bold"><tr><td colspan="2" class="px-3 py-3 text-right">TOTAL</td><td class="px-3 py-3 text-right font-mono">{{ formatCurrency(totals.debit) }}</td><td class="px-3 py-3 text-right font-mono">{{ formatCurrency(totals.credit) }}</td><td class="px-3 py-3 text-right text-xs opacity-80">Dr = Cr {{ balanced ? '✓' : '✗' }}</td></tr></tfoot>
+            <tfoot class="sticky bottom-0 bg-primary/[0.05] border-t-2 border-primary/20 font-bold text-foreground"><tr><td colspan="2" class="px-3 py-3 text-right">TOTAL</td><td class="px-3 py-3 text-right font-mono">{{ formatCurrency(totals.debit) }}</td><td class="px-3 py-3 text-right font-mono">{{ formatCurrency(totals.credit) }}</td><td class="px-3 py-3 text-right text-xs opacity-80">Dr = Cr {{ balanced ? '✓' : '✗' }}</td></tr></tfoot>
           </StaticTable>
       </AcctSection>
       <p class="text-xs text-muted-foreground flex items-center gap-2"><Calendar class="size-3.5" /> Snapshot at {{ asOf }} · Ledger table only (posted journals). Void reverses stay visible for audit.</p>

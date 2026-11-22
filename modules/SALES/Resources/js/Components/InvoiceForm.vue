@@ -150,7 +150,7 @@ function submit() {
 </script>
 
 <template>
-    <div class="space-y-5">
+    <div class="space-y-4">
         <PageHeader
             :title="isEdit ? `Edit ${inv.invoice_no ?? 'invoice'}` : 'New Invoice'"
             description="Posting deducts stock and writes Accounts Receivable (Dr) → Sales (Cr) with output VAT."
@@ -177,8 +177,8 @@ function submit() {
             </div>
         </div>
 
-        <form class="space-y-5" @submit.prevent="submit">
-            <fieldset :disabled="locked" class="m-0 space-y-5 border-0 p-0">
+        <form class="space-y-4" @submit.prevent="submit">
+                <fieldset :disabled="locked" class="m-0 space-y-4 border-0 p-0">
                 <div
                     v-if="errorCount"
                     role="alert"
@@ -193,7 +193,7 @@ function submit() {
                     </div>
                 </div>
 
-                <FormSection title="Invoice details" description="Customer, warehouse and dates." :icon="FileText" :cols="4">
+                <FormSection title="Invoice details" description="Customer, warehouse and dates." :icon="FileText" :cols="4" body-class="xl:grid-cols-4" dense>
                     <FormField label="Customer" required span="2" :error="form.errors.customer_id as string">
                         <SearchableSelect
                             v-model="form.customer_id"
@@ -255,7 +255,7 @@ function submit() {
 
                     <FormField label="Notes" span="full" :error="form.errors.notes as string">
                         <template #default="{ id, invalid }">
-                            <Textarea v-model="form.notes" :id="id" :aria-invalid="invalid" rows="2" class="resize-none" />
+                            <Textarea v-model="form.notes" :id="id" :aria-invalid="invalid" rows="2" class="min-h-16 resize-y" />
                         </template>
                     </FormField>
                 </FormSection>
@@ -265,6 +265,7 @@ function submit() {
                     description="Discount is taken off the gross, then VAT is applied to the net."
                     :icon="CreditCard"
                     plain
+                    dense
                     :badge="`${form.items.length} line${form.items.length === 1 ? '' : 's'}`"
                 >
                     <template #actions>
@@ -273,7 +274,7 @@ function submit() {
                         </Button>
                     </template>
 
-                    <div class="space-y-3">
+                    <div class="space-y-2.5">
                         <div class="hidden gap-x-5 xl:grid xl:grid-cols-12 xl:px-1">
                             <p class="col-span-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Product</p>
                             <p class="col-span-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Qty</p>
@@ -286,10 +287,10 @@ function submit() {
                         <div
                             v-for="(it, i) in form.items"
                             :key="i"
-                            class="rounded-xl border bg-card p-4 transition hover:border-primary/30 hover:shadow-sm"
+                            class="rounded-xl border bg-card p-3 transition hover:border-primary/30 hover:shadow-sm"
                             :class="form.errors[`items.${i}.product_id`] ? 'border-destructive/50' : 'border-border'"
                         >
-                            <div class="grid items-end gap-x-5 gap-y-3 xl:grid-cols-12">
+                            <div class="grid items-end gap-x-5 gap-y-2.5 xl:grid-cols-12">
                                 <FormField
                                     label="Product"
                                     required
@@ -350,21 +351,21 @@ function submit() {
 
                     <template #footer>
                         <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                            <div class="rounded-lg bg-muted/40 px-3 py-2">
-                                <p class="text-xs font-medium text-muted-foreground">Subtotal</p>
-                                <p class="font-mono text-base font-bold">{{ money(subtotal) }}</p>
+                            <div class="rounded-lg bg-muted/40 px-3 py-1.5">
+                                <p class="text-[11px] font-medium text-muted-foreground">Subtotal</p>
+                                <p class="font-mono text-sm font-bold">{{ money(subtotal) }}</p>
                             </div>
-                            <div class="rounded-lg bg-muted/40 px-3 py-2">
-                                <p class="text-xs font-medium text-muted-foreground">Discount</p>
-                                <p class="font-mono text-base font-bold text-amber-600 dark:text-amber-400">−{{ money(discountTotal) }}</p>
+                            <div class="rounded-lg bg-muted/40 px-3 py-1.5">
+                                <p class="text-[11px] font-medium text-muted-foreground">Discount</p>
+                                <p class="font-mono text-sm font-bold text-amber-600 dark:text-amber-400">−{{ money(discountTotal) }}</p>
                             </div>
-                            <div class="rounded-lg bg-muted/40 px-3 py-2">
-                                <p class="text-xs font-medium text-muted-foreground">VAT</p>
-                                <p class="font-mono text-base font-bold">{{ money(vatTotal) }}</p>
+                            <div class="rounded-lg bg-muted/40 px-3 py-1.5">
+                                <p class="text-[11px] font-medium text-muted-foreground">VAT</p>
+                                <p class="font-mono text-sm font-bold">{{ money(vatTotal) }}</p>
                             </div>
-                            <div class="rounded-lg bg-primary/10 px-3 py-2">
-                                <p class="text-xs font-medium text-muted-foreground">Total</p>
-                                <p class="font-mono text-base font-bold text-primary">{{ money(total) }}</p>
+                            <div class="rounded-lg bg-primary/10 px-3 py-1.5">
+                                <p class="text-[11px] font-medium text-muted-foreground">Total</p>
+                                <p class="font-mono text-sm font-bold text-primary">{{ money(total) }}</p>
                             </div>
                         </div>
                     </template>

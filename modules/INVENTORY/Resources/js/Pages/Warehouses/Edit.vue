@@ -7,6 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import FormSection from '@core/Components/FormSection.vue';
+import FormField from '@core/Components/FormField.vue';
+import FormActions from '@core/Components/FormActions.vue';
+import FormCheckbox from '@core/Components/FormCheckbox.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
 const props=defineProps<{ warehouse:Warehouse; userOptions:SelectOption[] }>();
@@ -16,6 +20,22 @@ function submit(){ form.put(route('inventory.warehouses.update', props.warehouse
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Inventory' }, { title: 'Warehouses', href: route('inventory.warehouses.index') }, { title: warehouse.code }, { title: 'Edit' }]"><Head :title="`Edit ${warehouse.code}`"/><PageHeader title="Edit {{ warehouse.code }}" description="Complete the form — required *" :icon="Package">
-    <div class="max-w-4xl"><form @submit.prevent="submit" class="bg-card border rounded-xl shadow-sm p-4 space-y-4"><div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"><div class="space-y-2"><Label>Name</Label><Input v-model="form.name"/></div><div class="space-y-2"><Label>Code</Label><Input v-model="form.code"/></div></div><div class="space-y-2"><Label>Manager</Label><SearchableSelect v-model="form.manager_user_id" :options="userOptions" placeholder="Select" clearable /></div><div class="flex gap-4"><label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.is_default" class="rounded"/> Default</label><label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.is_active" class="rounded"/> Active</label></div><Button type="submit">Update</Button></form></div>    </PageHeader>
+    <div class="max-w-4xl"><form @submit.prevent="submit" class="space-y-4">
+        <FormSection title="Details" :cols="2">
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"><FormField label="Name">
+    <template #default="{ id, invalid }">
+        <Input :id="id" :aria-invalid="invalid" v-model="form.name"/>
+    </template>
+</FormField><FormField label="Code">
+    <template #default="{ id, invalid }">
+        <Input :id="id" :aria-invalid="invalid" v-model="form.code"/>
+    </template>
+</FormField></div><FormField label="Manager">
+    <template #default="{ id, invalid }">
+        <SearchableSelect :id="id" v-model="form.manager_user_id" :options="userOptions" placeholder="Select" clearable />
+    </template>
+</FormField><div class="flex gap-4"><FormCheckbox v-model="form.is_default" label="Default" /><FormCheckbox v-model="form.is_active" label="Active" /></div><FormActions submit-label="Update" :processing="form.processing" :dirty="form.isDirty" cancel-href="route('inventory.warehouses.index')" />
+        </FormSection>
+</form></div>    </PageHeader>
   </AdminLayout>
 </template>

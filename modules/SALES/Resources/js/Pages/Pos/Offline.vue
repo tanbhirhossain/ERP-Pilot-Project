@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { AlertTriangle, CheckCircle2, CloudOff, Download, Printer, RefreshCw, RotateCcw, Smartphone, Trash2, Wifi } from 'lucide-vue-next';
+import { AlertTriangle, CheckCircle2, CloudOff, Download, FileDown, Printer, RefreshCw, RotateCcw, Smartphone, Trash2, Wifi } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
 import { confirmDialog } from '@core/Composables/useConfirm';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { useLocale } from '@core/Composables/useLocale';
 import { formatCurrency } from '@core/Utils/format';
 import { cartTotalCents, type CartLine } from '@sales/offline/payload';
@@ -305,6 +306,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeinstallprompt', captureI
         <div v-if="slip" class="rounded-xl border bg-card p-4">
           <div class="mb-3 flex items-center justify-between print:hidden">
             <p class="text-sm font-semibold">{{ tr('pos.offlineSlip') }}</p>
+            <Button size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" />{{ tr('pos.offlineDownloadPdf') || 'Download PDF' }}</Button>
             <Button size="sm" variant="outline" class="rounded-full" @click="printSlip"><Printer class="size-4" />{{ tr('pos.offlinePrintSlip') }}</Button>
           </div>
           <div class="rounded-lg border bg-background p-4 font-mono text-xs print:border-none print:bg-transparent" data-core-print>

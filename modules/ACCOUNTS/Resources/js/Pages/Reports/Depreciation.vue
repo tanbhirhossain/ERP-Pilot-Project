@@ -1,20 +1,39 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Timer, Building2, Calendar, Printer, Wallet, TrendingDown } from 'lucide-vue-next';
+import { FileDown, Timer, Building2, Calendar, Printer, Wallet, TrendingDown } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import PageHeader from '@core/Components/PageHeader.vue';
 import { formatCurrency } from '@core/Utils/format';
 import AcctKpi from '../../Components/AcctKpi.vue';
 import AcctSection from '../../Components/AcctSection.vue';
 import AcctEmpty from '../../Components/AcctEmpty.vue';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import StaticTable from '@core/Components/StaticTable.vue';
 const props = defineProps<{ report:any; asOf:string }>();
 const asOf = ref(new URLSearchParams(window.location.search).get('as_of') || props.asOf || new Date().toISOString().slice(0,10));
 function apply(){ router.get(route('accounts.reports.depreciation'), { as_of: asOf.value }, { preserveState:true }); }
+
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: 'Depreciation Schedule',
+    subtitle: `As of ${asOf.value} · straight-line`,
+    permission: 'accounts.reports.view',
+    orientation: 'landscape',
+    meta: {
+        'As of': asOf.value,
+        'Assets': String(props.report.rows.length),
+        'Monthly charge': formatCurrency(props.report.total_monthly),
+        'Method': 'Straight-line 10% p.a.',
+    },
+    headings: ['Code', 'Asset', 'Rate', 'Book value', 'Monthly charge', 'Yearly'],
+    rows: props.report.rows.map((r: any) => [r.code, r.name, `${(r.annual_rate * 100).toFixed(0)}%`, Number(r.book_value) || 0, Number(r.monthly_charge) || 0, Number(r.monthly_charge) * 12]),
+    footer: 'Depreciation · Accounts',
+}));
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{title:'Accounts'},{title:'Depreciation'}]">
@@ -23,7 +42,7 @@ function apply(){ router.get(route('accounts.reports.depreciation'), { as_of: as
       title="Depreciation Schedule"
       description="Straight-line 10% p.a. fallback until Fixed Asset register is filled. Replace rate per asset with FA module."
       :icon="Timer"
-      :actions="[{ label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label:'Assets tracked', value: String(report.rows.length), sub: '15xx + Asset-tagged' },
         { label:'Total monthly charge', value: formatCurrency(report.total_monthly), sub: 'At 10% p.a.' },

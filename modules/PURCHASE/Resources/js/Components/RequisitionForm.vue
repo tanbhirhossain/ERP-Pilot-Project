@@ -98,7 +98,7 @@ function submit() {
 </script>
 
 <template>
-    <div class="space-y-5">
+    <div class="space-y-4">
         <PageHeader
             :title="isEdit ? `Edit ${r.req_no ?? 'requisition'}` : 'New Purchase Requisition'"
             description="What you need, for which department, by when. This asks; it does not buy."
@@ -119,7 +119,7 @@ function submit() {
             <span>This requisition is {{ r.status }}. Only a draft can be edited — the server will refuse this form.</span>
         </p>
 
-        <form class="space-y-5" @submit.prevent="submit">
+        <form class="space-y-4" @submit.prevent="submit">
             <div v-if="errorCount" role="alert" class="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                 <AlertCircle class="mt-0.5 size-4 shrink-0" />
                 <div>
@@ -187,7 +187,7 @@ function submit() {
                     <div
                         v-for="(it, i) in form.items"
                         :key="i"
-                        class="rounded-xl border bg-card p-4 transition hover:border-primary/30"
+                        class="rounded-xl border bg-card p-3 transition hover:border-primary/30"
                         :class="form.errors[`items.${i}.description`] ? 'border-destructive/50' : 'border-border'"
                     >
                         <div class="grid items-end gap-x-5 gap-y-3 xl:grid-cols-12">

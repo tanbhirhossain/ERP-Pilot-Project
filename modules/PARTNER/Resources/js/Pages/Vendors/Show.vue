@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Building2, Phone, MapPin, Landmark, FileText, Clock, ShieldCheck, Ban, CheckCircle, AlertTriangle, CreditCard, Send } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@core/Utils/format';
 
@@ -32,38 +33,32 @@ function toneForStatus(s:string){ if(s==='approved') return 'success'; if(s==='r
     <Head :title="`${partner.partner_code} — ${partner.name}`" />
     <div class="space-y-4">
       <!-- Header -->
-      <div class="bg-card border rounded-xl p-4">
-        <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-          <div class="flex gap-4">
-            <div class="size-14 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center text-white font-bold text-lg">{{ partner.name.substring(0,2).toUpperCase() }}</div>
-            <div>
-              <h1 class="text-xl font-bold flex items-center gap-2">{{ partner.name }} <span class="font-mono text-sm px-2 py-0.5 rounded bg-primary/10 text-primary">{{ partner.partner_code }}</span> <StatusBadge :label="partner.verification_status" :tone="toneForStatus(partner.verification_status)" dot /></h1>
-              <p class="text-sm text-muted-foreground">{{ partner.legal_name || 'No legal name' }} · {{ partner.type }} · {{ partner.group?.name || 'No group' }} · {{ partner.phone || 'No phone' }}</p>
-              <div class="flex gap-2 mt-2">
-                <StatusBadge :label="partner.is_active?'Active':'Inactive'" :tone="partner.is_active?'success':'neutral'" />
-                <StatusBadge :label="partner.is_verified?'Verified':'Unverified'" :tone="partner.is_verified?'success':'warning'" />
-                <span class="text-xs text-muted-foreground ml-2">Created {{ formatDate(partner.created_at) }}</span>
-              </div>
-            </div>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" @click="toggleActive"><Ban class="size-4"/>{{ partner.is_active?'Deactivate':'Activate' }}</Button>
-            <Button v-if="partner.verification_status==='pending'" size="sm" class="bg-emerald-600 hover:bg-emerald-700" @click="verify('approve')"><CheckCircle class="size-4"/> Approve</Button>
-            <Button v-if="partner.verification_status==='pending'" variant="destructive" size="sm" @click="verify('reject')"><AlertTriangle class="size-4"/> Reject</Button>
-            <Link :href="route(partner.type==='customer'?'partner.customers.edit':'partner.vendors.edit', partner.id)"><Button variant="outline" size="sm">Edit</Button></Link>
-          </div>
-        </div>
-        <!-- KPI Cards -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-          <div class="bg-muted/40 rounded-lg p-3 border"><p class="text-xs text-muted-foreground">Credit Limit</p><p class="text-lg font-bold font-mono">{{ formatCurrency(Number(partner.credit_limit)) }}</p></div>
-          <div class="bg-muted/40 rounded-lg p-3 border"><p class="text-xs text-muted-foreground">Current Balance</p><p class="text-lg font-bold font-mono" :class="Number(partner.current_balance) > Number(partner.credit_limit) && Number(partner.credit_limit)>0 ? 'text-rose-600':''">{{ formatCurrency(Number(partner.current_balance)) }}</p></div>
-          <div class="bg-muted/40 rounded-lg p-3 border"><p class="text-xs text-muted-foreground">Available Credit</p><p class="text-lg font-bold font-mono text-emerald-600">{{ formatCurrency(Number(partner.credit_limit)-Number(partner.current_balance)) }}</p></div>
-          <div class="bg-muted/40 rounded-lg p-3 border"><p class="text-xs text-muted-foreground">Opening Balance</p><p class="text-lg font-bold font-mono">{{ formatCurrency(Number(partner.opening_balance)) }}</p></div>
-        </div>
-        <div v-if="creditCheck" class="mt-3 rounded-lg border p-3 flex items-center gap-3" :class="creditCheck.level==='exceeded'?'bg-rose-500/5 border-rose-500/20':creditCheck.level==='warning'?'bg-amber-500/5 border-amber-500/20':'bg-emerald-500/5 border-emerald-500/20'">
-          <CreditCard class="size-5" :class="creditCheck.level==='exceeded'?'text-rose-600':creditCheck.level==='warning'?'text-amber-600':'text-emerald-600'" />
-          <div><p class="text-sm font-medium">{{ creditCheck.message }}</p><p class="text-xs text-muted-foreground">Utilization: {{ creditCheck.utilization_pct }}% · Available: {{ formatCurrency(creditCheck.available_credit) }}</p></div>
-        </div>
+      <PageHeader
+        :title="partner.name"
+        :icon="Building2"
+        :description="`${partner.legal_name || 'No legal name'} · ${partner.type} · ${partner.group?.name || 'No group'} · ${partner.phone || 'No phone'}`"
+        :stats="[
+          { label: 'Credit Limit', value: formatCurrency(Number(partner.credit_limit)) },
+          { label: 'Current Balance', value: formatCurrency(Number(partner.current_balance)) },
+          { label: 'Available Credit', value: formatCurrency(Number(partner.credit_limit)-Number(partner.current_balance)) },
+          { label: 'Opening Balance', value: formatCurrency(Number(partner.opening_balance)) },
+        ]"
+      >
+        <template #badge>
+          <span class="font-mono text-sm px-2 py-0.5 rounded bg-primary/10 text-primary">{{ partner.partner_code }}</span>
+          <StatusBadge :label="partner.verification_status" :tone="toneForStatus(partner.verification_status)" dot />
+        </template>
+        <template #actions>
+          <Button variant="outline" size="sm" @click="toggleActive"><Ban class="size-4"/>{{ partner.is_active?'Deactivate':'Activate' }}</Button>
+          <Button v-if="partner.verification_status==='pending'" size="sm" class="bg-emerald-600 hover:bg-emerald-700" @click="verify('approve')"><CheckCircle class="size-4"/> Approve</Button>
+          <Button v-if="partner.verification_status==='pending'" variant="destructive" size="sm" @click="verify('reject')"><AlertTriangle class="size-4"/> Reject</Button>
+          <Link :href="route(partner.type==='customer'?'partner.customers.edit':'partner.vendors.edit', partner.id)"><Button variant="outline" size="sm">Edit</Button></Link>
+        </template>
+      </PageHeader>
+
+      <div v-if="creditCheck" class="rounded-lg border p-3 flex items-center gap-3" :class="creditCheck.level==='exceeded'?'bg-rose-500/5 border-rose-500/20':creditCheck.level==='warning'?'bg-amber-500/5 border-amber-500/20':'bg-emerald-500/5 border-emerald-500/20'">
+        <CreditCard class="size-5" :class="creditCheck.level==='exceeded'?'text-rose-600':creditCheck.level==='warning'?'text-amber-600':'text-emerald-600'" />
+        <div><p class="text-sm font-medium">{{ creditCheck.message }}</p><p class="text-xs text-muted-foreground">Utilization: {{ creditCheck.utilization_pct }}% · Available: {{ formatCurrency(creditCheck.available_credit) }}</p></div>
       </div>
 
       <!-- Tabs -->

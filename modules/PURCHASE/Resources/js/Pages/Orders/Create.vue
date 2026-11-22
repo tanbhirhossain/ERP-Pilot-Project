@@ -7,6 +7,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, ReceiptText, Percent, Coins } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import FormSection from '@core/Components/FormSection.vue';
+import FormField from '@core/Components/FormField.vue';
+import FormActions from '@core/Components/FormActions.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { computed } from 'vue';
 
@@ -53,21 +56,43 @@ function submit() { form.post(route('purchase.orders.store')); }
       <p class="text-sm text-muted-foreground">Vendor → confirm → GRN (stock IN 1200) → Bill (AP 2100). VAT posts to 1330 (input) / 2110 (payable).</p>
       <form @submit.prevent="submit" class="space-y-4">
         <p v-if="Object.keys(form.errors).length" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ Object.values(form.errors)[0] as string }}</p>
+        <FormSection title="Details" :cols="2">
 
-        <div class="bg-card border rounded-xl p-4 space-y-4">
+
+        <div class="bg-card border rounded-xl p-4 space-y-4 col-span-full">
           <div class="grid grid-cols-1 sm:grid-cols-3 2xl:grid-cols-4 gap-4">
-            <div class="space-y-2"><Label>Vendor *</Label><SearchableSelect v-model="form.vendor_id" endpoint="/partner/api/options/vendors" placeholder="Search vendor" /></div>
-            <div class="space-y-2"><Label>Warehouse *</Label><SearchableSelect v-model="form.warehouse_id" endpoint="/inventory/api/options/warehouses" placeholder="Receiving warehouse" /></div>
-            <div class="space-y-2"><Label>Order Date *</Label><Input v-model="form.order_date" type="date" /></div>
+            <FormField label="Vendor" required>
+    <template #default="{ id, invalid }">
+        <SearchableSelect :id="id" v-model="form.vendor_id" endpoint="/partner/api/options/vendors" placeholder="Search vendor" />
+    </template>
+</FormField>
+            <FormField label="Warehouse" required>
+    <template #default="{ id, invalid }">
+        <SearchableSelect :id="id" v-model="form.warehouse_id" endpoint="/inventory/api/options/warehouses" placeholder="Receiving warehouse" />
+    </template>
+</FormField>
+            <FormField label="Order Date" required>
+    <template #default="{ id, invalid }">
+        <Input :id="id" :aria-invalid="invalid" v-model="form.order_date" type="date" />
+    </template>
+</FormField>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            <div class="space-y-2"><Label>Expected Date</Label><Input v-model="form.expected_date" type="date" /></div>
-            <div class="space-y-2"><Label>Notes</Label><Textarea v-model="form.notes" rows="2" placeholder="Delivery terms..." /></div>
+            <FormField label="Expected Date">
+    <template #default="{ id, invalid }">
+        <Input :id="id" :aria-invalid="invalid" v-model="form.expected_date" type="date" />
+    </template>
+</FormField>
+            <FormField label="Notes">
+    <template #default="{ id, invalid }">
+        <Textarea :id="id" :aria-invalid="invalid" v-model="form.notes" rows="2" placeholder="Delivery terms..." />
+    </template>
+</FormField>
           </div>
         </div>
 
         <!-- ── Lines ───────────────────────────────────────────────────── -->
-        <div class="bg-card border rounded-xl overflow-hidden">
+        <div class="bg-card border rounded-xl overflow-hidden col-span-full">
           <div class="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-3">
             <ReceiptText class="size-4 text-primary" aria-hidden="true" />
             <h3 class="font-semibold text-sm">Items</h3>
@@ -133,7 +158,7 @@ function submit() { form.post(route('purchase.orders.store')); }
         </div>
 
         <!-- ── Totals ──────────────────────────────────────────────────── -->
-        <div class="bg-card border rounded-xl p-4">
+        <div class="bg-card border rounded-xl p-4 col-span-full">
           <div class="ml-auto w-full max-w-sm space-y-2 text-sm">
             <div class="flex items-baseline justify-between gap-3">
               <span class="text-muted-foreground">Subtotal (gross)</span>
@@ -155,10 +180,9 @@ function submit() { form.post(route('purchase.orders.store')); }
           </div>
         </div>
 
-        <Button type="submit" size="lg" :disabled="form.processing">
-          Create PO — {{ money(grandTotal) }} BDT
-        </Button>
-      </form>
+        <FormActions submit-label="Create PO — {{ money(grandTotal) }} BDT" :processing="form.processing" :dirty="form.isDirty" />
+          </FormSection>
+    </form>
     </div>
   </AdminLayout>
 </template>

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { TrendingUp, Building2, Wallet, Calendar, Printer, ArrowRight, Droplets } from 'lucide-vue-next';
+import { FileDown, TrendingUp, Building2, Wallet, Calendar, Printer, ArrowRight, Droplets } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import PageHeader from '@core/Components/PageHeader.vue';
 import { formatCurrency, formatDate } from '@core/Utils/format';
 import AcctKpi from '../../Components/AcctKpi.vue';
@@ -28,6 +29,27 @@ function bucketTone(bucket: string): string {
 
     return 'bg-slate-100 text-slate-700';
 }
+
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: 'Cash Flow Statement',
+    subtitle: `${from.value} → ${to.value} · all cash & bank movements`,
+    permission: 'accounts.reports.view',
+    orientation: 'landscape',
+    meta: {
+        'From': from.value,
+        'To': to.value,
+        'Operating': formatCurrency(props.report.operating),
+        'Investing': formatCurrency(props.report.investing),
+        'Financing': formatCurrency(props.report.financing),
+        'Net change': formatCurrency(props.report.net_change),
+        'Closing cash': formatCurrency(props.report.closing_cash),
+    },
+    headings: ['Journal', 'Date', 'Reference', 'Against', 'Bucket', 'Cash in / (out)'],
+    rows: (props.report.details ?? []).map((r: any) => [r.journal_no, r.date, r.reference || '—', `${r.counter_code} ${r.counter_account}`, r.bucket, Number(r.amount) || 0]),
+    footer: 'Cash Flow · Accounts',
+}));
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{title:'Accounts'},{title:'Cash Flow'}]">
@@ -36,7 +58,7 @@ function bucketTone(bucket: string): string {
       title="Cash Flow Statement"
       description="Every posted journal that moved a cash or bank account, classified by what the money moved against."
       :icon="Droplets"
-      :actions="[{ label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label:'Operating', value: formatCurrency(report.operating), sub: 'trading' },
         { label:'Investing', value: formatCurrency(report.investing), sub: 'fixed assets' },

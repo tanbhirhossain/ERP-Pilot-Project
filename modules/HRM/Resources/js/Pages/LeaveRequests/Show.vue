@@ -2,10 +2,11 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import type { LeaveRequest } from '@hrm/types';
 import {ArrowLeft, CalendarDays, Check, X, Clock, User, Printer, FileText} from 'lucide-vue-next';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import PageHeader from '@core/Components/PageHeader.vue';
 import { useConfirm } from '@core/Composables/useConfirm';
 const { confirm } = useConfirm();
@@ -14,6 +15,36 @@ const processing=ref(false);
 async function approve(){ processing.value=true; router.post(route('hrm.leaves.approve', props.leave.id),{},{onFinish(){processing.value=false;}}); }
 async function reject(){ if(!await confirm({ description: 'Reject?', danger: true })) return; processing.value=true; router.post(route('hrm.leaves.reject', props.leave.id),{},{onFinish(){processing.value=false;}}); }
 async function printSlip(){ printDocument({ portrait: true }); }
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => {
+    const l = props.leave;
+    return {
+        title: `Leave application #${l.id}`,
+        subtitle: `${l.employee} · ${l.leave_type ?? 'Leave'}`,
+        permission: 'hrm.leaves.view',
+        orientation: 'portrait',
+        meta: {
+            'Employee': l.employee,
+            'Employee ID': l.employee_id,
+            'Leave type': l.leave_type ?? '—',
+            'Status': l.status,
+            'Days': String(l.days),
+        },
+        headings: ['Field', 'Value'],
+        rows: [
+            ['From', l.from_date ?? '—'],
+            ['To', l.to_date ?? '—'],
+            ['Days', String(l.days)],
+            ['Half day', l.is_half_day ? 'Yes' : 'No'],
+            ['Reason', l.reason ?? '—'],
+            ['Status', l.status],
+            ['Approver', l.approver ?? '—'],
+            ['Approved at', l.approved_at ?? '—'],
+        ],
+        footer: `Leave application #${l.id} · HR`,
+    };
+});
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Leave' }, { title: 'Leaves', href: route('hrm.leaves.index') }, { title: `#${leave.id}` }]">
@@ -24,7 +55,8 @@ async function printSlip(){ printDocument({ portrait: true }); }
       :icon="FileText"
     >
     <div class="space-y-4 print-portrait" data-core-print>
-      <div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2"><CalendarDays class="size-5"/> Leave Application #{{ leave.id }} <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" :class="leave.status==='Pending'?'bg-amber-100 text-amber-700': leave.status==='Approved'?'bg-emerald-100 text-emerald-700': leave.status==='Rejected'?'bg-red-100 text-red-700':'bg-muted'">{{ leave.status }}</span></h1><div class="no-print flex gap-2"><Button variant="outline" size="sm" @click="printSlip"><Printer class="size-4"/> Print Slip</Button><Link :href="route('hrm.leaves.index')"><Button variant="outline" size="sm"><ArrowLeft class="size-4"/> Back</Button></Link></div></div>
+      <div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2"><CalendarDays class="size-5"/> Leave Application #{{ leave.id }} <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" :class="leave.status==='Pending'?'bg-amber-100 text-amber-700': leave.status==='Approved'?'bg-emerald-100 text-emerald-700': leave.status==='Rejected'?'bg-red-100 text-red-700':'bg-muted'">{{ leave.status }}</span></h1><div class="no-print flex gap-2"><Button size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4"/> Download PDF</Button>
+<Button variant="outline" size="sm" @click="printSlip"><Printer class="size-4"/> Print Slip</Button><Link :href="route('hrm.leaves.index')"><Button variant="outline" size="sm"><ArrowLeft class="size-4"/> Back</Button></Link></div></div>
       <div class="bg-card border rounded-xl shadow-sm p-6 space-y-4">
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div><p class="text-muted-foreground flex items-center gap-1"><User class="size-3"/> Employee</p><p class="font-semibold font-mono">{{ leave.employee_id }} <span class="text-muted-foreground font-normal">{{ leave.employee }}</span></p></div>

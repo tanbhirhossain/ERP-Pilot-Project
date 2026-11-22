@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Head, router, Link } from '@inertiajs/vue3';
 import type { EmployeeMovement } from '@hrm/types';
+import { ArrowRight } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@core/Composables/useConfirm';
 const { confirm } = useConfirm();
@@ -16,7 +18,18 @@ const tone=(s:string)=>({Draft:'bg-slate-400 text-white',Pending:'bg-amber-500 t
   <AdminLayout :breadcrumbs="[{ title: 'HRM' }, { title: 'Movements', href: route('hrm.movements.index') }, { title: movement.movement_no }]">
     <Head :title="movement.movement_no"/>
     <div class="space-y-6">
-      <div class="flex items-center justify-between"><h1 class="text-xl font-bold">{{ movement.movement_no }} <span :class="['ml-2 px-3 py-1 rounded-full text-xs font-bold', tone(movement.status)]">{{ movement.status }}</span></h1><Link :href="route('hrm.employees.show', movement.employee?.id)" v-if="movement.employee?.id" class="text-sm text-primary hover:underline">{{ movement.employee.full_name }} →</Link></div>
+      <PageHeader
+        :title="movement.movement_no"
+        :icon="ArrowRight"
+        :description="`${movement.movement_type} · ${movement.employee?.full_name ?? ''}`"
+      >
+        <template #badge>
+          <span :class="['px-3 py-1 rounded-full text-xs font-bold', tone(movement.status)]">{{ movement.status }}</span>
+        </template>
+        <template #actions>
+          <Link v-if="movement.employee?.id" :href="route('hrm.employees.show', movement.employee?.id)"><Button variant="ghost" size="sm">{{ movement.employee.full_name }} →</Button></Link>
+        </template>
+      </PageHeader>
       <div class="bg-card border rounded-xl p-6 space-y-4 text-sm">
         <div class="grid md:grid-cols-2 gap-4">
           <div><span class="text-muted-foreground">Employee:</span> <b>{{ movement.employee?.full_name }} ({{ movement.employee_id }})</b></div>

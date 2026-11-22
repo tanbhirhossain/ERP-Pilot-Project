@@ -8,6 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2 } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
+import FormSection from '@core/Components/FormSection.vue';
+import FormField from '@core/Components/FormField.vue';
+import FormActions from '@core/Components/FormActions.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { computed } from 'vue';
 import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
@@ -35,15 +38,33 @@ function submit(){ form.put(route('purchase.returns.update', props.ret.id)); }
       <PageHeader :title="`Edit ${ret.return_no}`" />
       <form @submit.prevent="submit" class="space-y-4">
         <p v-if="Object.keys(form.errors).length" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ Object.values(form.errors)[0] as string }}</p>
-        <div class="bg-card border rounded-xl p-4 space-y-4">
+        <FormSection title="Details" :cols="2">
+
+        <div class="bg-card border rounded-xl p-4 space-y-4 col-span-full">
           <div class="grid grid-cols-1 sm:grid-cols-3 2xl:grid-cols-4 gap-4">
-            <div class="space-y-2"><Label>Vendor *</Label><SearchableSelect v-model="form.vendor_id" endpoint="/partner/api/options/vendors" placeholder="Search vendor"/></div>
-            <div class="space-y-2"><Label>Warehouse *</Label><SearchableSelect v-model="form.warehouse_id" endpoint="/inventory/api/options/warehouses" placeholder="Warehouse"/></div>
-            <div class="space-y-2"><Label>Return Date *</Label><Input v-model="form.return_date" type="date"/></div>
+            <FormField label="Vendor" required>
+    <template #default="{ id, invalid }">
+        <SearchableSelect :id="id" v-model="form.vendor_id" endpoint="/partner/api/options/vendors" placeholder="Search vendor"/>
+    </template>
+</FormField>
+            <FormField label="Warehouse" required>
+    <template #default="{ id, invalid }">
+        <SearchableSelect :id="id" v-model="form.warehouse_id" endpoint="/inventory/api/options/warehouses" placeholder="Warehouse"/>
+    </template>
+</FormField>
+            <FormField label="Return Date" required>
+    <template #default="{ id, invalid }">
+        <Input :id="id" :aria-invalid="invalid" v-model="form.return_date" type="date"/>
+    </template>
+</FormField>
           </div>
-          <div class="space-y-2"><Label>Notes</Label><Textarea v-model="form.notes" rows="2"/></div>
+          <FormField label="Notes">
+    <template #default="{ id, invalid }">
+        <Textarea :id="id" :aria-invalid="invalid" v-model="form.notes" rows="2"/>
+    </template>
+</FormField>
         </div>
-        <div class="bg-card border rounded-xl p-4 space-y-3">
+        <div class="bg-card border rounded-xl p-4 space-y-3 col-span-full">
           <h3 class="font-semibold text-sm">Items — {{ total.toFixed(2) }} BDT</h3>
           <div v-for="(it,i) in form.items" :key="i" class="border rounded-lg p-3 space-y-3 relative bg-muted/10">
             <Button type="button" variant="ghost" size="icon" class="absolute top-2 right-2 size-6" @click="removeItem(i)"><Trash2 class="size-3"/></Button>
@@ -56,8 +77,9 @@ function submit(){ form.put(route('purchase.returns.update', props.ret.id)); }
           </div>
           <Button type="button" variant="outline" size="sm" @click="addItem"><Plus class="size-4"/> Add Item</Button>
         </div>
-        <Button type="submit" :disabled="form.processing">Update Return</Button>
-      </form>
+        <FormActions submit-label="Update Return" :processing="form.processing" :dirty="form.isDirty" />
+          </FormSection>
+    </form>
     </div>
   </AdminLayout>
 </template>

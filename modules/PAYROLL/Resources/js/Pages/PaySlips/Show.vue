@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, Link } from '@inertiajs/vue3';
 import type { PayrollSlip } from '../../types';
+import { FileText, FileDown, Printer } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { printDocument } from '@core/Composables/usePrint';
 import { Button } from '@/components/ui/button';
 
@@ -51,8 +53,21 @@ const unallocated = computed(() => {
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Payroll' }, { title: 'Salary Sheets', href: route('payroll.sheets.index') }, { title: 'Pay Slip' }]">
     <Head title="Pay Slip" />
+    <PageHeader
+      title="Pay Slip"
+      :icon="FileText"
+      :description="`${slip.employee_id} · ${slip.department || '—'} · ${slip.designation || '—'}`"
+    >
+      <template #badge>
+        <span class="rounded-full bg-muted px-2 py-1 text-xs capitalize">{{ slip.payment_status }}</span>
+      </template>
+      <template #actions>
+        <Link :href="route('core.documents.pdf', { type: 'payslip', id: slip.id })"><Button size="sm" variant="default" class="rounded-full"><FileDown class="size-4" />Download PDF</Button></Link>
+        <Button size="sm" variant="outline" @click="printSlip"><Printer class="size-4" />Print</Button>
+      </template>
+    </PageHeader>
     <div class="print print-portrait rounded-xl border bg-card p-6 print:border-0 print:shadow-none" data-core-print>
-      <div class="flex flex-wrap justify-between gap-4">
+      <div class="print-furniture flex flex-wrap justify-between gap-4">
         <div>
           <p class="text-xs uppercase tracking-widest text-muted-foreground">Payroll statement</p>
           <h1 class="mt-1 text-2xl font-bold">{{ slip.employee_name }}</h1>

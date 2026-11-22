@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
-import { Banknote, CalendarRange, Info, Printer, Search, User } from 'lucide-vue-next';
+import { FileDown, Banknote, CalendarRange, Info, Printer, Search, User } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import EnterpriseCard from '@core/Components/EnterpriseCard.vue';
 import EmptyState from '@core/Components/EmptyState.vue';
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatCurrency, formatNumber } from '@core/Utils/format';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 
 /**
  * Encashment preview — what an employee's unused leave is worth.
@@ -41,6 +42,23 @@ interface Preview {
   total_days: number;
   total_amount: number;
 }
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => props.preview ? ({
+    title: 'Leave encashment preview',
+    subtitle: props.preview.employee.name,
+    permission: 'hrm.leaves.balance.view',
+    orientation: 'landscape',
+    meta: {
+        'Employee': props.preview.employee.name,
+        'Employee ID': props.preview.employee.employee_id,
+        'Basic salary': props.preview.employee.basic_salary,
+        'Gross salary': props.preview.employee.gross_salary,
+    },
+    headings: ['Leave type', 'Code', 'Days', 'Component', 'Basis', 'Per day', 'Amount', 'Capped'],
+    rows: props.preview.lines.map((l: any) => [l.leave_type, l.code ?? '—', l.days, l.component, l.basis, l.per_day, l.amount, l.capped ? 'Yes' : 'No']),
+    footer: 'Leave encashment · HR',
+}) : null);
 
 const props = defineProps<{
   year: number;

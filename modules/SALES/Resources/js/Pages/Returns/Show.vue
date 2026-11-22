@@ -2,7 +2,9 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import type { SalesReturn } from '@sales/types';
 import { Button } from '@/components/ui/button';
+import { ArrowLeftRight } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@core/Utils/format';
 import StaticTable from '@core/Components/StaticTable.vue';
@@ -15,10 +17,17 @@ async function cancel(id:number){ if(await confirm({ description: 'Cancel return
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'Sales Returns', href: route('sales.returns.index') }, { title: ret.return_no }]">
     <Head :title="ret.return_no" />
-    <div class="space-y-4 ">
-      <div class="flex items-center justify-between"><h1 class="text-xl font-bold flex items-center gap-2">{{ ret.return_no }} <StatusBadge :label="ret.status" :tone="ret.status==='approved'?'success':'warning'" /> <span v-if="ret.is_restocked" class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700">Restocked</span></h1>
-        <div class="flex gap-2"><Button v-if="ret.status==='draft'" @click="approve(ret.id)" size="sm" class="bg-emerald-600 hover:bg-emerald-700">Approve — Restock + Credit Note</Button><Button v-if="ret.status==='draft'" variant="outline" @click="cancel(ret.id)" size="sm">Cancel</Button></div>
-      </div>
+    <PageHeader :title="ret.return_no" :description="`Invoice ${ret.invoice?.invoice_no || '—'} · ${ret.customer?.name || '—'} · ${formatDate(ret.return_date)}`" :icon="ArrowLeftRight">
+      <template #badge>
+        <StatusBadge :label="ret.status" :tone="ret.status==='approved'?'success':'warning'" /> <span v-if="ret.is_restocked" class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700">Restocked</span>
+      </template>
+      <template #actions>
+        <div class="flex gap-2">
+          <Button v-if="ret.status==='draft'" @click="approve(ret.id)" size="sm" class="bg-emerald-600 hover:bg-emerald-700">Approve — Restock + Credit Note</Button>
+          <Button v-if="ret.status==='draft'" variant="outline" @click="cancel(ret.id)" size="sm">Cancel</Button>
+        </div>
+      </template>
+
       <div class="bg-card border rounded-xl p-4">
         <div class="grid md:grid-cols-3 gap-3 text-sm">
           <div><span class="text-muted-foreground">Invoice</span><div class="font-mono font-bold">{{ ret.invoice?.invoice_no }}</div></div>
@@ -39,6 +48,6 @@ async function cancel(id:number){ if(await confirm({ description: 'Cancel return
         ><thead class="bg-muted/40 text-xs uppercase"><tr><th class="px-3 py-2 text-left">Product</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right">Price</th><th class="px-3 py-2 text-right">Total</th><th class="px-3 py-2 text-center">Condition</th></tr></thead>
         <tbody class="divide-y"><tr v-for="it in ret.items" :key="it.id"><td class="px-3 py-2">{{ it.product?.name }}</td><td class="px-3 py-2 text-center font-mono">{{ it.qty }}</td><td class="px-3 py-2 text-right font-mono">{{ formatCurrency(Number(it.unit_price)) }}</td><td class="px-3 py-2 text-right font-mono font-bold">{{ formatCurrency(Number(it.line_total)) }}</td><td class="px-3 py-2 text-center"><span :class="['px-2 py-1 rounded text-xs', it.condition==='resalable'?'bg-emerald-100 text-emerald-700':'bg-red-100 text-red-700']">{{ it.condition }}</span></td></tr></tbody></StaticTable>
       </div>
-    </div>
+    </PageHeader>
   </AdminLayout>
 </template>

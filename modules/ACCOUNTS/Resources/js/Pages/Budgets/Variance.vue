@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
-import { Printer, Scale, TrendingDown, TrendingUp } from 'lucide-vue-next';
+import { FileDown, Printer, Scale, TrendingDown, TrendingUp } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { formatCurrency } from '@core/Utils/format';
 import { useLocale } from '@core/Composables/useLocale';
 import type { BudgetVarianceReport } from '@accounts/types';
@@ -29,6 +30,26 @@ function apply() {
     if (period.value) q.period = period.value;
     router.get(route('accounts.budgets.variance'), q, { preserveState: true });
 }
+
+
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => props.report ? {
+    title: 'Budget Variance',
+    subtitle: `${props.report.budget.name} · ${props.report.budget.code}`,
+    permission: 'accounts.budgets.view',
+    orientation: 'landscape',
+    meta: {
+        'Budget': props.report.budget.name,
+        'Code': props.report.budget.code,
+        'Fiscal year': props.report.budget.fiscal_year,
+        'Budgeted': formatCurrency(props.report.totals.budget),
+        'Actual': formatCurrency(props.report.totals.actual),
+        'Variance': formatCurrency(props.report.totals.variance),
+    },
+    headings: ['Account', 'Budgeted', 'Actual', 'Variance', 'Used', 'State'],
+    rows: props.report.rows.map((r: any) => [`${r.code} ${r.name}`, Number(r.budget) || 0, Number(r.actual) || 0, Number(r.variance) || 0, `${r.pct}%`, r.favourable ? 'On track' : 'Off plan']),
+    footer: 'Budget Variance · Accounts',
+} : null);
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Accounts' }, { title: 'Budget Variance' }]">
@@ -46,6 +67,7 @@ function apply() {
     >
       <template #actions>
         <div class="flex items-end gap-2">
+          <Button v-if="report" variant="default" size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" /> {{ tr('common.downloadPdf') || 'Download PDF' }}</Button>
           <Button v-if="report" variant="outline" size="sm" class="rounded-full" @click="printDocument()"><Printer class="size-4" /> {{ tr('common.print') }}</Button>
         </div>
       </template>

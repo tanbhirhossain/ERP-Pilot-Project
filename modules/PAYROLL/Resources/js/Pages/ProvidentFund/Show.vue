@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { ArrowLeft, BadgeCheck, Banknote, Printer, XCircle } from 'lucide-vue-next';
+import { FileDown, ArrowLeft, BadgeCheck, Banknote, Printer, XCircle } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@core/Composables/useToast';
 import { confirmDialog, promptDialog } from '@core/Composables/useConfirm';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { formatCurrency } from '@core/Utils/format';
 
 /**
@@ -201,6 +203,23 @@ async function decide(id: number, decision: 'approve' | 'reject' | 'pay'): Promi
 
 /* --------------------------------- print -------------------------------- */
 
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: `PF statement — ${props.account.employee_name || props.account.employee_id}`,
+    permission: 'payroll.pf.view',
+    orientation: 'portrait',
+    meta: {
+        'Member': props.account.employee_name || props.account.employee_id,
+        'Employee ID': props.account.employee_id,
+        'Status': props.account.status,
+        'Opening balance': money(props.statement.opening_balance),
+        'Closing balance': money(props.statement.closing_balance),
+    },
+    headings: ['Date', 'Month', 'Type', 'Direction', 'Amount', 'Balance', 'Description'],
+    rows: props.statement.lines.map((l: any) => [l.entry_date ?? '—', l.contribution_month ?? '—', l.entry_type, l.direction, l.amount, l.balance, l.description ?? '—']),
+    footer: 'PF statement · Payroll',
+}));
+
 function print(): void {
   printDocument();
 }
@@ -210,65 +229,36 @@ function print(): void {
   <AdminLayout :breadcrumbs="[{ title: 'Payroll' }, { title: 'Provident Fund', href: route('payroll.pf.dashboard') }, { title: 'Members', href: route('payroll.pf.members') }, { title: account.employee_name || account.employee_id }]">
     <Head :title="`PF statement — ${account.employee_name || account.employee_id}`" />
 
-    <header class="border-b pb-4">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div class="min-w-0">
-          <button type="button" class="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" @click="router.visit(route('payroll.pf.members'))">
-            <ArrowLeft class="size-3" />Member register
-          </button>
-          <h1 class="text-lg font-semibold leading-tight tracking-tight">{{ account.employee_name || account.employee_id }}</h1>
-          <p class="mt-0.5 text-[12.5px] text-muted-foreground">
-            <span class="font-mono">{{ account.employee_id }}</span>
-            <template v-if="account.employee?.designation"> · {{ account.employee.designation }}</template>
-            <template v-if="account.policy"> · {{ account.policy.name }}</template>
-          </p>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-[10px] font-semibold uppercase tracking-[0.12em]" :class="{
-            'text-emerald-700 dark:text-emerald-400': account.status === 'active',
-            'text-amber-700 dark:text-amber-400': account.status === 'suspended',
-            'text-muted-foreground': account.status === 'closed',
-          }">{{ account.status }} account</span>
-          <Button size="sm" variant="outline" @click="print"><Printer class="size-3.5" />Print statement</Button>
-        </div>
-      </div>
+    <PageHeader
+      :title="account.employee_name || account.employee_id"
+      :icon="Banknote"
+      :description="`${account.employee_id}${account.employee?.designation ? ' · ' + account.employee.designation : ''}${account.policy ? ' · ' + account.policy.name : ''}`"
+      :stats="[
+        { label: 'Employee share', value: money(account.employee_balance) },
+        { label: 'Employer share', value: money(account.employer_balance) },
+        { label: 'Total balance', value: money(account.total_balance) },
+        { label: 'Contribution', value: account.policy ? account.policy.employee_contribution_percent + '% / ' + account.policy.employer_contribution_percent + '%' : '—' },
+      ]"
+    >
+      <template #badge>
+        <span class="text-[10px] font-semibold uppercase tracking-[0.12em]" :class="{
+          'text-emerald-700 dark:text-emerald-400': account.status === 'active',
+          'text-amber-700 dark:text-amber-400': account.status === 'suspended',
+          'text-muted-foreground': account.status === 'closed',
+        }">{{ account.status }} account</span>
+      </template>
+      <template #actions>
+        <Button size="sm" variant="ghost" @click="router.visit(route('payroll.pf.members'))"><ArrowLeft class="size-3" />Member register</Button>
+        <Button size="sm" class="rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-3.5" />Download PDF</Button>
+        <Button size="sm" variant="outline" @click="print"><Printer class="size-3.5" />Print statement</Button>
+      </template>
+    </PageHeader>
 
-      <!-- The passbook header: balance split by side, and the account's terms. -->
-      <dl class="mt-4 grid grid-cols-2 divide-y divide-border rounded-md border bg-card sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-        <div class="px-4 py-3">
-          <dt class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Employee share</dt>
-          <dd class="mt-1 text-[19px] font-semibold leading-none tabular-nums">{{ money(account.employee_balance) }}</dd>
-        </div>
-        <div class="px-4 py-3">
-          <dt class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Employer share</dt>
-          <dd class="mt-1 text-[19px] font-semibold leading-none tabular-nums">{{ money(account.employer_balance) }}</dd>
-        </div>
-        <div class="px-4 py-3">
-          <dt class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Total balance</dt>
-          <dd class="mt-1 text-[19px] font-bold leading-none tabular-nums">{{ money(account.total_balance) }}</dd>
-        </div>
-        <div class="px-4 py-3">
-          <dt class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Account terms</dt>
-          <dd class="mt-1 text-[12px] leading-snug">
-            <template v-if="account.policy">
-              {{ account.policy.employee_contribution_percent }}% / {{ account.policy.employer_contribution_percent }}%
-              on <span class="lowercase">{{ account.policy.contribution_base.replaceAll('_', ' ') }}</span>
-            </template>
-            <template v-else>—</template>
-          </dd>
-          <dd class="text-[11px] text-muted-foreground">
-            Eligible {{ plainDate(account.eligible_from) }}
-            <template v-if="account.employee?.joining_date"> · joined {{ plainDate(account.employee.joining_date) }}</template>
-          </dd>
-        </div>
-      </dl>
-
-      <div v-if="drift" role="alert" class="mt-2 rounded-md border border-rose-500/30 bg-rose-500/[0.05] px-3 py-2 text-[12px] text-rose-700 dark:text-rose-400">
-        <strong>Statement does not reconcile.</strong>
-        Ledger closing balance is {{ money(statement.closing_balance) }} against a cached balance of
-        {{ money(account.total_balance) }} — a variance of {{ money(drift) }}. Rebuild the account before relying on this figure.
-      </div>
-    </header>
+    <div v-if="drift" role="alert" class="mt-2 rounded-md border border-rose-500/30 bg-rose-500/[0.05] px-3 py-2 text-[12px] text-rose-700 dark:text-rose-400">
+      <strong>Statement does not reconcile.</strong>
+      Ledger closing balance is {{ money(statement.closing_balance) }} against a cached balance of
+      {{ money(account.total_balance) }} — a variance of {{ money(drift) }}. Rebuild the account before relying on this figure.
+    </div>
 
     <div class="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div class="min-w-0 space-y-5">

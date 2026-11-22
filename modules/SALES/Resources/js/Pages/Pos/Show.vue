@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
+import PageHeader from '@core/Components/PageHeader.vue';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { confirmDialog } from '@core/Composables/useConfirm';
@@ -93,28 +94,28 @@ const payLabels: Record<string, string> = {
   <AdminLayout :breadcrumbs="[{ title: 'Sales & POS' }, { title: 'POS History', href: route('sales.pos.history') }, { title: sale.pos_no }]">
     <Head :title="sale.pos_no" />
 
-    <div class="mb-3 flex flex-wrap gap-2">
-      <Link :href="route('sales.pos.history')"><Button variant="outline" size="sm"><ArrowLeft class="size-4" />History</Button></Link>
-      <Link :href="route('sales.pos.receipt', sale.id)"><Button variant="outline" size="sm"><Printer class="size-4" />Receipt</Button></Link>
-      <Link v-if="sale.session" :href="route('sales.pos.sessions.dayEnd', { session: sale.session.id })">
-        <Button variant="outline" size="sm"><FileText class="size-4" />Day-end {{ sale.session.session_no }}</Button>
-      </Link>
-      <Button v-if="!isVoid && !drawerClosed" variant="destructive" size="sm" @click="voidSale"><Ban class="size-4" />Void</Button>
-    </div>
+    <PageHeader
+      :title="sale.pos_no"
+      :icon="Receipt"
+      :description="`${sale.customer?.name ?? sale.customer_name ?? 'Walk-in Customer'} · ${formatDate(sale.sale_date)} · ${sale.warehouse?.name ?? '—'}`"
+    >
+      <template #badge>
+        <StatusBadge :label="sale.status" :tone="sale.status === 'completed' ? 'success' : 'danger'" />
+        <span class="rounded bg-muted px-1.5 py-0.5 text-xs">{{ payLabels[sale.payment_method] ?? sale.payment_method }}</span>
+      </template>
+      <template #actions>
+        <Link :href="route('sales.pos.history')"><Button variant="outline" size="sm"><ArrowLeft class="size-4" />History</Button></Link>
+        <Link :href="route('sales.pos.receipt', sale.id)"><Button variant="outline" size="sm"><Printer class="size-4" />Receipt</Button></Link>
+        <Link v-if="sale.session" :href="route('sales.pos.sessions.dayEnd', { session: sale.session.id })">
+          <Button variant="outline" size="sm"><FileText class="size-4" />Day-end {{ sale.session.session_no }}</Button>
+        </Link>
+        <Button v-if="!isVoid && !drawerClosed" variant="destructive" size="sm" @click="voidSale"><Ban class="size-4" />Void</Button>
+      </template>
+    </PageHeader>
 
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div class="space-y-4 lg:col-span-2">
         <div class="rounded-xl border bg-card p-4">
-          <div class="flex flex-wrap items-center gap-2">
-            <h1 class="flex items-center gap-2 text-xl font-bold"><Receipt class="size-5 text-primary" />{{ sale.pos_no }}</h1>
-            <StatusBadge :label="sale.status" :tone="sale.status === 'completed' ? 'success' : 'danger'" />
-            <span class="rounded bg-muted px-1.5 py-0.5 text-xs">{{ payLabels[sale.payment_method] ?? sale.payment_method }}</span>
-          </div>
-          <p class="mt-1 text-sm text-muted-foreground">
-            {{ sale.customer?.name ?? sale.customer_name ?? 'Walk-in Customer' }} ·
-            {{ formatDate(sale.sale_date) }} ·
-            {{ sale.warehouse?.name ?? '—' }}
-          </p>
           <p v-if="sale.session" class="mt-1 text-xs text-muted-foreground">
             Drawer {{ sale.session.session_no }}
             <span v-if="sale.session.journal?.journal_no"> · posted in {{ sale.session.journal.journal_no }}</span>
@@ -127,6 +128,7 @@ const payLabels: Record<string, string> = {
             <div v-if="money(sale.vat_amount) > 0" class="flex justify-between py-1"><span class="text-muted-foreground">VAT</span><span class="font-mono">{{ formatCurrency(money(sale.vat_amount)) }}</span></div>
             <div class="flex justify-between py-1 font-bold"><span>Total</span><span class="font-mono">{{ formatCurrency(money(sale.total_amount)) }}</span></div>
             <div class="flex justify-between py-1"><span class="text-muted-foreground">Paid at the counter</span><span class="font-mono">{{ formatCurrency(money(sale.paid_amount)) }}</span></div>
+            <div v-if="sale.transaction_ref" class="flex justify-between py-1"><span class="text-muted-foreground">Transaction ref</span><span class="font-mono text-primary font-semibold">{{ sale.transaction_ref }}</span></div>
             <template v-if="due > 0">
               <div class="flex justify-between py-1"><span class="text-muted-foreground">Sold on credit</span><span class="font-mono">{{ formatCurrency(due) }}</span></div>
               <div class="flex justify-between py-1"><span class="text-muted-foreground">Collected since</span><span class="font-mono">{{ formatCurrency(collected) }}</span></div>

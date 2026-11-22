@@ -3,8 +3,9 @@ import PageHeader from '@core/Components/PageHeader.vue';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import { Button } from '@/components/ui/button';
 import { printDocument } from '@core/Composables/usePrint';
+import { useReportPdf } from '@core/Composables/useReportPdf';
 import { Head, Link } from '@inertiajs/vue3';
-import { ArrowLeft, FileText, Printer } from 'lucide-vue-next';
+import { FileDown, ArrowLeft, FileText, Printer } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface BreakdownItem { name: string; amount: number | string }
@@ -57,6 +58,29 @@ const STATUS_TONE: Record<string, string> = {
     unpaid: 'bg-sky-500/10 text-sky-600',
 };
 
+const { downloadPdf } = useReportPdf();
+const pdfPayload = computed(() => ({
+    title: `Payslip · ${period.value}`,
+    subtitle: props.slip.employee_name,
+    permission: undefined,
+    orientation: 'portrait',
+    meta: {
+        'Employee': props.slip.employee_name,
+        'Period': period.value,
+        'Gross': money(props.slip.gross_salary),
+        'Total benefits': money(props.slip.total_benefits),
+        'Total deductions': money(props.slip.total_deductions),
+        'Net payable': money(props.slip.net_salary),
+        'Status': props.slip.payment_status,
+    },
+    headings: ['Item', 'Amount'],
+    rows: [
+        ...benefits.value.map((b) => [b.name, Number(b.amount)]),
+        ...deductions.value.map((d) => [d.name, -Number(d.amount)]),
+    ],
+    footer: `Payslip · ${period.value}`,
+}));
+
 function print(): void {
     printDocument({ portrait: true });
 }
@@ -68,6 +92,7 @@ function print(): void {
         <PageHeader :title="`Payslip · ${period}`" :description="`${props.slip.employee_name} · ${props.slip.designation ?? 'Employee'}`" :icon="FileText">
             <template #actions>
                 <Link :href="route('hrm.my.payslips')"><Button variant="outline" size="sm" class="gap-1.5"><ArrowLeft class="size-4" /> All payslips</Button></Link>
+                <Button size="sm" class="gap-1.5 rounded-full" @click="downloadPdf(pdfPayload)"><FileDown class="size-4" /> Download PDF</Button>
                 <Button variant="outline" size="sm" class="gap-1.5" @click="print"><Printer class="size-4" /> Print</Button>
             </template>
         </PageHeader>
