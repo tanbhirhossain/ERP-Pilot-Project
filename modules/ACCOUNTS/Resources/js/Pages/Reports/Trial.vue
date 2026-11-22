@@ -31,11 +31,11 @@ const byType = computed(()=> {
 const { downloadPdf } = useReportPdf();
 const pdfPayload = computed(() => ({
     title: 'Trial Balance',
-    subtitle: `As of ${asOf.value}`,
+    subtitle: `As of ${props.asOf}`,
     permission: 'accounts.reports.view',
     orientation: 'landscape',
     meta: {
-        'As of': asOf.value,
+        'As of': props.asOf,
         'Accounts': String(filtered.value.length),
         'Total Debit': formatCurrency(props.totals.debit),
         'Total Credit': formatCurrency(props.totals.credit),
@@ -54,7 +54,7 @@ const pdfPayload = computed(() => ({
       title="Trial Balance"
       description="All ledgers aggregated to as_of — Σ Debit must equal Σ Credit. Basis for every other report."
       :icon="Scale"
-      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label:'Total Debit', value: formatCurrency(totals.debit), sub: rows.length + ' accounts' },
         { label:'Total Credit', value: formatCurrency(totals.credit), sub: 'Mirror of debit' },

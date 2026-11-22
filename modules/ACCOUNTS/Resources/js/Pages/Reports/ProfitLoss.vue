@@ -55,7 +55,7 @@ const pdfPayload = computed(() => {
       title="Profit & Loss"
       :description="`Period ${report.from} → ${report.to} · Accrual basis from posted ledgers. BDT`"
       :icon="TrendingUp"
-      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label: 'Income', value: formatCurrency(report.income), sub: `${incomeRows.length} ${incomeRows.length === 1 ? 'account' : 'accounts'}` },
         { label: 'Expense', value: formatCurrency(report.expense), sub: `${expenseRows.length} ${expenseRows.length === 1 ? 'account' : 'accounts'}` },

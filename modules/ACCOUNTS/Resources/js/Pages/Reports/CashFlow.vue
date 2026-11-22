@@ -58,7 +58,7 @@ const pdfPayload = computed(() => ({
       title="Cash Flow Statement"
       description="Every posted journal that moved a cash or bank account, classified by what the money moved against."
       :icon="Droplets"
-      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label:'Operating', value: formatCurrency(report.operating), sub: 'trading' },
         { label:'Investing', value: formatCurrency(report.investing), sub: 'fixed assets' },

@@ -32,7 +32,7 @@ const pdfPayload = computed(() => ({
 <template>
   <AdminLayout :breadcrumbs="[{title:'Accounts'},{title:'Payables (AP)'}]">
     <Head title="Payables" />
-    <PageHeader title="Payables (AP)" description="Vendor bills mirrored from payables table — unpaid PV/vendor bills. Use Aging for buckets." :icon="CreditCard" :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]">
+    <PageHeader title="Payables (AP)" description="Vendor bills mirrored from payables table — unpaid PV/vendor bills. Use Aging for buckets." :icon="CreditCard" :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]">
       <AcctSection title="Outstanding vendor bills" :description="`${payables.total ?? payables.data.length} record(s) · BDT`">
         <StaticTable flush>
             <thead class="bg-muted/40 text-xs uppercase tracking-widest"><tr><th class="px-3 py-2.5 text-left">Bill No</th><th class="px-3 py-2.5 text-left">Vendor</th><th class="px-3 py-2.5 text-right">Amount</th><th class="px-3 py-2.5 text-right">Balance</th><th class="px-3 py-2.5 text-center">Status</th><th class="px-3 py-2.5 text-left">Due</th></tr></thead>

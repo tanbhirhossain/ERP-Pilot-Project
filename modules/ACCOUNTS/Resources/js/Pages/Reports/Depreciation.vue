@@ -42,7 +42,7 @@ const pdfPayload = computed(() => ({
       title="Depreciation Schedule"
       description="Straight-line 10% p.a. fallback until Fixed Asset register is filled. Replace rate per asset with FA module."
       :icon="Timer"
-      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label:'Assets tracked', value: String(report.rows.length), sub: '15xx + Asset-tagged' },
         { label:'Total monthly charge', value: formatCurrency(report.total_monthly), sub: 'At 10% p.a.' },

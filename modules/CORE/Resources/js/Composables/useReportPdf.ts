@@ -143,6 +143,7 @@ export function useReportPdf() {
                 headers: {
                     'Content-Type': 'application/json',
                     Accept: 'application/pdf, */*',
+                    'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '',
                 },
                 body: JSON.stringify({
                     title: payload.title,

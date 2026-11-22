@@ -32,7 +32,7 @@ const pdfPayload = computed(() => ({
 <template>
   <AdminLayout :breadcrumbs="[{title:'Accounts'},{title:'Receivables (AR)'}]">
     <Head title="Receivables" />
-    <PageHeader title="Receivables (AR)" description="Customer invoices mirrored from receivables — unpaid RV/SV. Use Aging for buckets." :icon="Wallet" :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]">
+    <PageHeader title="Receivables (AR)" description="Customer invoices mirrored from receivables — unpaid RV/SV. Use Aging for buckets." :icon="Wallet" :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]">
       <AcctSection title="Outstanding customer invoices" :description="`${receivables.total ?? receivables.data.length} record(s) · BDT`">
         <StaticTable flush>
             <thead class="bg-muted/40 text-xs uppercase tracking-widest"><tr><th class="px-3 py-2.5 text-left">Invoice No</th><th class="px-3 py-2.5 text-left">Customer</th><th class="px-3 py-2.5 text-right">Amount</th><th class="px-3 py-2.5 text-right">Balance</th><th class="px-3 py-2.5 text-center">Status</th><th class="px-3 py-2.5 text-left">Due</th></tr></thead>

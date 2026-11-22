@@ -50,7 +50,7 @@ const pdfPayload = computed(() => ({
       title="General Ledger"
       description="Account-wise drill-down — posting_date, reference, debit / credit and running balance. Paginated 200."
       :icon="BookMarked"
-      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label:'Filters', value: account ? `${account.code} · ${account.name}` : 'Pick an account', sub: `${entries.length} entries` },
         { label:'Total Debit', value: formatCurrency(totalDr), sub: 'In window' },

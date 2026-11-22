@@ -54,7 +54,7 @@ const pdfPayload = computed(() => {
       title="Balance Sheet"
       description="Financial position — Assets = Liabilities + Equity (incl. retained earnings to date). Posting-date ledger."
       :icon="Scale"
-      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload.value) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
+      :actions="[{ label:'Download PDF', icon: FileDown, variant:'default', onClick: () => downloadPdf(pdfPayload) }, { label:'Print', icon: Printer, variant:'outline', onClick: () => printDocument() }]"
       :stats="[
         { label:'Assets', value: formatCurrency(assets), sub: 'Dr nature' },
         { label:'Liabilities', value: formatCurrency(liabilities), sub: 'Cr nature' },

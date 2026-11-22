@@ -26,9 +26,9 @@ use Symfony\Component\HttpFoundation\Response;
  *  - The PDF reflects exactly the view the operator is looking at (filters,
  *    search, sort) rather than a fresh query that might disagree.
  *
- * Security: the client sends the permission it already needs to see the page;
- * the server verifies it with the ACL before rendering anything. A user cannot
- * export a report they cannot open. Rows are capped at `core.exports.pdf_max_rows`.
+ * This is an export of client-supplied values, not a server-verified financial report.
+ * Access to the originating page is enforced by that page; the optional permission
+ * here is only an additional check, never proof that the submitted values are genuine.
  */
 class ReportPdfController extends Controller
 {
@@ -48,11 +48,9 @@ class ReportPdfController extends Controller
             'footer'      => ['nullable', 'string', 'max:200'],
         ]);
 
-        // Permission gate: the page route already enforces the view permission,
-        // and this re-checks it so a crafted POST cannot export a report the
-        // caller has no right to see. A null permission means "authenticated
-        // only" (used only for pages with no ACL gate).
-        if ($data['permission'] !== null && $data['permission'] !== '') {
+        // These rows come from the caller, not the database. The permission is an
+        // optional additional check; it cannot establish the provenance of the data.
+        if (($data['permission'] ?? null) !== null && $data['permission'] !== '') {
             abort_unless($request->user()->can($data['permission']), 403);
         } else {
             abort_unless($request->user(), 403);
@@ -207,6 +205,8 @@ class ReportPdfController extends Controller
                     <div>{$this->e($company['phone'])} · {$this->e($company['email'])}</div>
                 </div>
             </div>
+
+            <p class="note">UNVERIFIED CLIENT-SUPPLIED DATA — This is a view export, not a system-verified financial record. Check the source report before use.</p>
 
             <table class="meta">
                 {$metaCells}
