@@ -46,6 +46,8 @@ Route::middleware(['web', 'auth'])->prefix('purchase')->name('purchase.')->group
     // Bills
     Route::get('bills', [VendorBillController::class, 'index'])->middleware(PermissionMiddleware::class.':purchase.bills.view')->name('bills.index');
     Route::get('bills/create', [VendorBillController::class, 'create'])->middleware(PermissionMiddleware::class.':purchase.bills.manage')->name('bills.create');
+    // Before `bills/{bill}`: otherwise "create-asset" binds as a bill id and 404s on model binding.
+    Route::get('bills/create-asset', [VendorBillController::class, 'createAsset'])->middleware(PermissionMiddleware::class.':purchase.bills.manage')->name('bills.create_asset');
     Route::post('bills', [VendorBillController::class, 'store'])->middleware(PermissionMiddleware::class.':purchase.bills.manage')->name('bills.store');
     Route::get('bills/{bill}', [VendorBillController::class, 'show'])->middleware(PermissionMiddleware::class.':purchase.bills.view')->name('bills.show');
     Route::get('bills/{bill}/edit', [VendorBillController::class, 'edit'])->middleware(PermissionMiddleware::class.':purchase.bills.manage')->name('bills.edit');

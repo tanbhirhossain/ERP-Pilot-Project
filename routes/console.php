@@ -25,3 +25,7 @@ Schedule::command('erp:overdue-invoice-reminders')->dailyAt('08:15')->withoutOve
 Schedule::command('erp:credit-limit-review')->dailyAt('08:30')->withoutOverlapping();
 // Accrue on the 1st of each month at 01:00 — firstOrCreate makes re-runs no-ops.
 Schedule::command('erp:leave-balance-accrual')->monthlyOn(1, '01:00')->withoutOverlapping();
+// Depreciate last month on the 1st at 02:00, after the accrual — an already-run period is a
+// no-op success, so a repeated tick never double-posts.
+Schedule::command('erp:depreciation-run')->monthlyOn(1, '02:00')->timezone('Asia/Dhaka')->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/depreciation-scheduled.log'));

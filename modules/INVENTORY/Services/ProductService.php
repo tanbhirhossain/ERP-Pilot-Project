@@ -23,9 +23,9 @@ class ProductService
         return $this->repo->exportBuilder($dt);
     }
 
-    public function options(?string $search = null, int $limit = 25): Collection
+    public function options(?string $search = null, int $limit = 25, ?string $type = null, ?string $excludeType = null): Collection
     {
-        return $this->repo->options($search, $limit);
+        return $this->repo->options($search, $limit, $type, $excludeType);
     }
 
     public function findOrFail(int $id): Product

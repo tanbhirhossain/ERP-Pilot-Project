@@ -3,6 +3,7 @@
 namespace Modules\ACCOUNTS\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Modules\ACCOUNTS\Console\Commands\DepreciationRunCommand;
 use Modules\ACCOUNTS\Imports\CoaImport;
 use Modules\ACCOUNTS\Interfaces\AccountRepositoryInterface;
 use Modules\ACCOUNTS\Interfaces\AccountsPostingProviderInterface;
@@ -43,5 +44,9 @@ class ACCOUNTSServiceProvider extends ServiceProvider
         // Register this module's importer into the shared orchestrator (Phase 1).
         $this->app->make(ImportService::class)
             ->register('coa', CoaImport::class);
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([DepreciationRunCommand::class]);
+        }
     }
 }

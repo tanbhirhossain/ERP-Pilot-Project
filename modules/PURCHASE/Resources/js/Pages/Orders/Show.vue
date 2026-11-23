@@ -9,8 +9,15 @@ import { Button } from '@/components/ui/button';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@core/Utils/format';
 import StaticTable from '@core/Components/StaticTable.vue';
-defineProps<{ order: PurchaseOrder; activities?: any[] }>();
+import { computed } from 'vue';
+const props = defineProps<{ order: PurchaseOrder; activities?: any[] }>();
 function tone(s:string){ if(s==='received') return 'success'; if(s==='confirmed') return 'info'; if(s==='draft') return 'warning'; if(s==='cancelled') return 'danger'; return 'neutral'; }
+/**
+ * Assets skip the GRN entirely (PO → bill), so a pure-asset order offers no Receive button —
+ * only the asset bill. A mixed order keeps both: its goods still arrive through a receipt.
+ */
+const hasAssetLines = computed(() => (props.order.items ?? []).some((it: any) => it.product?.type === 'asset'));
+const hasGoodsLines = computed(() => (props.order.items ?? []).some((it: any) => (it.product?.type ?? 'stockable') !== 'asset'));
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: order.order_no }]">
@@ -35,8 +42,9 @@ function tone(s:string){ if(s==='received') return 'success'; if(s==='confirmed'
             <Button v-if="order.status==='draft'" size="sm" @click="router.post(route('purchase.orders.confirm', order.id))">Confirm</Button>
             <Button v-if="['draft','sent'].includes(order.status)" size="sm" variant="outline" @click="router.post(route('purchase.orders.approve', order.id))">Approve (≥50k)</Button>
             <Button v-if="order.status==='draft'" size="sm" variant="outline" @click="router.post(route('purchase.orders.send', order.id))">Send to Vendor</Button>
-            <Link v-if="['confirmed','partially_received'].includes(order.status)" :href="route('purchase.receipts.create', { order_id: order.id })"><Button size="sm">Receive (GRN)</Button></Link>
+            <Link v-if="['confirmed','partially_received'].includes(order.status) && hasGoodsLines" :href="route('purchase.receipts.create', { order_id: order.id })"><Button size="sm">Receive (GRN)</Button></Link>
             <Link v-if="['received','partially_received'].includes(order.status)" :href="route('purchase.bills.create', { order_id: order.id })"><Button size="sm" variant="outline">Create Bill</Button></Link>
+            <Link v-if="order.status==='confirmed' && hasAssetLines" :href="route('purchase.bills.create_asset', { order_id: order.id })"><Button size="sm">Create Asset Bill</Button></Link>
           </div>
         </div>
         <p v-if="order.notes" class="mt-2 text-sm bg-muted/30 rounded p-2">{{ order.notes }}</p>

@@ -193,6 +193,12 @@ class PosService
                     $serviceProductIds[$line->productId] = true;
                 }
 
+                // Capital assets are never sold at the till: they carry no shelf quantity and no
+                // inventory cost, so ringing one up would pocket revenue against nothing.
+                if ($product->type === 'asset') {
+                    throw new \DomainException("{$product->name}: fixed assets cannot be sold through POS — dispose of them through the asset register.");
+                }
+
                 $grossCents = (int) round($line->qty * $line->unitPrice * 100);
                 $lineDiscountCents = (int) round($grossCents * ($line->discountPct / 100));
                 $netCents = $grossCents - $lineDiscountCents;

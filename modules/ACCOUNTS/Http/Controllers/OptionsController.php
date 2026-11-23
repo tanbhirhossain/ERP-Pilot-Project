@@ -5,6 +5,7 @@ namespace Modules\ACCOUNTS\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Modules\ACCOUNTS\Models\AssetCategory;
 use Modules\ACCOUNTS\Services\AccountService;
 use Modules\ACCOUNTS\Services\BankService;
 use Modules\CORE\Support\OptionAccess;
@@ -51,6 +52,12 @@ class OptionsController extends Controller
             'payroll.bank-advices.view', 'payroll.bank-advices.manage',
             'payroll.finance.view', 'payroll.finance.post',
         ],
+        // The asset class a bill line capitalises into. Served to the bill form as well as the
+        // register, so whoever can raise a bill can look the classes up.
+        'asset-categories' => [
+            'accounts.assets.view', 'accounts.assets.manage',
+            'purchase.bills.view', 'purchase.bills.manage',
+        ],
     ];
 
     public function __invoke(Request $r, string $type, AccountService $accounts, BankService $banks): JsonResponse
@@ -67,8 +74,36 @@ class OptionsController extends Controller
             'accounts' => $accounts->options($search, $limit),
             'posting-accounts' => $accounts->options($search, $limit),
             'banks' => $banks->options($search, $limit),
+            'asset-categories' => $this->assetCategoryOptions($search, $limit),
         };
 
         return response()->json(['data' => $data]);
+    }
+
+    /**
+     * Active asset classes for the bill line's category picker.
+     *
+     * The defaults ride along so the form can show what a blank field inherits ("SL · 5y · 10%")
+     * instead of leaving the clerk to guess — or worse, to fill every line by hand when the
+     * category already knows.
+     */
+    private function assetCategoryOptions(?string $search, int $limit): \Illuminate\Support\Collection
+    {
+        $needle = $search ? '%'.addcslashes($search, '%_').'%' : null;
+
+        return AssetCategory::query()->active()->with('assetAccount:id,code,name')
+            ->when($needle, fn ($q) => $q->where(fn ($g) => $g->where('name', 'like', $needle)->orWhere('code', 'like', $needle)))
+            ->orderBy('name')->limit($limit)
+            ->get()
+            ->map(fn (AssetCategory $c) => [
+                'value' => $c->id,
+                'label' => $c->name,
+                'description' => $c->code.($c->assetAccount ? " · {$c->assetAccount->code} {$c->assetAccount->name}" : ''),
+                'meta' => $c->code,
+                'default_method' => $c->default_method,
+                'default_useful_life_years' => $c->default_useful_life_years,
+                'default_salvage_pct' => (float) $c->default_salvage_pct,
+                'default_db_factor' => (float) $c->default_db_factor,
+            ])->values();
     }
 }

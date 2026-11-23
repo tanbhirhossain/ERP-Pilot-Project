@@ -102,6 +102,17 @@ class InvoiceService
         return DB::transaction(function () use ($invoice): Invoice {
             $invoice->load(['items.product', 'customer']);
 
+            // Capital assets are sold by disposal, never by invoice line: they have no shelf
+            // quantity to deduct and no inventory cost to relieve, so selling one through the
+            // order book would silently understate COGS and overstate stock.
+            foreach ($invoice->items as $line) {
+                if (($line->product?->type ?? 'stockable') === 'asset') {
+                    throw new \DomainException(
+                        "Invoice {$invoice->invoice_no} line \"{$line->product_name}\" is a fixed asset — dispose of it through the asset register, not the sales book."
+                    );
+                }
+            }
+
             // Refuse to invoice more than the order still owes, and work out per line what this
             // invoice newly takes off the shelf versus what a delivery already carried out.
             $plan = $this->planInvoiceQuantities($invoice);

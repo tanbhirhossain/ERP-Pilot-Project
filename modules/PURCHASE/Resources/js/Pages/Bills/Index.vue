@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { FileText, Plus, Eye } from 'lucide-vue-next';
+import { FileText, Plus, Eye, Building2 } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
 import DataTable, { type DataTableColumn } from '@core/Components/DataTable.vue';
@@ -75,7 +75,7 @@ function daysOverdue(due: string | null | undefined): number | null {
       title="Vendor Bills"
       description="AP • GRN → Bill posted = AP 2100 Cr • Payment clears AP"
       :icon="FileText"
-      :actions="[{ label: 'New Vendor Bill', route: 'purchase.bills.create', icon: Plus }]"
+      :actions="[{ label: 'New Vendor Bill', route: 'purchase.bills.create', icon: Plus }, { label: 'New Asset Purchase', route: 'purchase.bills.create_asset', icon: Building2 }]"
     >
       <DataTable
         route-name="purchase.bills.index"

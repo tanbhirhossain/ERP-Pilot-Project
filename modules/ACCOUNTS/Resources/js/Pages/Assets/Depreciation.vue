@@ -25,6 +25,12 @@ const { t: tr } = useLocale();
 const run = useForm({ period: props.month });
 function submitRun() { run.post(route('accounts.assets.depreciation.run')); }
 
+const catchUp = useForm({ period: props.month });
+function submitCatchUp() {
+    if (!confirm(`Run every outstanding month through ${catchUp.period}? Each month posts its own journal.`)) return;
+    catchUp.post(route('accounts.assets.depreciation.catch-up'));
+}
+
 const byBasis = computed(() => props.preview.map((r) => r.charge.method === 'declining_balance' ? 'DB' : 'SL'));
 </script>
 <template>
@@ -42,10 +48,16 @@ const byBasis = computed(() => props.preview.map((r) => r.charge.method === 'dec
       ]"
     >
       <template #actions>
-        <form class="flex items-end gap-2" @submit.prevent="submitRun">
-          <div><Input v-model="run.period" type="month" class="h-9 w-44" /></div>
-          <Button type="submit" class="rounded-full" :disabled="run.processing || alreadyRun || !canManage"><Play class="size-4" /> {{ alreadyRun ? 'Already run' : tr('assets.run') }}</Button>
-        </form>
+        <div class="flex flex-wrap items-end gap-2">
+          <form class="flex items-end gap-2" @submit.prevent="submitRun">
+            <div><Input v-model="run.period" type="month" class="h-9 w-44" /></div>
+            <Button type="submit" class="rounded-full" :disabled="run.processing || alreadyRun || !canManage"><Play class="size-4" /> {{ alreadyRun ? 'Already run' : tr('assets.run') }}</Button>
+          </form>
+          <form class="flex items-end gap-2" title="Run every outstanding month through the target — the yearly close in one click" @submit.prevent="submitCatchUp">
+            <div><Input v-model="catchUp.period" type="month" class="h-9 w-44" /></div>
+            <Button type="submit" variant="outline" class="rounded-full" :disabled="catchUp.processing || !canManage"><CalendarClock class="size-4" /> Catch up</Button>
+          </form>
+        </div>
       </template>
     </PageHeader>
 

@@ -49,6 +49,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
     'update:modelValue': [value: string | number | (string | number)[] | null];
+    /** The whole option the user picked — for forms that need more than the value (product type, defaults). */
+    select: [option: SelectOption];
 }>();
 
 const root = ref<HTMLElement | null>(null);
@@ -184,12 +186,14 @@ function select(option: SelectOption) {
         }
 
         emit('update:modelValue', [...current]);
+        emit('select', option);
 
         if (!props.endpoint) {
             query.value = '';
         }
     } else {
         emit('update:modelValue', option.value);
+        emit('select', option);
         open.value = false;
     }
 }

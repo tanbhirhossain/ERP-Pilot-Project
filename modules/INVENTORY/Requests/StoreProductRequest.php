@@ -24,7 +24,7 @@ class StoreProductRequest extends FormRequest
             'category_id' => ['nullable', 'exists:inventory_categories,id'],
             'brand_id' => ['nullable', 'exists:inventory_brands,id'],
             'uom_id' => ['nullable', 'exists:inventory_uoms,id'],
-            'type' => ['required', Rule::in(['stockable', 'consumable', 'service', 'bundle'])],
+            'type' => ['required', Rule::in(['stockable', 'consumable', 'service', 'bundle', 'asset'])],
             'description' => ['nullable', 'string', 'max:5000'],
             'short_description' => ['nullable', 'string', 'max:500'],
             'hs_code' => ['nullable', 'string', 'max:30'],

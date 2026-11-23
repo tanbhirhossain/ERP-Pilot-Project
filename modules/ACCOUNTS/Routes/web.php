@@ -104,6 +104,7 @@ Route::middleware(['web', 'auth'])->prefix('accounts')->name('accounts.')->group
     Route::post('assets/{asset}/dispose', [FixedAssetController::class, 'dispose'])->middleware(PermissionMiddleware::class.':accounts.assets.manage')->name('assets.dispose');
     Route::get('assets/depreciation', [DepreciationController::class, 'index'])->middleware(PermissionMiddleware::class.':accounts.assets.view')->name('assets.depreciation');
     Route::post('assets/depreciation', [DepreciationController::class, 'store'])->middleware(PermissionMiddleware::class.':accounts.assets.manage')->name('assets.depreciation.run');
+    Route::post('assets/depreciation/catch-up', [DepreciationController::class, 'catchUp'])->middleware(PermissionMiddleware::class.':accounts.assets.manage')->name('assets.depreciation.catch-up');
 
     // ── F14: Budgets & variance ──────────────────────────────────────────
     Route::get('budgets/variance', [BudgetVarianceController::class, 'index'])->middleware(PermissionMiddleware::class.':accounts.budgets.view')->name('budgets.variance');

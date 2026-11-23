@@ -40,6 +40,21 @@ class VendorBillController extends Controller
         return Inertia::render('PURCHASE::Bills/Create', ['receipt' => $receipt, 'order' => $order]);
     }
 
+    /**
+     * The Fixed Asset Purchase page: the same bill, entered where assets live.
+     *
+     * Purchase keeps two doors — inventory bills and asset bills — over one room. The form
+     * locks itself to asset lines here, so a furniture invoice never has to explain what a
+     * goods line is; storage, posting and the register below are untouched.
+     */
+    public function createAsset(Request $r): Response
+    {
+        $receipt = $r->query('receipt_id') ? GoodsReceipt::with(['vendor', 'warehouse', 'items.product'])->find($r->query('receipt_id')) : null;
+        $order = $r->query('order_id') ? PurchaseOrder::with(['vendor', 'warehouse', 'items.product'])->find($r->query('order_id')) : null;
+
+        return Inertia::render('PURCHASE::Bills/CreateAsset', ['receipt' => $receipt, 'order' => $order]);
+    }
+
     public function store(VendorBillRequest $r): RedirectResponse
     {
         $b = $this->svc->create($r->validated());

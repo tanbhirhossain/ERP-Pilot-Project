@@ -141,6 +141,14 @@ class DeliveryService
                 if ($product !== null && $product->type === 'service') {
                     $deductQty = 0.0;
                 }
+
+                // Capital assets leave by disposal, not by challan: there is no shelf quantity to
+                // carry out, so a delivery line would move nothing while claiming it did.
+                if ($product !== null && $product->type === 'asset') {
+                    throw new \DomainException(
+                        "Delivery {$delivery->delivery_no} line \"{$di->product_name}\" is a fixed asset — assets leave the business by disposal through the asset register, not by challan."
+                    );
+                }
                 if ($deductQty > 0.0001) {
                     $deductItems[] = [
                         'product_id' => $di->product_id, 'variant_id' => $di->variant_id ?? null,

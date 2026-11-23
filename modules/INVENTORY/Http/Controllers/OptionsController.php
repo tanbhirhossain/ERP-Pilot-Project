@@ -102,7 +102,7 @@ class OptionsController extends Controller
 
         // No `default` arm — see OptionAccess: a mapped type with no handler must fail loudly.
         $data = match ($type) {
-            'products' => app(ProductService::class)->options($search, $limit),
+            'products' => app(ProductService::class)->options($search, $limit, $request->query('type'), $request->query('exclude_type')),
             'categories' => app(CategoryService::class)->options($search, $limit),
             'brands' => app(BrandService::class)->options($search, $limit),
             'uoms', 'units' => app(UomService::class)->options($search, $limit),

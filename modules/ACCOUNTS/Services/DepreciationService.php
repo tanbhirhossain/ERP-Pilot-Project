@@ -355,6 +355,61 @@ class DepreciationService
         });
     }
 
+    /**
+     * Run every outstanding month through `$to` — the "yearly" button.
+     *
+     * The engine stays monthly: a year is twelve sequential runs, each in its own transaction
+     * with its own journal, because pro-rata starts, disposals mid-year and closed fiscal months
+     * all need month boundaries to stay honest. Months already run are refused by `run()`, so a
+     * catch-up that stops halfway (a closed fiscal month, a misconfigured category) can simply be
+     * re-aimed: finished months stay posted, and the chain resumes after the break.
+     *
+     * @return DepreciationRun[] the runs it posted, in period order
+     */
+    public function catchUp(string $to, ?int $userId = null, ?string $notes = null): array
+    {
+        $this->assertPeriod($to);
+
+        $last = DepreciationRun::orderByDesc('period')->value('period');
+
+        if ($last === null) {
+            // The engine charges from in-service (falling back to purchase), so the chain starts
+            // at the earliest month any asset could charge — starting later would silently skip
+            // months the register then claims never existed.
+            $first = FixedAsset::depreciable()->selectRaw('MIN(COALESCE(in_service_date, purchase_date)) AS d')->value('d');
+
+            if ($first === null) {
+                abort(422, 'There is nothing to depreciate — the register holds no in-use asset.');
+            }
+
+            $cursor = Carbon::parse($first)->format('Y-m');
+
+            if ($cursor > $to) {
+                abort(422, "Nothing is due through {$to} — the earliest in-service asset starts {$cursor}.");
+            }
+        } else {
+            $cursor = Carbon::createFromFormat('Y-m-d', $last.'-01')->addMonthNoOverflow()->format('Y-m');
+
+            if ($cursor > $to) {
+                abort(422, "Every month through {$to} is already run — there is nothing to catch up.");
+            }
+        }
+
+        $runs = [];
+        $guard = 0;
+
+        while ($cursor <= $to) {
+            if (++$guard > 120) {
+                abort(422, 'Catch-up is limited to ten years at a time — aim closer and repeat.');
+            }
+
+            $runs[] = $this->run($cursor, $userId, $notes);
+            $cursor = Carbon::createFromFormat('Y-m-d', $cursor.'-01')->addMonthNoOverflow()->format('Y-m');
+        }
+
+        return $runs;
+    }
+
     /** Aggregate NBV / cost / accum for the register header, in dollars. */
     public function summary(): array
     {

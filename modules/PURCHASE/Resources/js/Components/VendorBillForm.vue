@@ -6,9 +6,18 @@
  * that shared three omissions: no Discount % input even though the request validates it and
  * `enrichTotals()` computes with it, no per-field errors on the item rows, and no totals
  * breakdown — just one number in a heading. This is the one implementation.
+ *
+ * A line is either goods or a fixed asset. Asset lines capitalise on posting — one register row
+ * per unit, straight into the category's fixed-asset account — so they carry the class and the
+ * depreciation overrides. Blank overrides inherit the category defaults; the picker shows them
+ * so "blank" is an informed choice, not a shrug.
+ *
+ * Purchase shows two doors over this one form: Inventory Purchase locks every line to goods,
+ * Fixed Asset Purchase locks every line to assets. The lock only narrows the page — the bill,
+ * the posting and the register below never know which door was used.
  */
-import { useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Link, useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,9 +40,21 @@ const props = withDefaults(
         receipt?: any;
         submitUrl: string;
         indexUrl: string;
+        /**
+         * Which door the clerk walked through. `goods` is the Inventory Purchase page, where the
+         * asset controls never appear; `fixed_asset` is the Fixed Asset Purchase page, where every
+         * line is an asset. Null keeps the per-line toggle (mixed bills in edit).
+         */
+        lockLineType?: 'goods' | 'fixed_asset' | null;
+        /** Page heading — the two create pages name themselves. */
+        formTitle?: string;
+        /** One-line explainer under the heading. */
+        formDescription?: string;
     }>(),
-    { bill: null, order: null, receipt: null },
+    { bill: null, order: null, receipt: null, lockLineType: null, formTitle: '', formDescription: '' },
 );
+
+const lock = computed(() => props.lockLineType ?? null);
 
 const isEdit = computed(() => props.mode === 'edit');
 const src = computed<any>(() => props.receipt ?? props.order ?? null);
@@ -57,30 +78,41 @@ const blankItem = () => ({
     unit_price: null as number | null,
     discount_pct: 0 as number | null,
     vat_rate: 0 as number | null,
+    line_type: (lock.value ?? 'goods') as 'goods' | 'fixed_asset',
+    asset_category_id: null as number | null,
+    asset_name: '' as string,
+    asset_method: '' as '' | 'straight_line' | 'declining_balance',
+    asset_useful_life_years: null as number | null,
+    asset_salvage_value: null as number | null,
+    asset_db_factor: null as number | null,
+    asset_in_service_date: '' as string,
+    asset_location: '' as string,
+});
+
+/** Prefilled lines inherit the asset marking from the source product — a PO line for an asset product is an asset line. */
+const prefillItem = (it: any) => ({
+    product_id: it.product_id ?? null,
+    qty: Number(it.qty ?? 1),
+    unit_price: Number(it.unit_price ?? 0),
+    discount_pct: Number(it.discount_pct ?? 0),
+    vat_rate: Number(it.vat_rate ?? 0),
+    line_type: (lock.value ?? (it.line_type === 'fixed_asset' || (!it.line_type && it.product?.type === 'asset') ? 'fixed_asset' : 'goods')) as 'goods' | 'fixed_asset',
+    asset_category_id: it.asset_category_id ?? null,
+    asset_name: it.asset_name ?? '',
+    asset_method: (it.asset_method ?? '') as '' | 'straight_line' | 'declining_balance',
+    asset_useful_life_years: it.asset_useful_life_years ?? null,
+    asset_salvage_value: it.asset_salvage_value != null ? Number(it.asset_salvage_value) : null,
+    asset_db_factor: it.asset_db_factor != null ? Number(it.asset_db_factor) : null,
+    asset_in_service_date: it.asset_in_service_date ? String(it.asset_in_service_date).slice(0, 10) : '',
+    asset_location: it.asset_location ?? '',
 });
 
 const initialItems = computed(() => {
     if (isEdit.value) {
-        return b.value.items?.length
-            ? b.value.items.map((it: any) => ({
-                  product_id: it.product_id ?? null,
-                  qty: Number(it.qty ?? 1),
-                  unit_price: Number(it.unit_price ?? 0),
-                  discount_pct: Number(it.discount_pct ?? 0),
-                  vat_rate: Number(it.vat_rate ?? 0),
-              }))
-            : [blankItem()];
+        return b.value.items?.length ? b.value.items.map(prefillItem) : [blankItem()];
     }
 
-    return src.value?.items?.length
-        ? src.value.items.map((it: any) => ({
-              product_id: it.product_id ?? null,
-              qty: Number(it.qty ?? 1),
-              unit_price: Number(it.unit_price ?? 0),
-              discount_pct: Number(it.discount_pct ?? 0),
-              vat_rate: Number(it.vat_rate ?? 0),
-          }))
-        : [blankItem()];
+    return src.value?.items?.length ? src.value.items.map(prefillItem) : [blankItem()];
 });
 
 const form = useForm({
@@ -92,6 +124,7 @@ const form = useForm({
     due_date: isEdit.value ? (b.value.due_date ? String(b.value.due_date).slice(0, 10) : '') : '',
     vendor_reference: isEdit.value ? (b.value.vendor_reference ?? '') : '',
     currency: isEdit.value ? (b.value.currency ?? 'BDT') : 'BDT',
+    vat_recoverable: isEdit.value ? b.value.vat_recoverable !== false : true,
     notes: isEdit.value
         ? (b.value.notes ?? '')
         : src.value
@@ -128,12 +161,109 @@ function addItem() {
 function removeItem(i: number) {
     form.items.splice(i, 1);
     if (!form.items.length) addItem();
+    // Line numbers shift up — the tracked product types shift with them.
+    const next: Record<number, string> = {};
+    Object.entries(lineProductTypes.value).forEach(([k, v]) => {
+        const n = Number(k);
+        if (n !== i) next[n > i ? n - 1 : n] = v;
+    });
+    lineProductTypes.value = next;
 }
 
-const errorCount = computed(() => Object.keys(form.errors).length);
+/** Each page shops its own catalogue — the picker never offers what the page cannot bill. */
+const productEndpoint = computed(() =>
+    lock.value === 'fixed_asset'
+        ? '/inventory/api/options/products?type=asset'
+        : lock.value === 'goods'
+          ? '/inventory/api/options/products?exclude_type=asset'
+          : '/inventory/api/options/products',
+);
+
+/**
+ * What each line's product turned out to be. Prefill knows it when the source embeds the
+ * product; manual picks report it through the select event. A locked page uses it to spot the
+ * line that wandered in from the other catalogue (usually prefill from a mixed order).
+ */
+const lineProductTypes = ref<Record<number, string>>({});
+function seedLineTypes(items: any[]) {
+    items.forEach((it: any, i: number) => {
+        if (it.product_id && it.product?.type) lineProductTypes.value[i] = it.product.type;
+    });
+}
+
+function lineMismatch(i: number): boolean {
+    if (!lock.value) return false;
+    const t = lineProductTypes.value[i];
+    if (!t) return false;
+
+    return lock.value === 'fixed_asset' ? t !== 'asset' : t === 'asset';
+}
+const mismatchCount = computed(() => form.items.filter((_it, i) => lineMismatch(i)).length);
+
+/**
+ * Picking an asset product marks the line; picking anything else unmarks it. The marking stays
+ * a conscious control — the clerk can still flip it by hand — but the common case needs no
+ * second click, and a forgotten marking is what the posting guard shouts about.
+ */
+function onProductSelect(i: number, option: any) {
+    if (option?.type) lineProductTypes.value[i] = option.type;
+    if (lock.value) return;
+    const isAsset = option?.type === 'asset';
+    form.items[i].line_type = isAsset ? 'fixed_asset' : 'goods';
+    if (isAsset && form.items[i].unit_price == null && option?.price != null) {
+        form.items[i].unit_price = Number(option.price);
+    }
+}
+
+/** Remember what the chosen class would lend a blank field, so the form can say so. */
+const categoryDefaults = ref<Record<number, any>>({});
+function onCategorySelect(i: number, option: any) {
+    if (option?.value) categoryDefaults.value[i] = option;
+}
+function inheritedHint(i: number): string {
+    const d = categoryDefaults.value[i];
+    if (!d?.default_method) return 'Blank inherits the class defaults.';
+    const method = d.default_method === 'declining_balance' ? `DB ×${d.default_db_factor ?? 2}` : 'SL';
+    const life = d.default_useful_life_years ? ` · ${d.default_useful_life_years}y` : '';
+    const salvage = d.default_salvage_pct ? ` · ${d.default_salvage_pct}% salvage` : '';
+
+    return `Blank inherits: ${method}${life}${salvage}.`;
+}
+
+const assetLineCount = computed(() => form.items.filter((it) => it.line_type === 'fixed_asset').length);
+
+seedLineTypes(src.value?.items ?? []);
+
+/** What the prefilled source is made of — guides the clerk to the right door. */
+const srcKind = computed<'asset' | 'goods' | 'mixed' | null>(() => {
+    const items = src.value?.items ?? [];
+    if (!items.length) return null;
+    const kinds = new Set(items.map((it: any) => (it.product?.type === 'asset' ? 'asset' : 'goods')));
+
+    return kinds.size > 1 ? 'mixed' : (kinds.has('asset') ? 'asset' : 'goods');
+});
+const showAssetRedirect = computed(() => lock.value === 'goods' && !isEdit.value && props.order && srcKind.value === 'asset');
+const showGoodsRedirect = computed(
+    () => lock.value === 'fixed_asset' && !isEdit.value && (props.receipt || (props.order && srcKind.value === 'goods')),
+);
+const showMixedHint = computed(() => lock.value !== null && !isEdit.value && props.order && srcKind.value === 'mixed');
+
+const blocked = ref('');
 
 function submit() {
     if (locked.value) return;
+
+    // A locked page never submits a line from the other catalogue: the picker filters, but
+    // prefill from a mixed order can still smuggle one in. Deleting the line unblocks.
+    if (lock.value && mismatchCount.value > 0) {
+        blocked.value =
+            lock.value === 'fixed_asset'
+                ? `${mismatchCount.value} line${mismatchCount.value === 1 ? ' is' : 's are'} not asset products — remove them here and bill them under Inventory Purchase.`
+                : `${mismatchCount.value} line${mismatchCount.value === 1 ? ' is' : 's are'} asset products — remove them here and bill them under Fixed Asset Purchase.`;
+
+        return;
+    }
+    blocked.value = '';
 
     if (isEdit.value) {
         form.put(props.submitUrl, { preserveScroll: true });
@@ -143,13 +273,15 @@ function submit() {
 
     form.post(props.submitUrl);
 }
+
+const errorCount = computed(() => Object.keys(form.errors).length);
 </script>
 
 <template>
     <div class="space-y-5">
         <PageHeader
-            :title="isEdit ? `Edit ${b.bill_no ?? 'bill'}` : 'New Vendor Bill'"
-            description="Posting writes Inventory 1200 / VAT input 1330 → Accounts Payable 2100. Link a GRN or PO to inherit its lines."
+            :title="formTitle || (isEdit ? `Edit ${b.bill_no ?? 'bill'}` : 'New Vendor Bill')"
+            :description="formDescription || 'Posting writes Inventory 1200 / VAT input 1330 → Accounts Payable 2100. Link a GRN or PO to inherit its lines.'"
             :icon="Receipt"
             :actions="[{ label: 'Back to bills', href: indexUrl, variant: 'outline' }]"
         >
@@ -170,6 +302,72 @@ function submit() {
                 <p class="mt-0.5 text-amber-800/90 dark:text-amber-200/80">
                     Only draft bills can be edited. Void it and raise a new one to make a correction.
                 </p>
+            </div>
+        </div>
+
+        <div
+            v-if="showAssetRedirect"
+            role="alert"
+            class="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm"
+        >
+            <AlertCircle class="mt-0.5 size-4 shrink-0 text-primary" />
+            <div>
+                <p class="font-semibold">This order buys fixed assets — it belongs on the other page.</p>
+                <p class="mt-0.5 text-muted-foreground">
+                    Inventory Purchase cannot bill asset products.
+                    <Link :href="route('purchase.bills.create_asset', { order_id: props.order.id })" class="font-medium text-primary hover:underline">
+                        Continue in Fixed Asset Purchase →
+                    </Link>
+                </p>
+            </div>
+        </div>
+
+        <div
+            v-if="showGoodsRedirect"
+            role="alert"
+            class="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm"
+        >
+            <AlertCircle class="mt-0.5 size-4 shrink-0 text-primary" />
+            <div>
+                <p class="font-semibold">This {{ props.receipt ? 'receipt' : 'order' }} carries goods — it belongs on the other page.</p>
+                <p class="mt-0.5 text-muted-foreground">
+                    Fixed Asset Purchase cannot bill stock products{{ props.receipt ? ', and assets never arrive through a GRN' : '' }}.
+                    <Link
+                        :href="props.receipt ? route('purchase.bills.create', { receipt_id: props.receipt.id }) : route('purchase.bills.create', { order_id: props.order.id })"
+                        class="font-medium text-primary hover:underline"
+                    >
+                        Continue in Inventory Purchase →
+                    </Link>
+                </p>
+            </div>
+        </div>
+
+        <div
+            v-if="showMixedHint"
+            role="alert"
+            class="flex items-start gap-3 rounded-xl border border-sky-500/30 bg-sky-500/5 px-4 py-3 text-sm"
+        >
+            <AlertCircle class="mt-0.5 size-4 shrink-0 text-sky-600" />
+            <div>
+                <p class="font-semibold">This order mixes goods and assets — bill each part on its own page.</p>
+                <p class="mt-0.5 text-muted-foreground">
+                    Delete the lines that do not belong here, post this half, then raise the other half{{
+                        lock === 'fixed_asset' ? ' in Inventory Purchase' : ' in Fixed Asset Purchase'
+                    }}
+                    with the same vendor reference.
+                </p>
+            </div>
+        </div>
+
+        <div
+            v-if="blocked"
+            role="alert"
+            class="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+            <AlertCircle class="mt-0.5 size-4 shrink-0" />
+            <div>
+                <p class="font-semibold">This bill cannot be saved yet</p>
+                <p class="mt-0.5 text-destructive/85">{{ blocked }}</p>
             </div>
         </div>
 
@@ -242,6 +440,25 @@ function submit() {
                         </template>
                     </FormField>
 
+                    <FormField
+                        label="VAT recoverable"
+                        help="Untick only when the VAT cannot be claimed — it then becomes part of the cost. Direct bills only."
+                        :error="form.errors.vat_recoverable as string"
+                    >
+                        <template #default="{ id, invalid }">
+                            <label class="flex h-10 cursor-pointer items-center gap-2 text-sm">
+                                <input
+                                    :id="id"
+                                    v-model="form.vat_recoverable"
+                                    type="checkbox"
+                                    :aria-invalid="invalid"
+                                    class="size-4 rounded border-input accent-primary"
+                                />
+                                <span class="font-medium">{{ form.vat_recoverable ? 'Claim input VAT' : 'VAT is part of cost' }}</span>
+                            </label>
+                        </template>
+                    </FormField>
+
                     <FormField label="Notes" span="full" :error="form.errors.notes as string">
                         <template #default="{ id, invalid }">
                             <Textarea v-model="form.notes" :id="id" :aria-invalid="invalid" rows="2" class="resize-none" />
@@ -251,10 +468,14 @@ function submit() {
 
                 <FormSection
                     title="Bill lines"
-                    description="Discount is taken off the gross, then VAT is applied to the net."
+                    :description="
+                        lock === 'fixed_asset'
+                            ? 'Every line capitalises — one register row per unit — when the bill posts.'
+                            : 'Discount is taken off the gross, then VAT is applied to the net.'
+                    "
                     :icon="Landmark"
                     plain
-                    :badge="`${form.items.length} line${form.items.length === 1 ? '' : 's'}`"
+                    :badge="`${form.items.length} line${form.items.length === 1 ? '' : 's'}${!lock && assetLineCount ? ` · ${assetLineCount} asset` : ''}`"
                 >
                     <template #actions>
                         <Button type="button" variant="outline" size="sm" :disabled="form.items.length >= 100" @click="addItem">
@@ -278,6 +499,43 @@ function submit() {
                             class="rounded-xl border bg-card p-4 transition hover:border-primary/30 hover:shadow-sm"
                             :class="form.errors[`items.${i}.product_id`] ? 'border-destructive/50' : 'border-border'"
                         >
+                            <div class="mb-3 flex items-center justify-between gap-2">
+                                <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Line {{ i + 1 }}</p>
+                                <span
+                                    v-if="lock"
+                                    class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                    :class="lock === 'fixed_asset' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
+                                >
+                                    {{ lock === 'fixed_asset' ? 'Fixed asset' : 'Goods' }}
+                                </span>
+                                <div
+                                    v-else
+                                    class="flex rounded-lg border bg-muted/40 p-0.5 text-xs font-semibold"
+                                    role="radiogroup"
+                                    :aria-label="`Line ${i + 1} type`"
+                                >
+                                    <button
+                                        type="button"
+                                        role="radio"
+                                        :aria-checked="it.line_type !== 'fixed_asset'"
+                                        class="rounded-md px-2.5 py-1 transition"
+                                        :class="it.line_type !== 'fixed_asset' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                                        @click="it.line_type = 'goods'"
+                                    >
+                                        Goods
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="radio"
+                                        :aria-checked="it.line_type === 'fixed_asset'"
+                                        class="rounded-md px-2.5 py-1 transition"
+                                        :class="it.line_type === 'fixed_asset' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                                        @click="it.line_type = 'fixed_asset'"
+                                    >
+                                        Fixed asset
+                                    </button>
+                                </div>
+                            </div>
                             <div class="grid items-end gap-x-5 gap-y-3 xl:grid-cols-12">
                                 <FormField
                                     label="Product"
@@ -289,13 +547,34 @@ function submit() {
                                 >
                                     <SearchableSelect
                                         v-model="it.product_id"
-                                        endpoint="/inventory/api/options/products"
-                                        placeholder="Search products…"
+                                        :endpoint="productEndpoint"
+                                        :placeholder="lock === 'fixed_asset' ? 'Search asset products…' : 'Search products…'"
+                                        @select="(opt) => onProductSelect(i, opt)"
                                     />
+                                    <p v-if="lineMismatch(i)" class="mt-1 text-xs font-medium text-destructive">
+                                        {{
+                                            lock === 'fixed_asset'
+                                                ? 'Not an asset product — bill it under Inventory Purchase.'
+                                                : 'An asset product — bill it under Fixed Asset Purchase.'
+                                        }}
+                                    </p>
                                 </FormField>
 
-                                <FormField label="Qty" required class="xl:col-span-2" :label-class="'xl:sr-only'" :error="form.errors[`items.${i}.qty`] as string">
-                                    <Input v-model.number="it.qty" type="number" step="0.01" min="0.01" class="text-right font-mono" />
+                                <FormField
+                                    label="Qty"
+                                    required
+                                    class="xl:col-span-2"
+                                    :label-class="'xl:sr-only'"
+                                    :help="it.line_type === 'fixed_asset' ? 'Whole units — one register row each.' : ''"
+                                    :error="form.errors[`items.${i}.qty`] as string"
+                                >
+                                    <Input
+                                        v-model.number="it.qty"
+                                        type="number"
+                                        :step="it.line_type === 'fixed_asset' ? 1 : 0.01"
+                                        min="0.01"
+                                        class="text-right font-mono"
+                                    />
                                 </FormField>
 
                                 <FormField label="Unit price" required class="xl:col-span-2" :label-class="'xl:sr-only'" :error="form.errors[`items.${i}.unit_price`] as string">
@@ -326,6 +605,88 @@ function submit() {
                                         <Trash2 class="size-4" />
                                     </Button>
                                 </div>
+                            </div>
+
+                            <div
+                                v-if="it.line_type === 'fixed_asset'"
+                                class="mt-4 rounded-lg border border-primary/20 bg-primary/[0.04] p-4"
+                            >
+                                <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Capitalise as · {{ inheritedHint(i) }}
+                                </p>
+                                <div class="grid items-end gap-x-5 gap-y-3 sm:grid-cols-2 xl:grid-cols-4">
+                                    <FormField
+                                        label="Asset class"
+                                        required
+                                        class="sm:col-span-2 xl:col-span-1"
+                                        :error="form.errors[`items.${i}.asset_category_id`] as string"
+                                    >
+                                        <SearchableSelect
+                                            v-model="it.asset_category_id"
+                                            endpoint="/accounts/api/options/asset-categories"
+                                            placeholder="Pick a class…"
+                                            @select="(opt) => onCategorySelect(i, opt)"
+                                        />
+                                    </FormField>
+
+                                    <FormField label="Asset name" :help="'Blank uses the product name.'" :error="form.errors[`items.${i}.asset_name`] as string">
+                                        <template #default="{ id, invalid }">
+                                            <Input v-model="it.asset_name" :id="id" :aria-invalid="invalid" placeholder="Optional tag name" />
+                                        </template>
+                                    </FormField>
+
+                                    <FormField label="Method" :error="form.errors[`items.${i}.asset_method`] as string">
+                                        <template #default="{ id, invalid }">
+                                            <FormSelect v-model="it.asset_method" :id="id" :invalid="invalid">
+                                                <option value="">Inherit from class</option>
+                                                <option value="straight_line">Straight line</option>
+                                                <option value="declining_balance">Declining balance</option>
+                                            </FormSelect>
+                                        </template>
+                                    </FormField>
+
+                                    <FormField
+                                        label="Useful life (yrs)"
+                                        :error="form.errors[`items.${i}.asset_useful_life_years`] as string"
+                                    >
+                                        <template #default="{ id, invalid }">
+                                            <Input v-model.number="it.asset_useful_life_years" :id="id" :aria-invalid="invalid" type="number" min="1" max="100" placeholder="Class default" class="font-mono" />
+                                        </template>
+                                    </FormField>
+
+                                    <FormField label="Salvage value" :help="'Per line, split across units.'" :error="form.errors[`items.${i}.asset_salvage_value`] as string">
+                                        <template #default="{ id, invalid }">
+                                            <Input v-model.number="it.asset_salvage_value" :id="id" :aria-invalid="invalid" type="number" step="0.01" min="0" placeholder="Class default" class="text-right font-mono" />
+                                        </template>
+                                    </FormField>
+
+                                    <FormField
+                                        v-if="it.asset_method === 'declining_balance'"
+                                        label="DB factor"
+                                        :error="form.errors[`items.${i}.asset_db_factor`] as string"
+                                    >
+                                        <template #default="{ id, invalid }">
+                                            <Input v-model.number="it.asset_db_factor" :id="id" :aria-invalid="invalid" type="number" step="0.01" min="0.01" max="10" placeholder="Class default" class="font-mono" />
+                                        </template>
+                                    </FormField>
+
+                                    <FormField label="In-service date" :help="'Blank uses the bill date.'" :error="form.errors[`items.${i}.asset_in_service_date`] as string">
+                                        <template #default="{ id, invalid }">
+                                            <Input v-model="it.asset_in_service_date" :id="id" :aria-invalid="invalid" type="date" />
+                                        </template>
+                                    </FormField>
+
+                                    <FormField label="Location" :error="form.errors[`items.${i}.asset_location`] as string">
+                                        <template #default="{ id, invalid }">
+                                            <Input v-model="it.asset_location" :id="id" :aria-invalid="invalid" placeholder="e.g. Head office, 3rd floor" />
+                                        </template>
+                                    </FormField>
+                                </div>
+                                <p class="mt-3 text-xs text-muted-foreground">
+                                    Posting creates {{ Math.max(1, Math.floor(n(it.qty))) }} register row{{ Math.floor(n(it.qty)) > 1 ? 's' : '' }} at
+                                    {{ money(lineGross(i) - lineDiscount(i) + (form.vat_recoverable ? 0 : lineVat(i))) }} total cost —
+                                    {{ form.vat_recoverable ? 'net of VAT' : 'VAT included' }}.
+                                </p>
                             </div>
 
                             <p class="mt-2 text-right font-mono text-xs text-muted-foreground xl:hidden">

@@ -54,6 +54,25 @@ class DepreciationController extends Controller
             : "Depreciation for {$month}: nothing due — the period is closed off.");
     }
 
+    /**
+     * The "yearly" button: run every outstanding month through the target period.
+     *
+     * Each month still posts its own run and journal — this only saves the clicking, it does not
+     * merge the books. A refusal names the month that stopped the chain; everything before it
+     * stays posted and the catch-up can be re-aimed past the break.
+     */
+    public function catchUp(Request $r)
+    {
+        $month = $this->period($r);
+
+        $runs = $this->depreciation->catchUp($month, $r->user()?->id, 'Manual catch-up');
+        $total = round(array_sum(array_map(fn ($run) => (float) $run->total_amount, $runs)), 2);
+        $count = count($runs);
+
+        return back()->with('success',
+            "Depreciation caught up through {$month}: {$count} month".($count === 1 ? '' : 's').', '.number_format($total, 2).' posted in '.$count.' journal'.($count === 1 ? '' : 's').'.');
+    }
+
     private function period(Request $r): string
     {
         $month = (string) $r->input('period', now()->format('Y-m'));

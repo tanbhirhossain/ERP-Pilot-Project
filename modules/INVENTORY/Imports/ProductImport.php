@@ -60,8 +60,8 @@ class ProductImport implements ImportContract
             }
 
             $type = strtolower(trim((string) ($row['type'] ?? 'stockable')));
-            if (! in_array($type, ['stockable', 'consumable', 'service', 'bundle'], true)) {
-                $rowErrors[] = "type must be stockable|consumable|service|bundle (got \"{$type}\")";
+            if (! in_array($type, ['stockable', 'consumable', 'service', 'bundle', 'asset'], true)) {
+                $rowErrors[] = "type must be stockable|consumable|service|bundle|asset (got \"{$type}\")";
             }
 
             foreach (['cost_price', 'selling_price', 'vat_rate', 'reorder_level'] as $num) {

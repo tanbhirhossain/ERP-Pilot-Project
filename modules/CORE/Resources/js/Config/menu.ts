@@ -182,6 +182,7 @@ export const sidebarMenu: SidebarItem[] = [
       { key: 'pur-rfqs', label: 'Quote Rounds (RFQ)', route: 'purchase.rfqs.index', icon: Handshake, permission: 'purchase.rfq.view' },
       { key: 'pur-receipts', label: 'Goods Receipts (GRN)', route: 'purchase.receipts.index', icon: Truck, permission: 'purchase.receipts.view' },
       { key: 'pur-bills', label: 'Vendor Bills', route: 'purchase.bills.index', icon: Receipt, permission: 'purchase.bills.view' },
+      { key: 'pur-asset-bills', label: 'Fixed Asset Purchase', route: 'purchase.bills.create_asset', icon: Building2, permission: 'purchase.bills.manage', keywords: 'asset purchase, capitalise, furniture, equipment, laptop, vehicle' },
       { key: 'pur-returns', label: 'Purchase Returns', route: 'purchase.returns.index', icon: Undo2, permission: 'purchase.returns.view' },
       { key: 'pur-landed', label: 'Landed Costs', route: 'purchase.landed-costs.index', icon: Receipt, permission: 'purchase.landed.view' },
     ] },

@@ -34,15 +34,20 @@ class ProductRepository implements ProductRepositoryInterface
         return $q;
     }
 
-    public function options(?string $search = null, int $limit = 25): Collection
+    public function options(?string $search = null, int $limit = 25, ?string $type = null, ?string $excludeType = null): Collection
     {
         return Product::query()->active()
+            // The two bill pages each shop their own catalogue: the asset page sees only asset
+            // products, the inventory page sees everything else. A mistyped filter fails closed
+            // to the full list — an empty picker would read as "no products exist".
+            ->when($type && in_array($type, ['stockable', 'consumable', 'service', 'bundle', 'asset'], true), fn (Builder $q) => $q->where('type', $type))
+            ->when($excludeType && in_array($excludeType, ['stockable', 'consumable', 'service', 'bundle', 'asset'], true), fn (Builder $q) => $q->where('type', '!=', $excludeType))
             ->when($search, function (Builder $q, string $term): void {
                 $needle = '%'.addcslashes($term, '%_').'%';
                 $q->where(fn (Builder $g) => $g->where('name', 'like', $needle)->orWhere('sku', 'like', $needle)->orWhere('barcode', 'like', $needle));
             })
             ->orderBy('name')->limit($limit)
-            ->get(['id', 'name', 'sku', 'barcode', 'selling_price', 'cost_price', 'vat_rate'])
+            ->get(['id', 'name', 'sku', 'barcode', 'type', 'selling_price', 'cost_price', 'vat_rate'])
             ->map(fn (Product $p) => [
                 'value' => $p->id,
                 // The label used to repeat the SKU that the description already
@@ -56,6 +61,9 @@ class ProductRepository implements ProductRepositoryInterface
                 'barcode' => $p->barcode,
                 'price' => $p->selling_price,
                 'vat_rate' => $p->vat_rate ?? 0,
+                // The bill form auto-marks an asset line when an asset product is picked;
+                // without the type in the payload it would be guessing from the name.
+                'type' => $p->type,
             ])->values();
     }
 

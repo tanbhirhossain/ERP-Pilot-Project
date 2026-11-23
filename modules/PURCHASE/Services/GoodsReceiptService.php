@@ -76,6 +76,18 @@ class GoodsReceiptService
                 }
             }
 
+            // A receipt puts stock on a shelf and accrues GRNI — neither of which an asset wants.
+            // Assets capitalise straight from the bill, so an asset line here means the wrong
+            // document: bill the order directly instead of receiving it.
+            foreach ($receipt->items as $line) {
+                if (($line->product?->type ?? 'stockable') === 'asset') {
+                    throw new \DomainException(
+                        "GRN {$receipt->receipt_no} line \"{$line->product_name}\" is a fixed asset — assets never arrive through a stock receipt. "
+                        .'Remove the line and bill the order directly; the assets capitalise at bill posting.'
+                    );
+                }
+            }
+
             // Refuse to receive more than the order still owes, before a single unit moves.
             //
             // The create form already offers only the outstanding quantity, but the form is not the

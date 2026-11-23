@@ -8,7 +8,10 @@ use Illuminate\Support\Facades\DB;
 use Modules\ACCOUNTS\DTO\JournalData;
 use Modules\ACCOUNTS\DTO\JournalLineData;
 use Modules\ACCOUNTS\Interfaces\AccountsPostingProviderInterface;
+use Modules\ACCOUNTS\Models\Account;
+use Modules\ACCOUNTS\Models\AssetCategory;
 use Modules\ACCOUNTS\Models\Bank;
+use Modules\ACCOUNTS\Models\FixedAsset;
 use Modules\ACCOUNTS\Support\ChartOfAccounts;
 use Modules\CORE\Services\ApprovalService;
 use Modules\CORE\Support\DataTableQuery;
@@ -39,11 +42,19 @@ class VendorBillService
 
     public function create(array $data): VendorBill
     {
+        // Normalised, never NULL: the form omits an unticked checkbox, and a NULL flag with a
+        // boolean cast reads back as false — silently turning recoverable VAT into cost.
+        $data['vat_recoverable'] = (bool) ($data['vat_recoverable'] ?? true);
+
         return $this->repo->create($this->enrichTotals($data));
     }
 
     public function update(VendorBill $b, array $data): VendorBill
     {
+        if (array_key_exists('vat_recoverable', $data)) {
+            $data['vat_recoverable'] = (bool) $data['vat_recoverable'];
+        }
+
         return $this->repo->update($b, $this->enrichTotals($data));
     }
 
@@ -72,6 +83,17 @@ class VendorBillService
             }
         }
 
+        // Assets never arrive through a stock receipt: a GRN books inventory and accrues GRNI,
+        // while an asset capitalises straight into its fixed-asset account. A bill mixing the two
+        // would post half its lines against an accrual that never existed for them — raise the
+        // assets on their own direct bill instead.
+        if ($bill->receipt_id && $bill->items->contains(fn ($l) => ($l->line_type ?? 'goods') === 'fixed_asset')) {
+            throw new \DomainException(
+                "Bill {$bill->bill_no} links GRN {$bill->receipt?->receipt_no} but carries fixed-asset lines. "
+                .'Receive-then-bill is for stock: raise the assets on a direct bill, with or without a purchase order.'
+            );
+        }
+
         // One invoice per delivery. A bill raised against a receipt already billed elsewhere would
         // reverse the same GRNI a second time: the accrual would go negative, AP would carry two
         // liabilities for one delivery, and both documents would look perfectly ordinary. The check
@@ -98,12 +120,16 @@ class VendorBillService
             ->assertAllowed('vendor_bill', $bill->id, (float) $bill->total_amount, $bill->bill_no);
 
         return DB::transaction(function () use ($bill): VendorBill {
-            $bill->load(['items.product', 'vendor']);
+            $bill->load(['items.product', 'items.assetCategory', 'vendor']);
 
             // Refuse to bill more than arrived (or was ordered) before the journal exists. A bill
             // that charges for unreceived goods books a liability nobody owes and — on a GRN bill —
             // reverses an accrual for stock that never landed.
             $this->applyBillQuantities($bill);
+
+            // Validates the asset lines (category, method, life, whole units) and splits every
+            // line into goods cents and per-category asset cents for the journal below.
+            $split = $this->splitBillForPosting($bill);
 
             $journalId = null;
             if (app()->bound(AccountsPostingProviderInterface::class)) {
@@ -118,40 +144,81 @@ class VendorBillService
                 // status update below, so the bill was marked posted with no ledger entry at all.
                 $apId = ChartOfAccounts::requireId($posting, $apCode, $purpose);
 
-                $total = (float) $bill->total_amount;
-                $subtotal = (float) $bill->subtotal - (float) $bill->discount_amount;
-                $vat = (float) $bill->vat_amount;
+                $totalCents = (int) round((float) $bill->total_amount * 100);
                 $hasGrn = (bool) ($bill->receipt_id && $bill->receipt);
+                $recoverable = (bool) ($bill->vat_recoverable ?? true);
 
-                if ($hasGrn) {
-                    // GRN already hit Inventory/GRNI — the bill reverses GRNI to AP. GRNI is
-                    // required, not optional: the old `$hasGrn && $grniId` test fell through to
-                    // the else branch on a miss and debited Inventory a second time for stock the
-                    // receipt had already booked.
-                    $debitId = ChartOfAccounts::requireId($posting, config('accounts.defaults.grni_code', '2115'), $purpose);
-                    $debitDescription = "GRNI reversal {$bill->bill_no} — GRN {$bill->receipt->receipt_no}";
-                } else {
-                    // No receipt: expense the purchase, or capitalise it into Inventory when the
-                    // chart carries no purchase account. Either is acceptable; neither is not.
-                    $debitId = ChartOfAccounts::firstExistingId($posting, $purpose, $expCode, $invCode);
-                    $debitDescription = "Purchase {$bill->bill_no} - {$bill->vendor?->name}";
+                $lines = [];
+                if ($split['goodsBaseCents'] > 0) {
+                    if ($hasGrn) {
+                        // GRN already hit Inventory/GRNI — the bill reverses GRNI to AP. GRNI is
+                        // required, not optional: the old `$hasGrn && $grniId` test fell through to
+                        // the else branch on a miss and debited Inventory a second time for stock the
+                        // receipt had already booked.
+                        $debitId = ChartOfAccounts::requireId($posting, config('accounts.defaults.grni_code', '2115'), $purpose);
+                        $debitDescription = "GRNI reversal {$bill->bill_no} — GRN {$bill->receipt->receipt_no}";
+                    } else {
+                        // No receipt: expense the purchase, or capitalise it into Inventory when the
+                        // chart carries no purchase account. Either is acceptable; neither is not.
+                        $debitId = ChartOfAccounts::firstExistingId($posting, $purpose, $expCode, $invCode);
+                        $debitDescription = "Purchase {$bill->bill_no} - {$bill->vendor?->name}";
+                    }
+                    $lines[] = new JournalLineData(accountId: $debitId, debit: $this->splitMoney($split['goodsBaseCents']), description: $debitDescription);
                 }
 
-                $lines = [
-                    new JournalLineData(accountId: $debitId, debit: $subtotal, description: $debitDescription),
-                ];
-                if ($vat > 0) {
+                foreach ($split['assetGroups'] as $accountId => $group) {
+                    $lines[] = new JournalLineData(
+                        accountId: $accountId,
+                        debit: $this->splitMoney($group['cents']),
+                        description: "Asset {$bill->bill_no} — {$group['name']}"
+                    );
+                }
+
+                if ($recoverable && $split['vatCents'] > 0) {
                     // Required whenever VAT is actually charged. Dropping this leg used to produce
                     // a journal that could not balance, which threw — but reported an arithmetic
                     // mismatch instead of naming the account that was missing.
                     $vatId = ChartOfAccounts::requireId($posting, $vatCode, $purpose);
-                    $lines[] = new JournalLineData(accountId: $vatId, debit: $vat, description: "VAT input {$bill->bill_no}");
+                    $lines[] = new JournalLineData(accountId: $vatId, debit: $this->splitMoney($split['vatCents']), description: "VAT input {$bill->bill_no}");
                 }
-                $lines[] = new JournalLineData(accountId: $apId, credit: $total, description: "AP {$bill->bill_no} - {$bill->vendor?->name}");
+
+                // Per-line rounding can leave the debits a cent or two from the header total. The
+                // payable is the legal liability so it keeps the header figure; the plug goes on
+                // the largest debit leg, where a cent is rounding — anywhere else it would be a bug.
+                $debitCents = array_sum(array_map(fn ($l) => (int) round($l->debit * 100), $lines));
+                $plug = $totalCents - $debitCents;
+                if ($plug !== 0) {
+                    if ($lines === [] || abs($plug) > count($lines)) {
+                        throw new \DomainException("Bill {$bill->bill_no} lines do not add up to its total — re-check the bill before posting.");
+                    }
+                    $biggest = 0;
+                    foreach ($lines as $i => $l) {
+                        if ($l->debit > $lines[$biggest]->debit) {
+                            $biggest = $i;
+                        }
+                    }
+                    $adjusted = (int) round($lines[$biggest]->debit * 100) + $plug;
+                    if ($adjusted <= 0) {
+                        throw new \DomainException("Bill {$bill->bill_no} lines do not add up to its total — re-check the bill before posting.");
+                    }
+                    $lines[$biggest] = new JournalLineData(
+                        accountId: $lines[$biggest]->accountId,
+                        debit: $this->splitMoney($adjusted),
+                        description: $lines[$biggest]->description,
+                    );
+                }
+
+                $lines[] = new JournalLineData(accountId: $apId, credit: $this->splitMoney($totalCents), description: "AP {$bill->bill_no} - {$bill->vendor?->name}");
 
                 $dto = new JournalData(journalDate: $bill->bill_date->format('Y-m-d'), type: 'PV', referenceNo: $bill->bill_no, narration: "Vendor Bill {$bill->bill_no}", lines: $lines, partnerId: $bill->vendor_id, partnerType: 'vendor', sourceType: 'purchase_bill', sourceId: $bill->id);
                 $journalId = $posting->postJournal($dto)->id;
             }
+
+            // The register entry is born in the same transaction as the journal that capitalised
+            // it: a bill posted with no assets would leave cost in a fixed-asset account that the
+            // register never heard of, and assets with no journal would depreciate thin air.
+            $this->createBillAssets($bill, $split);
+
             $bill->update(['status' => 'posted', 'journal_id' => $journalId, 'posted_by' => auth()->id(), 'posted_at' => now()]);
 
             return $bill->fresh(['items', 'journal']);
@@ -168,6 +235,28 @@ class VendorBillService
         }
 
         return DB::transaction(function () use ($bill): VendorBill {
+            // The bill's assets go down with it — but only if nothing has happened to them. An
+            // asset with depreciation behind it has a history the void cannot un-write, and a
+            // disposed one has left the register already: both block the void by name, checked
+            // before the ledger is touched so a refusal changes nothing.
+            $assets = FixedAsset::where('bill_id', $bill->getKey())->withCount('depreciations')->get();
+
+            foreach ($assets as $asset) {
+                if ($asset->depreciations_count > 0) {
+                    throw new \DomainException(
+                        "Bill {$bill->bill_no} cannot be voided: asset {$asset->asset_code} ({$asset->name}) already has depreciation posted. "
+                        .'Dispose of it through the register instead — its cost is already earning its keep in the ledger.'
+                    );
+                }
+
+                if ($asset->status === 'disposed') {
+                    throw new \DomainException(
+                        "Bill {$bill->bill_no} cannot be voided: asset {$asset->asset_code} ({$asset->name}) was already disposed. "
+                        .'The disposal stands on its own; voiding the purchase now would orphan it.'
+                    );
+                }
+            }
+
             if ($bill->journal_id && app()->bound(AccountsPostingProviderInterface::class)) {
                 $posting = app(AccountsPostingProviderInterface::class);
                 try {
@@ -188,6 +277,12 @@ class VendorBillService
             // Give the billed quantities back: voiding re-opens the receipt (one bill per
             // receipt) and the order lines for a corrected bill.
             $this->reverseBillQuantities($bill);
+
+            // Fresh assets — in use, never depreciated — are removed with the purchase that made
+            // them. Soft-deleted, so the audit trail keeps the codes and the register stays clean.
+            foreach ($assets as $asset) {
+                $asset->delete();
+            }
 
             $bill->update(['status' => 'cancelled']);
 
@@ -530,6 +625,232 @@ class VendorBillService
         return [];
     }
 
+    /**
+     * Split the bill into the figures its journal debits, and validate every asset line.
+     *
+     * Goods lines behave as they always did; each asset line is checked against its category
+     * (active, with three usable ledger accounts), inherits blanks from the category defaults,
+     * and joins its category's debit group. Quantities on asset lines are whole units — one
+     * register row each — because a fractional laptop cannot be tagged, sold or scrapped.
+     *
+     * @return array{goodsBaseCents: int, vatCents: int, assetGroups: array<int, array{cents: int, name: string}>, assets: array<int, array<string, mixed>>, totalUnits: int}
+     */
+    private function splitBillForPosting(VendorBill $bill): array
+    {
+        $recoverable = (bool) ($bill->vat_recoverable ?? true);
+
+        if (! $recoverable && $bill->receipt_id) {
+            throw new \DomainException(
+                "Bill {$bill->bill_no} marks its VAT non-recoverable, but it links a GRN — and that receipt already booked inventory net of VAT. "
+                .'Non-recoverable VAT belongs on a direct bill, where the gross can land in the cost.'
+            );
+        }
+
+        $goodsBase = 0;
+        $vat = 0;
+        $assetGroups = [];
+        $assets = [];
+        $totalUnits = 0;
+
+        foreach ($bill->items as $line) {
+            $net = (int) round(((float) $line->qty * (float) $line->unit_price - (float) $line->discount_amount) * 100);
+            $lineVat = (int) round((float) $line->vat_amount * 100);
+
+            if (! $line->isAssetLine()) {
+                if (($line->product?->type ?? 'stockable') === 'asset') {
+                    throw new \DomainException(
+                        "Bill {$bill->bill_no} line \"{$line->product_name}\" uses asset product {$line->product?->sku} on a goods line — "
+                        .'mark the line fixed-asset so it capitalises, or pick a stock product.'
+                    );
+                }
+                $goodsBase += $recoverable ? $net : $net + $lineVat;
+
+                continue;
+            }
+
+            if (($line->product?->type ?? 'stockable') !== 'asset') {
+                throw new \DomainException(
+                    "Bill {$bill->bill_no} line \"{$line->product_name}\" is marked fixed-asset but {$line->product?->name} is not an asset product. "
+                    .'An asset line capitalises, so it must start from the asset catalogue.'
+                );
+            }
+
+            $category = $line->assetCategory ?? ($line->asset_category_id ? AssetCategory::find($line->asset_category_id) : null);
+
+            if ($category === null || ! $category->is_active) {
+                throw new \DomainException(
+                    "Bill {$bill->bill_no} line \"{$line->product_name}\" names no active asset category — pick the class it capitalises into."
+                );
+            }
+
+            $this->requireCategoryAccounts($bill, $line, $category);
+
+            $units = (int) floor((float) $line->qty);
+
+            if ($units < 1 || abs((float) $line->qty - $units) > 0.0001) {
+                throw new \DomainException(
+                    "Bill {$bill->bill_no} line \"{$line->product_name}\" buys {$line->qty} — assets come in whole units, one register row each."
+                );
+            }
+
+            if ($units > 100) {
+                throw new \DomainException(
+                    "Bill {$bill->bill_no} line \"{$line->product_name}\" buys {$units} units — split it across lines of at most 100 so each tag stays traceable."
+                );
+            }
+
+            $totalUnits += $units;
+
+            if ($totalUnits > 1000) {
+                throw new \DomainException(
+                    "Bill {$bill->bill_no} capitalises more than 1,000 assets — post it in smaller bills so a failure does not roll back the whole fleet."
+                );
+            }
+
+            $costCents = $recoverable ? $net : $net + $lineVat;
+
+            if ($costCents <= 0) {
+                throw new \DomainException(
+                    "Bill {$bill->bill_no} line \"{$line->product_name}\" costs nothing — an asset needs a cost above zero. Record donations through the register."
+                );
+            }
+
+            $method = $line->asset_method ?: ($category->default_method ?? 'straight_line');
+
+            if (! in_array($method, ['straight_line', 'declining_balance'], true)) {
+                throw new \DomainException("Bill {$bill->bill_no} line \"{$line->product_name}\": unknown depreciation method '{$method}'.");
+            }
+
+            $life = (int) ($line->asset_useful_life_years ?: ($category->default_useful_life_years ?? 5));
+
+            if ($life < 1 || $life > 100) {
+                throw new \DomainException("Bill {$bill->bill_no} line \"{$line->product_name}\": useful life must sit between 1 and 100 years.");
+            }
+
+            $dbFactor = (float) ($line->asset_db_factor ?: ($category->default_db_factor ?? 2));
+
+            if ($dbFactor < 0.01 || $dbFactor > 10) {
+                throw new \DomainException("Bill {$bill->bill_no} line \"{$line->product_name}\": declining-balance factor must sit between 0.01 and 10.");
+            }
+
+            $salvageCents = $line->asset_salvage_value !== null
+                ? (int) round((float) $line->asset_salvage_value * 100)
+                : (int) round($costCents * (float) ($category->default_salvage_pct ?? 0) / 100);
+
+            if ($salvageCents < 0 || $salvageCents > $costCents) {
+                throw new \DomainException("Bill {$bill->bill_no} line \"{$line->product_name}\": salvage must sit between zero and the line cost.");
+            }
+
+            $purchaseDate = $bill->bill_date->format('Y-m-d');
+            $inService = $line->asset_in_service_date?->format('Y-m-d') ?? $purchaseDate;
+
+            if ($inService < $purchaseDate) {
+                throw new \DomainException("Bill {$bill->bill_no} line \"{$line->product_name}\": in-service date cannot precede the bill date.");
+            }
+
+            $accountId = (int) $category->asset_account_id;
+            $assetGroups[$accountId] ??= ['cents' => 0, 'name' => $category->name];
+            $assetGroups[$accountId]['cents'] += $costCents;
+
+            $assets[$line->id] = [
+                'line' => $line, 'category' => $category, 'units' => $units, 'costCents' => $costCents,
+                'method' => $method, 'life' => $life, 'dbFactor' => $dbFactor, 'salvageCents' => $salvageCents,
+                'inService' => $inService, 'purchaseDate' => $purchaseDate,
+            ];
+        }
+
+        if ($recoverable) {
+            $vat = (int) round((float) $bill->vat_amount * 100);
+        }
+
+        return [
+            'goodsBaseCents' => $goodsBase, 'vatCents' => $vat, 'assetGroups' => $assetGroups,
+            'assets' => $assets, 'totalUnits' => $totalUnits,
+        ];
+    }
+
+    /**
+     * The category's three accounts must all be usable before its first asset exists.
+     *
+     * The debit account would fail anyway at journal creation, but the accumulated and expense
+     * accounts are only touched by a later depreciation run — refusing now keeps a half-mapped
+     * category from stranding an asset that can never depreciate.
+     */
+    private function requireCategoryAccounts(VendorBill $bill, $line, AssetCategory $category): void
+    {
+        foreach ([
+            'asset' => $category->asset_account_id,
+            'accumulated depreciation' => $category->accum_dep_account_id,
+            'depreciation expense' => $category->dep_expense_account_id,
+        ] as $role => $accountId) {
+            $account = $accountId ? Account::find($accountId) : null;
+
+            if ($account === null || ! $account->is_active || $account->is_group || ! $account->is_posting) {
+                throw new \DomainException(
+                    "Bill {$bill->bill_no} line \"{$line->product_name}\": category {$category->name} has no usable {$role} account — map it before posting."
+                );
+            }
+        }
+    }
+
+    /**
+     * Capitalise the bill's asset lines: one register row per unit, born `in_use`.
+     *
+     * Skipping `draft` is deliberate, not hasty. The draft state exists so a half-entered asset
+     * never enters the ledger — but here the ledger already holds the cost, posted moments ago in
+     * this same transaction. A draft would be the disagreement, not the protection: cost in a
+     * fixed-asset account the register claims is empty. Paise are split across units with the
+     * remainder on the last one, so the units always add back to the line exactly.
+     */
+    private function createBillAssets(VendorBill $bill, array $split): void
+    {
+        foreach ($split['assets'] as $billItemId => $plan) {
+            $line = $plan['line'];
+            $costs = $this->splitPaise($plan['costCents'], $plan['units']);
+            $salvages = $this->splitPaise($plan['salvageCents'], $plan['units']);
+            $baseName = $line->asset_name ?: $line->product_name;
+
+            for ($k = 0; $k < $plan['units']; $k++) {
+                FixedAsset::create([
+                    'asset_code' => FixedAsset::nextCode(),
+                    'name' => $plan['units'] > 1 ? "{$baseName} (".($k + 1)."/{$plan['units']})" : $baseName,
+                    'category_id' => $plan['category']->id,
+                    'supplier_partner_id' => $bill->vendor_id,
+                    'invoice_ref' => $bill->bill_no,
+                    'bill_id' => $bill->id,
+                    'bill_item_id' => $billItemId,
+                    'purchase_date' => $plan['purchaseDate'],
+                    'in_service_date' => $plan['inService'],
+                    'cost' => $this->splitMoney($costs[$k]),
+                    'salvage_value' => $this->splitMoney($salvages[$k]),
+                    'method' => $plan['method'],
+                    'useful_life_years' => $plan['life'],
+                    'db_factor' => $plan['dbFactor'],
+                    'accumulated_dep' => 0,
+                    'net_book_value' => $this->splitMoney($costs[$k]),
+                    'status' => 'in_use',
+                    'location' => $line->asset_location,
+                    'created_by' => auth()->id(),
+                ]);
+            }
+        }
+    }
+
+    /** Split paise across units, remainder on the last — the parts always sum to the whole. */
+    private function splitPaise(int $cents, int $units): array
+    {
+        $each = intdiv($cents, $units);
+        $parts = array_fill(0, $units, $each);
+        $parts[$units - 1] += $cents - $each * $units;
+
+        return $parts;
+    }
+
+    private function splitMoney(int $cents): float
+    {
+        return round($cents / 100, 2);
+    }
+
     private function enrichTotals(array $data): array
     {
         if (! isset($data['items']) || ! is_array($data['items'])) {
@@ -544,6 +865,14 @@ class VendorBillService
                 if ($p) {
                     $it['product_name'] = $p->name;
                     $it['sku'] = $p->sku;
+                }
+            }
+            $it['line_type'] = ($it['line_type'] ?? '') === 'fixed_asset' ? 'fixed_asset' : 'goods';
+            if ($it['line_type'] === 'goods') {
+                // Goods lines carry no asset meaning: wipe the columns so a line flipped back from
+                // fixed-asset cannot smuggle stale category and life into a later re-marking.
+                foreach (['asset_category_id', 'asset_name', 'asset_method', 'asset_useful_life_years', 'asset_salvage_value', 'asset_db_factor', 'asset_in_service_date', 'asset_location'] as $col) {
+                    $it[$col] = null;
                 }
             }
             $qty = (float) ($it['qty'] ?? 0);

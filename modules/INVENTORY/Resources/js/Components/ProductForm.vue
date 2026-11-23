@@ -237,7 +237,7 @@ function submit() {
             :description="
                 isEdit
                     ? `${prod.sku ?? ''}${prod.category?.name ? ' · ' + prod.category.name : ''}`
-                    : 'A catalog item — stockable, consumable, service or bundle. The SKU is generated if you leave it blank.'
+                    : 'A catalog item — stockable, consumable, service, bundle or asset. The SKU is generated if you leave it blank.'
             "
             :icon="Package"
             :actions="[{ label: 'Back to products', href: indexUrl, variant: 'outline' }]"
@@ -328,13 +328,19 @@ function submit() {
                     <SearchableSelect v-model="form.uom_id" :options="uomOptions" placeholder="Piece / Kg" clearable />
                 </FormField>
 
-                <FormField label="Type" required :error="form.errors.type as string">
+                <FormField
+                    label="Type"
+                    required
+                    :help="form.type === 'asset' ? 'Bought on PO or direct bill — never received, stocked or sold. Capitalises into the asset register when the bill posts.' : ''"
+                    :error="form.errors.type as string"
+                >
                     <template #default="{ id, invalid }">
                         <FormSelect v-model="form.type" :id="id" :invalid="invalid">
                             <option value="stockable">Stockable — tracked in inventory</option>
                             <option value="consumable">Consumable — not tracked</option>
                             <option value="service">Service — no stock</option>
                             <option value="bundle">Bundle — kit of products</option>
+                            <option value="asset">Fixed asset — capitalised on purchase</option>
                         </FormSelect>
                     </template>
                 </FormField>

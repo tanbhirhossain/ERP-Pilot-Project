@@ -25,6 +25,7 @@ class FixedAsset extends Model
 
     protected $fillable = [
         'asset_code', 'name', 'category_id', 'supplier_partner_id', 'invoice_ref',
+        'bill_id', 'bill_item_id',
         'purchase_date', 'in_service_date', 'cost', 'salvage_value', 'method',
         'useful_life_years', 'db_factor', 'accumulated_dep', 'net_book_value', 'status',
         'location', 'disposed_date', 'disposal_proceeds', 'notes', 'created_by', 'updated_by',
@@ -73,5 +74,22 @@ class FixedAsset extends Model
     public function depreciableBase(): float
     {
         return max(0, round((float) $this->cost - (float) $this->salvage_value, 2));
+    }
+
+    public function bill(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\PURCHASE\Models\VendorBill::class, 'bill_id');
+    }
+
+    /** FA-YYYY-#### continuing from the highest existing code for the year, live or deleted. */
+    public static function nextCode(): string
+    {
+        $year = now()->format('Y');
+        $prefix = "FA-{$year}-";
+        $last = static::withTrashed()->where('asset_code', 'like', $prefix.'%')
+            ->orderByDesc('asset_code')->value('asset_code');
+        $seq = $last ? ((int) substr($last, strlen($prefix))) + 1 : 1;
+
+        return $prefix.str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
     }
 }
