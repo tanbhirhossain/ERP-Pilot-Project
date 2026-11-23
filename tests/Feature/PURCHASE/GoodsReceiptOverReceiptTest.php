@@ -262,3 +262,26 @@ test('voiding the first bill re-opens the receipt for a corrected one', function
 
     expect($right->fresh()->status)->toBe('posted');
 });
+
+
+test('a stale second confirmation cannot post the same receipt twice', function () {
+    [$order, $warehouse, $product] = p3grnOrder(qty: 10.0, price: 100.0);
+    $draft = p3grnDraft($order, qty: 2.0, linkToOrderLine: false);
+    $stale = GoodsReceipt::findOrFail($draft->id);
+    app(GoodsReceiptService::class)->post($draft);
+    expect(p3grnOnHand($product->id, $warehouse->id))->toBe(2.0);
+    expect(fn () => app(GoodsReceiptService::class)->post($stale))
+        ->toThrow(\DomainException::class, 'Only draft can be posted.');
+    expect(p3grnOnHand($product->id, $warehouse->id))->toBe(2.0);
+});
+
+
+test('a receipt stays draft until the authorised confirm receive action posts it', function () {
+    [$order, $warehouse, $product] = p3grnOrder(qty: 10.0, price: 100.0);
+    $draft = p3grnDraft($order, qty: 4.0);
+    expect($draft->fresh()->status)->toBe('draft')->and(p3grnOnHand($product->id, $warehouse->id))->toBe(0.0);
+    $this->actingAs(User::first())->get(route('purchase.receipts.show', $draft->id))
+        ->assertOk()->assertInertia(fn ($page) => $page->where('receipt.status', 'draft')->where('canPost', true));
+    $this->actingAs(User::first())->post(route('purchase.receipts.post', $draft->id))->assertRedirect();
+    expect($draft->fresh()->status)->toBe('posted')->and(p3grnOnHand($product->id, $warehouse->id))->toBe(4.0);
+});

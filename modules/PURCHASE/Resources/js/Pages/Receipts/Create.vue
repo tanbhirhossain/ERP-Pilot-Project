@@ -8,6 +8,7 @@ import { Plus, Trash2 } from 'lucide-vue-next';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import FormSection from '@core/Components/FormSection.vue';
 import FormField from '@core/Components/FormField.vue';
+import FormActions from '@core/Components/FormActions.vue';
 import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { computed } from 'vue';
 import { useUnsavedGuard } from '@core/Composables/useUnsavedGuard';
@@ -32,10 +33,10 @@ function submit(){ form.post(route('purchase.receipts.store')); }
     <Head title="New GRN" />
     <div class="space-y-4">
       <h1 class="text-xl font-bold">New Goods Receipt (GRN) <span v-if="order" class="text-sm text-muted-foreground">for {{ order.order_no }}</span></h1>
-      <p class="text-sm text-muted-foreground">Posts stock IN (Inventory 1200 Dr). Links to PO.</p>
+      <p class="text-sm text-muted-foreground">Save this receipt as a draft, then confirm it on the next screen to post stock IN and the GRNI accrual.</p>
       <form @submit.prevent="submit" class="space-y-4">
         <p v-if="Object.keys(form.errors).length" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ Object.values(form.errors)[0] as string }}</p>
-        <FormSection title="Details" :cols="2">
+        <FormSection title="Details" :cols="2" class="overflow-visible">
 
         <div class="bg-card border rounded-xl p-4 space-y-4 col-span-full">
           <div class="grid grid-cols-1 sm:grid-cols-3 2xl:grid-cols-4 gap-4">
@@ -74,7 +75,7 @@ function submit(){ form.post(route('purchase.receipts.store')); }
           </div>
           <Button type="button" variant="outline" size="sm" @click="addItem"><Plus class="size-4"/> Add Item</Button>
         </div>
-        <FormActions submit-label="Create GRN — {{ total.toFixed(2) }} BDT" :processing="form.processing" :dirty="form.isDirty" cancel-href="route('purchase.receipts.index')" />
+        <FormActions :submit-label="`Save GRN draft — ${total.toFixed(2)} BDT`" :processing="form.processing" :dirty="form.isDirty" :cancel-href="route('purchase.receipts.index')" />
           </FormSection>
     </form>
     </div>

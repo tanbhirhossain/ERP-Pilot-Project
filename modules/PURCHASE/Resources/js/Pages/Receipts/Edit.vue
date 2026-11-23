@@ -36,7 +36,7 @@ function submit(){ form.put(route('purchase.receipts.update', props.receipt.id))
       <PageHeader :title="`Edit ${receipt.receipt_no}`" />
       <form @submit.prevent="submit" class="space-y-4">
         <p v-if="Object.keys(form.errors).length" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ Object.values(form.errors)[0] as string }}</p>
-        <FormSection title="Details" :cols="2">
+        <FormSection title="Details" :cols="2" class="overflow-visible">
 
         <div class="bg-card border rounded-xl p-4 space-y-4 col-span-full">
           <div class="grid grid-cols-1 sm:grid-cols-3 2xl:grid-cols-4 gap-4">
@@ -75,7 +75,7 @@ function submit(){ form.put(route('purchase.receipts.update', props.receipt.id))
           </div>
           <Button type="button" variant="outline" size="sm" @click="addItem"><Plus class="size-4"/> Add Item</Button>
         </div>
-        <FormActions submit-label="Update GRN" :processing="form.processing" :dirty="form.isDirty" cancel-href="route('purchase.receipts.index')" />
+        <FormActions submit-label="Update GRN" :processing="form.processing" :dirty="form.isDirty" :cancel-href="route('purchase.receipts.index')" />
           </FormSection>
     </form>
     </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import type { GoodsReceipt } from '@purchase/types';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
@@ -8,7 +8,17 @@ import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@core/Utils/format';
 import { FileText } from 'lucide-vue-next';
 import StaticTable from '@core/Components/StaticTable.vue';
-defineProps<{ receipt: GoodsReceipt }>();
+import { computed, ref } from 'vue';
+const props = defineProps<{ receipt: GoodsReceipt; canManage: boolean; canPost: boolean; canVoid: boolean }>();
+const page = usePage() as any;
+const flashError = computed(() => page.props.flash?.error);
+const posting = ref(false);
+function confirmReceipt() {
+  if (posting.value || !window.confirm('Confirm receipt? This posts stock IN and the GRNI accrual.')) return;
+  router.post(route('purchase.receipts.post', props.receipt.id), {}, {
+    onStart: () => { posting.value = true; }, onFinish: () => { posting.value = false; },
+  });
+}
 function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') return 'warning'; return 'neutral'; }
 </script>
 <template>
@@ -20,6 +30,8 @@ function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') retu
       :icon="FileText"
     >
     <div class="space-y-4">
+      <p v-if="flashError" role="alert" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ flashError }}</p>
+      <p v-if="receipt.status === 'draft'" class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">This is a draft. Stock is not received until it is confirmed. <span v-if="!canPost">You need receipt-post permission to confirm.</span></p>
       <div class="bg-card border rounded-xl shadow-sm p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -28,9 +40,9 @@ function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') retu
             <p class="text-sm">Total: <span class="font-mono font-bold">{{ formatCurrency(Number(receipt.total_amount)) }}</span></p>
           </div>
           <div class="flex gap-2">
-            <Link :href="route('purchase.receipts.edit', receipt.id)"><Button variant="outline" size="sm">Edit</Button></Link>
-            <Button v-if="receipt.status==='draft'" size="sm" @click="router.post(route('purchase.receipts.post', receipt.id))">Post — Stock IN</Button>
-            <Button v-if="receipt.status==='posted'" size="sm" variant="destructive" @click="router.post(route('purchase.receipts.void', receipt.id))">Void — Reverse Stock</Button>
+            <Link v-if="canManage && receipt.status === 'draft'" :href="route('purchase.receipts.edit', receipt.id)"><Button variant="outline" size="sm">Edit</Button></Link>
+            <Button v-if="receipt.status==='draft' && canPost" size="sm" :disabled="posting" @click="confirmReceipt">{{ posting ? 'Confirming…' : 'Confirm Receive — Stock IN' }}</Button>
+            <Button v-if="receipt.status==='posted' && canVoid" size="sm" variant="destructive" @click="router.post(route('purchase.receipts.void', receipt.id))">Void — Reverse Stock</Button>
             <Link v-if="receipt.status==='posted'" :href="route('purchase.bills.create', { receipt_id: receipt.id })"><Button size="sm" variant="outline">Create Bill</Button></Link>
             <Link v-if="receipt.status==='posted'" :href="route('purchase.returns.create', { receipt_id: receipt.id })"><Button size="sm" variant="outline">Return</Button></Link>
           </div>

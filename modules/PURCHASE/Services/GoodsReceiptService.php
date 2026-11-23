@@ -53,11 +53,13 @@ class GoodsReceiptService
 
     public function post(GoodsReceipt $receipt): GoodsReceipt
     {
-        if (! $receipt->isDraft()) {
-            throw new \DomainException('Only draft can be posted.');
-        }
-
         return DB::transaction(function () use ($receipt): GoodsReceipt {
+            // Re-read under a row lock: a stale model or a second concurrent click must not
+            // post the same receipt twice and move stock or the ledger twice.
+            $receipt = GoodsReceipt::whereKey($receipt->getKey())->lockForUpdate()->firstOrFail();
+            if (! $receipt->isDraft()) {
+                throw new \DomainException('Only draft can be posted.');
+            }
             $receipt->load(['items.product', 'order']);
 
             // Refuse to receive more than the order still owes, before a single unit moves.

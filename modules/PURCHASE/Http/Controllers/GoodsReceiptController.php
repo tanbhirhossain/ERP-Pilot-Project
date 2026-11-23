@@ -47,7 +47,12 @@ class GoodsReceiptController extends Controller
     {
         $receipt->load(['vendor', 'warehouse', 'order', 'items.product']);
 
-        return Inertia::render('PURCHASE::Receipts/Show', ['receipt' => $receipt]);
+        return Inertia::render('PURCHASE::Receipts/Show', [
+            'receipt' => $receipt,
+            'canManage' => (bool) request()->user()?->can('purchase.receipts.manage'),
+            'canPost' => (bool) request()->user()?->can('purchase.receipts.post'),
+            'canVoid' => (bool) request()->user()?->can('purchase.receipts.void'),
+        ]);
     }
 
     public function edit(GoodsReceipt $receipt): Response

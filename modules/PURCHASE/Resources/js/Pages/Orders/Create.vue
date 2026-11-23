@@ -56,7 +56,7 @@ function submit() { form.post(route('purchase.orders.store')); }
       <p class="text-sm text-muted-foreground">Vendor → confirm → GRN (stock IN 1200) → Bill (AP 2100). VAT posts to 1330 (input) / 2110 (payable).</p>
       <form @submit.prevent="submit" class="space-y-4">
         <p v-if="Object.keys(form.errors).length" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{{ Object.values(form.errors)[0] as string }}</p>
-        <FormSection title="Details" :cols="2">
+        <FormSection title="Details" :cols="2" class="overflow-visible" body-class="min-w-0">
 
 
         <div class="bg-card border rounded-xl p-4 space-y-4 col-span-full">
@@ -92,7 +92,7 @@ function submit() { form.post(route('purchase.orders.store')); }
         </div>
 
         <!-- ── Lines ───────────────────────────────────────────────────── -->
-        <div class="bg-card border rounded-xl overflow-hidden col-span-full">
+        <div class="relative min-w-0 bg-card border rounded-xl col-span-full">
           <div class="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-3">
             <ReceiptText class="size-4 text-primary" aria-hidden="true" />
             <h3 class="font-semibold text-sm">Items</h3>
@@ -103,7 +103,7 @@ function submit() { form.post(route('purchase.orders.store')); }
           </div>
 
           <!-- Column headings, only where the row is wide enough to be a table. -->
-          <div class="hidden lg:grid grid-cols-[minmax(0,2.2fr)_5.5rem_7.5rem_6rem_6rem_9rem_2.25rem] gap-3 border-b bg-muted/20 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div class="hidden xl:grid grid-cols-[minmax(0,2.2fr)_5.5rem_7.5rem_6rem_6rem_9rem_2.25rem] gap-3 border-b bg-muted/20 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             <span>Product</span><span class="text-right">Qty</span><span class="text-right">Unit price</span>
             <span class="text-right">Disc %</span><span class="text-right">VAT %</span>
             <span class="text-right">Line total</span><span aria-hidden="true" />
@@ -113,32 +113,32 @@ function submit() { form.post(route('purchase.orders.store')); }
             <div
               v-for="(it, i) in form.items"
               :key="i"
-              class="relative grid grid-cols-2 gap-3 p-4 transition-colors hover:bg-muted/20 sm:grid-cols-4 lg:grid-cols-[minmax(0,2.2fr)_5.5rem_7.5rem_6rem_6rem_9rem_2.25rem] lg:items-end lg:py-3"
+              class="relative grid min-w-0 grid-cols-2 gap-3 p-4 transition-colors hover:bg-muted/20 focus-within:z-40 sm:grid-cols-4 xl:grid-cols-[minmax(0,2.2fr)_5.5rem_7.5rem_6rem_6rem_9rem_2.25rem] xl:items-end xl:py-3"
             >
-              <div class="col-span-2 space-y-1 sm:col-span-3 lg:col-span-1">
-                <Label class="lg:hidden">Product *</Label>
+              <div class="col-span-2 min-w-0 space-y-1 sm:col-span-3 xl:col-span-1">
+                <Label class="xl:hidden">Product *</Label>
                 <SearchableSelect v-model="it.product_id" endpoint="/inventory/api/options/products" placeholder="Search SKU/barcode" />
               </div>
               <div class="space-y-1">
-                <Label class="lg:hidden">Qty *</Label>
+                <Label class="xl:hidden">Qty *</Label>
                 <Input v-model.number="it.qty" type="number" step="0.01" min="0.01" class="text-right font-mono" />
               </div>
               <div class="space-y-1">
-                <Label class="lg:hidden">Unit price *</Label>
+                <Label class="xl:hidden">Unit price *</Label>
                 <Input v-model.number="it.unit_price" type="number" step="0.01" min="0" placeholder="0.00" class="text-right font-mono" />
               </div>
               <div class="space-y-1">
-                <Label class="lg:hidden">Disc %</Label>
+                <Label class="xl:hidden">Disc %</Label>
                 <Input v-model.number="it.discount_pct" type="number" step="0.01" min="0" max="100" class="text-right font-mono" />
               </div>
               <div class="space-y-1">
-                <Label class="lg:hidden">VAT %</Label>
+                <Label class="xl:hidden">VAT %</Label>
                 <Input v-model.number="it.vat_rate" type="number" step="0.01" min="0" max="100" class="text-right font-mono" />
               </div>
 
               <!-- The line's own total, so a PO can be read without a calculator. -->
               <div class="space-y-1">
-                <Label class="lg:hidden">Line total</Label>
+                <Label class="xl:hidden">Line total</Label>
                 <div class="grid h-9 place-items-end rounded-md border bg-muted/40 px-2.5 font-mono text-sm font-bold tabular-nums">
                   {{ money(lineTotal(it)) }}
                 </div>
@@ -146,7 +146,7 @@ function submit() { form.post(route('purchase.orders.store')); }
 
               <Button
                 type="button" variant="ghost" size="icon"
-                class="absolute right-2 top-2 size-7 text-muted-foreground hover:text-destructive lg:static lg:mb-0.5 lg:hover:bg-destructive/10"
+                class="absolute right-2 top-2 size-7 text-muted-foreground hover:text-destructive xl:static xl:mb-0.5 xl:hover:bg-destructive/10"
                 :aria-label="`Remove line ${i + 1}`" @click="removeItem(i)"
               ><Trash2 class="size-3.5" /></Button>
             </div>
@@ -180,7 +180,7 @@ function submit() { form.post(route('purchase.orders.store')); }
           </div>
         </div>
 
-        <FormActions submit-label="Create PO — {{ money(grandTotal) }} BDT" :processing="form.processing" :dirty="form.isDirty" />
+        <FormActions :submit-label="`Create PO — ${money(grandTotal)} BDT`" :cancel-href="route('purchase.orders.index')" :processing="form.processing" :dirty="form.isDirty" />
           </FormSection>
     </form>
     </div>
