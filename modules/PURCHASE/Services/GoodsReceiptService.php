@@ -16,6 +16,7 @@ use Modules\PURCHASE\Interfaces\GoodsReceiptRepositoryInterface;
 use Modules\PURCHASE\Models\GoodsReceipt;
 use Modules\PURCHASE\Models\PurchaseOrder;
 use Modules\PURCHASE\Models\PurchaseOrderItem;
+use Modules\PURCHASE\Models\VendorBill;
 
 class GoodsReceiptService
 {
@@ -61,6 +62,19 @@ class GoodsReceiptService
                 throw new \DomainException('Only draft can be posted.');
             }
             $receipt->load(['items.product', 'order']);
+
+            // A receipt is goods arriving: every line carries a positive quantity. A zero or
+            // negative line would sail through the over-receipt check below (less than the
+            // outstanding quantity is always "allowed") and then move stock and GRNI the wrong
+            // way. Goods going back travel as a purchase return, not as a negative receipt.
+            if ($receipt->items->isEmpty()) {
+                throw new \DomainException("GRN {$receipt->receipt_no} has no lines — receive at least one product before posting.");
+            }
+            foreach ($receipt->items as $line) {
+                if ((float) $line->qty <= 0) {
+                    throw new \DomainException("GRN {$receipt->receipt_no} line \"{$line->product_name}\" has quantity {$line->qty} — received quantities must be positive.");
+                }
+            }
 
             // Refuse to receive more than the order still owes, before a single unit moves.
             //
@@ -143,7 +157,18 @@ class GoodsReceiptService
             throw new \DomainException('Only posted GRN can be voided.');
         }
 
-        // Prevent void if already billed? Soft warning — allow but reverse stock regardless
+        // A billed receipt cannot be voided. The bill already reversed this GRN's accrual
+        // into AP, so voiding here would reverse the accrual a second time: GRNI would go
+        // negative, the payable would stand against a cancelled delivery, and the bill would
+        // reference a receipt that no longer exists. Void the bill first — that re-opens this
+        // receipt for correction instead of corrupting both documents.
+        $linkedBill = VendorBill::where('receipt_id', $receipt->id)->whereNotIn('status', ['cancelled'])->first();
+        if ($linkedBill !== null) {
+            throw new \DomainException(
+                "GRN {$receipt->receipt_no} is already billed on {$linkedBill->bill_no} — void that bill first. Voiding the receipt underneath it would reverse the GRNI accrual twice."
+            );
+        }
+
         return DB::transaction(function () use ($receipt): GoodsReceipt {
             // 1) Reverse stock OUT (deduct what was added)
             if (app()->bound(InventoryStockProviderInterface::class)) {
@@ -154,7 +179,7 @@ class GoodsReceiptService
             if (! empty($receipt->grni_journal_id) && app()->bound(AccountsPostingProviderInterface::class)) {
                 try {
                     app(AccountsPostingProviderInterface::class)
-                        ->voidJournal($receipt->grni_journal_id, "Void GRN {$receipt->receipt_no}");
+                        ->voidJournal($receipt->grni_journal_id, "Void GRN {$receipt->receipt_no}", true);
                 } catch (\Throwable $e) {
                     // See VendorBillService::void() — swallowing here left the GRNI journal posted
                     // against a cancelled receipt, inside a transaction that could no longer roll back.

@@ -77,7 +77,7 @@ class InvoiceRepository implements InvoiceRepositoryInterface
     public function delete(Invoice $inv): void
     {
         if ($inv->isPosted()) {
-            throw new \DomainException('Posted invoice cannot be deleted. Void it.');
+            throw new \DomainException('Posted invoice cannot be deleted. Reverse it with a sales return.');
         } $inv->items()->delete();
         $inv->delete();
     }

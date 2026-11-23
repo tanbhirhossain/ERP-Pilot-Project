@@ -33,11 +33,11 @@ class AccountsPostingProvider implements AccountsPostingProviderInterface
         return $this->postJournal($dto);
     }
 
-    public function voidJournal(int $journalId, string $reason): Journal
+    public function voidJournal(int $journalId, string $reason, bool $viaSourceDoc = false): Journal
     {
         $journal = $this->journals->findOrFail($journalId);
 
-        return $this->journals->void($journal, $reason);
+        return $this->journals->void($journal, $reason, $viaSourceDoc);
     }
 
     public function accountIdByCode(string $code): ?int

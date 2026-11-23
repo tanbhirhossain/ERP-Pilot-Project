@@ -14,6 +14,7 @@ use Modules\CORE\Support\DataTableQuery;
 use Modules\CORE\Support\PaginatedResource;
 use Modules\SALES\Models\Invoice;
 use Modules\SALES\Models\Order;
+use Modules\SALES\Models\Payment;
 use Modules\SALES\Requests\StoreInvoiceRequest;
 use Modules\SALES\Services\InvoiceService;
 
@@ -109,6 +110,18 @@ class InvoiceController extends Controller
             $this->svc->recordPayment($invoice, $r->only(['amount', 'payment_date', 'method', 'bank_id', 'reference_no']));
 
             return back()->with('success', 'Payment recorded.');
+        } catch (\DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function voidPayment(Request $r, Payment $payment): RedirectResponse
+    {
+        $r->validate(['reason' => 'required|string|max:500']);
+        try {
+            $this->svc->voidPayment($payment, $r->input('reason'));
+
+            return back()->with('success', "Collection {$payment->payment_no} voided — invoice, receivable and ledger updated.");
         } catch (\DomainException $e) {
             return back()->with('error', $e->getMessage());
         }

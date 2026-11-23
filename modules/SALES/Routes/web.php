@@ -49,6 +49,7 @@ Route::middleware(['web', 'auth'])->prefix('sales')->name('sales.')->group(funct
     Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy'])->middleware(PermissionMiddleware::class.':sales.invoices.manage')->name('invoices.destroy');
     Route::post('invoices/{invoice}/post', [InvoiceController::class, 'post'])->middleware(PermissionMiddleware::class.':sales.invoices.post')->name('invoices.post');
     Route::post('invoices/{invoice}/pay', [InvoiceController::class, 'pay'])->middleware(PermissionMiddleware::class.':sales.invoices.manage')->name('invoices.pay');
+    Route::post('invoices/payments/{payment}/void', [InvoiceController::class, 'voidPayment'])->middleware(PermissionMiddleware::class.':sales.invoices.manage')->name('invoices.payments.void');
     Route::get('invoices/{invoice}/mushak', [InvoiceController::class, 'mushak'])->middleware(PermissionMiddleware::class.':sales.invoices.view')->name('invoices.mushak');
 
     // ── Deliveries (Challan) ───────────────────────────────────────────

@@ -10,9 +10,9 @@ class Payment extends Model
 {
     protected $table = 'sales_payments';
 
-    protected $fillable = ['payment_no', 'invoice_id', 'customer_id', 'journal_id', 'payment_date', 'amount', 'method', 'bank_id', 'reference_no', 'notes', 'status', 'created_by'];
+    protected $fillable = ['payment_no', 'invoice_id', 'customer_id', 'journal_id', 'payment_date', 'amount', 'method', 'bank_id', 'reference_no', 'notes', 'status', 'created_by', 'voided_by', 'voided_at', 'void_reason'];
 
-    protected $casts = ['payment_date' => 'date:Y-m-d', 'amount' => 'decimal:2'];
+    protected $casts = ['payment_date' => 'date:Y-m-d', 'amount' => 'decimal:2', 'voided_at' => 'datetime'];
 
     public function invoice(): BelongsTo
     {

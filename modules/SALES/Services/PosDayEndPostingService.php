@@ -84,7 +84,18 @@ class PosDayEndPostingService
         }
 
         return DB::transaction(function () use ($session): array {
-            $session->load(['sales', 'collections']);
+            // Locked and re-checked: two closes racing each other used to post the same day twice,
+            // and the only caller holds this same lock — this is the backstop for the next one.
+            $session = PosSession::whereKey($session->getKey())->lockForUpdate()->first() ?? $session;
+
+            if ($session->isPosted()) {
+                throw new \DomainException(
+                    "Session {$session->session_no} has already been posted to the ledger (journal {$session->journal_id}). "
+                    .'A day can only be closed once; correct it with a return or an adjustment in the next session.'
+                );
+            }
+
+            $session->load(['sales', 'collections.sale']);
 
             $totals = $this->aggregate($session);
 
@@ -157,6 +168,18 @@ class PosDayEndPostingService
             $saleDue = $this->cents($sale->due_amount);
             $due += $saleDue;
 
+            // The journal below debits AR for the gross due and the receivables are raised one row
+            // per customer: a due owed by nobody would sit in the ledger with no subledger row to
+            // chase, collect or age. The till refuses such a sale at the counter, so reaching here
+            // means the data was written around the service — refuse loudly rather than post a debt
+            // nobody owns.
+            if ($saleDue > 0 && ! $sale->customer_id) {
+                throw new \DomainException(
+                    "Cannot close session {$session->session_no}: POS {$sale->pos_no} is owed ".
+                    $this->money($saleDue).' BDT by no customer. Attach the customer to the sale first — a debt without a debtor cannot be posted.'
+                );
+            }
+
             $saleCash = $this->cents($sale->cash_amount);
             $cash += $saleCash;
 
@@ -164,15 +187,16 @@ class PosDayEndPostingService
             $bank += $saleBank;
 
             // Tender settles into a GL account: cash into the cash account, card/bank/mobile into
-            // the bank's own account. A bank with no GL account falls back to cash, which is what
-            // InvoiceService does — `accounts.defaults.bank_code` is 1002, a *group*, and posting
-            // to a group header is refused, so it cannot be the fallback.
+            // the bank's own account. There is deliberately no fallback to cash: posting card
+            // takings as drawer cash is what used to make the Z-report reconcile to a count that
+            // never happened. The till only accepts electronic money into an active, linked bank,
+            // so a missing one here means the bank was deactivated or unlinked mid-day — say so.
             if ($saleCash > 0) {
                 $moneyAccounts[$cashAccountId] = ($moneyAccounts[$cashAccountId] ?? 0) + $saleCash;
             }
 
             if ($saleBank > 0) {
-                $accountId = $this->bankAccountId($sale->bank_id) ?? $cashAccountId;
+                $accountId = $this->bankAccountId($sale->bank_id, "POS {$sale->pos_no} ({$session->session_no})");
                 $moneyAccounts[$accountId] = ($moneyAccounts[$accountId] ?? 0) + $saleBank;
             }
 
@@ -183,6 +207,25 @@ class PosDayEndPostingService
 
         foreach ($session->collections as $collection) {
             $amount = $this->cents($collection->amount);
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            // A collection against a cancelled sale is money with no sale behind it: the void took
+            // the revenue out of the day but this row would still credit receivables and debit
+            // cash. Voids are refused once money has been collected, so this is data written around
+            // the service — repair it, do not post it.
+            $collectionSale = $collection->sale;
+
+            if ($collectionSale === null || $collectionSale->status === 'void') {
+                throw new \DomainException(
+                    "Cannot close session {$session->session_no}: collection {$collection->collection_no} was taken against ".
+                    ($collectionSale === null ? 'a sale that no longer exists' : "POS {$collectionSale->pos_no}, which is void")
+                    .'. Reverse the collection through the customer ledger first.'
+                );
+            }
+
             $collected += $amount;
 
             if ($collection->isCash()) {
@@ -190,7 +233,7 @@ class PosDayEndPostingService
                 $moneyAccounts[$cashAccountId] = ($moneyAccounts[$cashAccountId] ?? 0) + $amount;
             } else {
                 $bank += $amount;
-                $accountId = $this->bankAccountId($collection->bank_id) ?? $cashAccountId;
+                $accountId = $this->bankAccountId($collection->bank_id, "collection {$collection->collection_no} ({$session->session_no})");
                 $moneyAccounts[$accountId] = ($moneyAccounts[$accountId] ?? 0) + $amount;
             }
         }
@@ -309,11 +352,15 @@ class PosDayEndPostingService
      *    `sales.pos.credit_days` only for a customer with no terms set (the column defaults to 0, and
      *    every seeded walk-in is in that state). A global default would date a 7-day customer's debt
      *    30 days out, which ages it wrong and hides it from the chase list for three weeks.
-     *  - **Dues collected in this same drawer are born part-paid.** The journal posts Dr AR for the
-     *    gross due and Cr AR for the gross collected, so a receivable showing `received_amount` 0
-     *    would disagree with the entry that created it. Only collections against a sale *of this
-     *    session* count: money taken here against an earlier day's sale settles that day's receivable
-     *    in `collectDue()`, and counting it again would settle the same money twice.
+     *  - **Dues collected anywhere against this day's sales are born part-paid.** The journal posts
+     *    Dr AR for the gross due, so a receivable showing `received_amount` 0 would disagree with the
+     *    entry that created it — and a due can be collected at a *later* till before this session
+     *    closes. Counting only this drawer's collections used to lose those: the other session's
+     *    journal credited AR for money this receivable then showed as still owed. So the pool is keyed
+     *    on the *sale's* session, not the collection's, across every drawer. Money taken here against
+     *    an earlier day's sale still settles that day's receivable in `collectDue()`, and this pool
+     *    never sees it — the two paths are mutually exclusive by whether the selling day had posted
+     *    when the money was taken, so nothing settles twice.
      *
      * @param  array<int, int>  $dueByCustomer  partner id => cents
      */
@@ -322,18 +369,15 @@ class PosDayEndPostingService
         $date = Carbon::parse($journal->journal_date);
         $fallbackDays = (int) config('sales.pos.credit_days', 30);
 
-        $collectedHere = [];
-
-        foreach ($session->collections as $collection) {
-            $sale = $collection->sale;
-
-            if ($sale === null || (int) $sale->session_id !== (int) $session->id || $sale->customer_id === null) {
-                continue;
-            }
-
-            $key = (int) $sale->customer_id;
-            $collectedHere[$key] = ($collectedHere[$key] ?? 0) + $this->cents($collection->amount);
-        }
+        // Every collection taken against this session's sales, in whatever drawer took it.
+        $collectedHere = DB::table('pos_collections as c')
+            ->join('pos_sales as s', 's.id', '=', 'c.pos_sale_id')
+            ->where('s.session_id', $session->id)
+            ->whereNotNull('s.customer_id')
+            ->whereNull('s.deleted_at')
+            ->groupBy('s.customer_id')
+            ->selectRaw('s.customer_id AS customer_id, ROUND(SUM(c.amount) * 100) AS cents')
+            ->pluck('cents', 'customer_id');
 
         foreach ($dueByCustomer as $partnerId => $amountCents) {
             if ($amountCents <= 0) {
@@ -341,9 +385,9 @@ class PosDayEndPostingService
             }
 
             $terms = (int) (Partner::find($partnerId)?->payment_terms_days ?? 0);
-            $receivedCents = min($collectedHere[(int) $partnerId] ?? 0, $amountCents);
+            $receivedCents = min((int) ($collectedHere[(int) $partnerId] ?? 0), $amountCents);
 
-            Receivable::create([
+            $receivable = Receivable::create([
                 'partner_id' => $partnerId,
                 'journal_id' => $journal->id,
                 'invoice_no' => $session->session_no,
@@ -353,6 +397,21 @@ class PosDayEndPostingService
                 'received_amount' => $this->money($receivedCents),
                 'status' => $receivedCents <= 0 ? 'open' : ($receivedCents >= $amountCents ? 'paid' : 'partial'),
             ]);
+
+            // Link the collections this receivable was born paid by — including the ones taken in
+            // other drawers, which `collectDue()` could not link because this row did not exist yet.
+            // Already-linked rows (settled directly at collect time) are never touched.
+            if ($receivedCents > 0) {
+                // A subquery, not a joined update: SQLite — this app's database — refuses the join.
+                DB::table('pos_collections')
+                    ->whereNull('receivable_id')
+                    ->whereIn('pos_sale_id', function ($query) use ($session, $partnerId): void {
+                        $query->select('id')->from('pos_sales')
+                            ->where('session_id', $session->id)
+                            ->where('customer_id', $partnerId);
+                    })
+                    ->update(['receivable_id' => $receivable->id]);
+            }
         }
     }
 
@@ -379,15 +438,28 @@ class PosDayEndPostingService
         );
     }
 
-    private function bankAccountId(?int $bankId): ?int
+    /**
+     * The GL account electronic money settles into — required, never defaulted.
+     *
+     * Falling back to cash when the bank was missing used to post card takings as drawer cash, and
+     * the Z-report reconciled to a count that never happened. The till only takes electronic money
+     * into an active bank linked to a ledger account, so failing here means the bank was deactivated
+     * or unlinked between the sale and the close: the fix is to restore the bank, not to guess where
+     * its money went.
+     */
+    private function bankAccountId(?int $bankId, string $context): int
     {
-        if (! $bankId) {
-            return null;
+        $bank = $bankId ? Bank::active()->find($bankId) : null;
+
+        if ($bank === null || ! $bank->account_id) {
+            throw new \DomainException(
+                "Cannot close: {$context} was taken electronically into ".
+                ($bank === null ? 'a bank or wallet that no longer exists or is no longer active' : "{$bank->name}, which is no longer linked to a ledger account")
+                .'. Reactivate or re-link the bank and close again — its money cannot be posted to cash.'
+            );
         }
 
-        $accountId = Bank::where('id', $bankId)->value('account_id');
-
-        return $accountId !== null ? (int) $accountId : null;
+        return (int) $bank->account_id;
     }
 
     /** A decimal column read back, in integer cents. */

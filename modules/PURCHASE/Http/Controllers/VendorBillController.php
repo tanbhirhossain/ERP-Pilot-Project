@@ -12,6 +12,7 @@ use Modules\CORE\Support\DataTableQuery;
 use Modules\CORE\Support\PaginatedResource;
 use Modules\PURCHASE\Models\GoodsReceipt;
 use Modules\PURCHASE\Models\PurchaseOrder;
+use Modules\PURCHASE\Models\PurchasePayment;
 use Modules\PURCHASE\Models\VendorBill;
 use Modules\PURCHASE\Requests\VendorBillRequest;
 use Modules\PURCHASE\Services\VendorBillService;
@@ -117,6 +118,18 @@ class VendorBillController extends Controller
             $this->svc->recordPayment($bill, $r->only(['amount', 'payment_date', 'method', 'bank_id', 'reference_no']));
 
             return back()->with('success', 'Payment recorded.');
+        } catch (\DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function voidPayment(Request $r, PurchasePayment $payment): RedirectResponse
+    {
+        $r->validate(['reason' => 'required|string|max:500']);
+        try {
+            $this->svc->voidPayment($payment, $r->input('reason'));
+
+            return back()->with('success', "Payment {$payment->payment_no} voided — bill, payable and ledger updated.");
         } catch (\DomainException $e) {
             return back()->with('error', $e->getMessage());
         }

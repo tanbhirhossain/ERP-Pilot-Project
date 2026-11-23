@@ -14,6 +14,7 @@ use Modules\CORE\Services\ApprovalService;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\INVENTORY\Models\Product;
 use Modules\PURCHASE\Interfaces\VendorBillRepositoryInterface;
+use Modules\PURCHASE\Models\PurchaseOrderItem;
 use Modules\PURCHASE\Models\PurchasePayment;
 use Modules\PURCHASE\Models\VendorBill;
 
@@ -57,6 +58,20 @@ class VendorBillService
             throw new \DomainException('Only draft can be posted.');
         }
 
+        // A bill charges for goods: every line carries a positive quantity. A zero or negative
+        // line would post a journal that still balances — the credit side simply shrinks — while
+        // the billed-quantity guards below compare against received quantities that are never
+        // negative. Credits travel as a purchase return, not as a negative bill line.
+        $bill->loadMissing('items');
+        if ($bill->items->isEmpty()) {
+            throw new \DomainException("Bill {$bill->bill_no} has no lines — add what the vendor charged for before posting.");
+        }
+        foreach ($bill->items as $line) {
+            if ((float) $line->qty <= 0) {
+                throw new \DomainException("Bill {$bill->bill_no} line \"{$line->product_name}\" has quantity {$line->qty} — billed quantities must be positive.");
+            }
+        }
+
         // One invoice per delivery. A bill raised against a receipt already billed elsewhere would
         // reverse the same GRNI a second time: the accrual would go negative, AP would carry two
         // liabilities for one delivery, and both documents would look perfectly ordinary. The check
@@ -84,6 +99,12 @@ class VendorBillService
 
         return DB::transaction(function () use ($bill): VendorBill {
             $bill->load(['items.product', 'vendor']);
+
+            // Refuse to bill more than arrived (or was ordered) before the journal exists. A bill
+            // that charges for unreceived goods books a liability nobody owes and — on a GRN bill —
+            // reverses an accrual for stock that never landed.
+            $this->applyBillQuantities($bill);
+
             $journalId = null;
             if (app()->bound(AccountsPostingProviderInterface::class)) {
                 $posting = app(AccountsPostingProviderInterface::class);
@@ -150,7 +171,7 @@ class VendorBillService
             if ($bill->journal_id && app()->bound(AccountsPostingProviderInterface::class)) {
                 $posting = app(AccountsPostingProviderInterface::class);
                 try {
-                    $posting->voidJournal($bill->journal_id, "Void bill {$bill->bill_no}");
+                    $posting->voidJournal($bill->journal_id, "Void bill {$bill->bill_no}", true);
                 } catch (\Throwable $e) {
                     // Do NOT swallow this. The catch used to discard the failure and the next line
                     // cancelled the bill anyway, leaving the AP/inventory journal posted against a
@@ -164,6 +185,10 @@ class VendorBillService
                     );
                 }
             }
+            // Give the billed quantities back: voiding re-opens the receipt (one bill per
+            // receipt) and the order lines for a corrected bill.
+            $this->reverseBillQuantities($bill);
+
             $bill->update(['status' => 'cancelled']);
 
             return $bill->fresh();
@@ -184,6 +209,17 @@ class VendorBillService
                 throw new \DomainException('Payment must be a positive amount with at most two decimal places.');
             }
             $dueCents = (int) round((float) $bill->total_amount * 100) - (int) round((float) $bill->paid_amount * 100);
+            // A debit note reduces what we owe without touching paid_amount — that column is cash
+            // truth, what actually left — so the subledger is the final word on what is still due.
+            // Without this a payment the bill header allows would settle against a smaller payable
+            // and the surplus would vanish into FIFO.
+            if ($bill->journal_id) {
+                $payable = DB::table('acc_payables')->where('journal_id', $bill->journal_id)->lockForUpdate()->first();
+                if ($payable) {
+                    $subledgerCents = (int) round(((float) $payable->amount - (float) $payable->paid_amount) * 100);
+                    $dueCents = min($dueCents, $subledgerCents);
+                }
+            }
             if ((int) round((float) $amount * 100) > $dueCents) {
                 throw new \DomainException('Payment cannot exceed the outstanding bill balance.');
             }
@@ -225,8 +261,273 @@ class VendorBillService
             $fresh = $bill->fresh();
             $fresh->update(['payment_status' => (float) $fresh->paid_amount >= (float) $fresh->total_amount ? 'paid' : 'partial']);
 
-            return $payment;
+            return $payment->fresh();
         });
+    }
+
+    /**
+     * Void a vendor payment: reverse its journal (which un-settles the linked payable), take the
+     * cash back off the bill, and mark the payment void with an audit trail.
+     *
+     * A wrong payment previously had no way back. The payment row is kept, not deleted: the
+     * voided row is the evidence that money left and was then returned, and deleting it would
+     * renumber nothing but explain nothing either.
+     */
+    public function voidPayment(PurchasePayment $payment, string $reason): PurchasePayment
+    {
+        return DB::transaction(function () use ($payment, $reason): PurchasePayment {
+            $payment = PurchasePayment::whereKey($payment->getKey())->lockForUpdate()->firstOrFail();
+            if (($payment->status ?? 'posted') === 'void') {
+                throw new \DomainException("{$payment->payment_no} is already voided.");
+            }
+            $bill = VendorBill::whereKey($payment->bill_id)->lockForUpdate()->firstOrFail();
+
+            if ($payment->journal_id && app()->bound(AccountsPostingProviderInterface::class)) {
+                try {
+                    app(AccountsPostingProviderInterface::class)
+                        ->voidJournal($payment->journal_id, "Void payment {$payment->payment_no}: {$reason}", true);
+                } catch (\Throwable $e) {
+                    // See void(): swallowing here would mark the payment void while its journal —
+                    // and its payable settlement — stayed posted.
+                    throw new \DomainException(
+                        "Could not reverse the journal for {$payment->payment_no}, so it was left posted: {$e->getMessage()}",
+                        0,
+                        $e
+                    );
+                }
+            }
+
+            $bill->decrement('paid_amount', (float) $payment->amount);
+            $fresh = $bill->fresh();
+            $paidCents = (int) round((float) $fresh->paid_amount * 100);
+            $totalCents = (int) round((float) $fresh->total_amount * 100);
+            $fresh->update(['payment_status' => $paidCents >= $totalCents ? 'paid' : ($paidCents > 0 ? 'partial' : 'unpaid')]);
+
+            $payment->update(['status' => 'void', 'voided_by' => auth()->id(), 'voided_at' => now(), 'void_reason' => $reason]);
+
+            return $payment->fresh();
+        });
+    }
+
+    /**
+     * Validate the billed quantities against what arrived (or was ordered) and consume them.
+     *
+     * One bill per receipt stops the same delivery being billed twice, but it never stopped a
+     * single bill charging for MORE than the delivery — or a bill with no receipt at all charging
+     * a PO that was already fully billed elsewhere. `qty_billed` on the order lines is the running
+     * total that makes the second case checkable; it is incremented here and given back on void.
+     *
+     * Service lines (freight, clearing, labour) carry no goods and are not guarded: a vendor can
+     * legitimately bill handling that was never on the order.
+     */
+    private function applyBillQuantities(VendorBill $bill): void
+    {
+        $plan = $this->planBillQuantities($bill, true);
+        if ($plan === []) {
+            return;
+        }
+        $lines = PurchaseOrderItem::whereIn('id', array_keys($plan))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        foreach ($plan as $id => $qty) {
+            if ($qty > 0.0001 && $lines->has($id)) {
+                $lines->get($id)->increment('qty_billed', $qty);
+            }
+        }
+    }
+
+    /**
+     * Give billed quantities back on void. Lenient by design: a bill posted before the guards
+     * existed may charge quantities the plan can no longer resolve, and that must never trap it
+     * in posted state. Each order line only gives back what it holds — legacy lines that never
+     * tracked `qty_billed` simply stay at zero.
+     */
+    private function reverseBillQuantities(VendorBill $bill): void
+    {
+        $plan = $this->planBillQuantities($bill, false);
+        if ($plan === []) {
+            return;
+        }
+        $lines = PurchaseOrderItem::whereIn('id', array_keys($plan))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        foreach ($plan as $id => $qty) {
+            if (! $lines->has($id)) {
+                continue;
+            }
+            $take = min((float) $lines->get($id)->qty_billed, $qty);
+            if ($take > 0.0001) {
+                $lines->get($id)->decrement('qty_billed', $take);
+            }
+        }
+    }
+
+    /**
+     * @return array<int, float> purchase order line id => billed qty to consume
+     */
+    private function planBillQuantities(VendorBill $bill, bool $strict): array
+    {
+        $bill->loadMissing(['items.product', 'receipt.items', 'order']);
+        $lines = $bill->items->filter(fn ($l) => ($l->product?->type ?? 'stockable') !== 'service');
+        if ($lines->isEmpty()) {
+            return [];
+        }
+
+        if ($bill->receipt_id && $bill->receipt) {
+            $receipt = $bill->receipt;
+            if ($strict) {
+                if ((int) $bill->vendor_id !== (int) $receipt->vendor_id) {
+                    throw new \DomainException("Bill {$bill->bill_no} names a different vendor than GRN {$receipt->receipt_no} — a bill charges the vendor who delivered.");
+                }
+                if ((int) $bill->warehouse_id !== (int) $receipt->warehouse_id) {
+                    throw new \DomainException("Bill {$bill->bill_no} names a different warehouse than GRN {$receipt->receipt_no} — a bill follows its delivery.");
+                }
+            }
+            $receiptLines = $receipt->items->keyBy('id');
+            $room = [];
+            foreach ($receiptLines as $id => $rl) {
+                $room[$id] = (float) $rl->qty;
+            }
+            // The receipt's room is per bill, but the PO's unbilled room is shared across bills:
+            // without intersecting the two, a second bill against the same receipt would pass with
+            // the full received quantity again and double-bill the delivery. Locked, so two bills
+            // posting together cannot both spend the same unbilled units.
+            $poRoom = [];
+            if ($strict) {
+                $oids = $receiptLines->pluck('order_item_id')->filter()->unique()->values()->all();
+                if ($oids !== []) {
+                    foreach (PurchaseOrderItem::whereIn('id', $oids)->orderBy('id')->lockForUpdate()->get() as $pl) {
+                        $poRoom[$pl->id] = (float) $pl->qty - (float) $pl->qty_billed;
+                    }
+                }
+            }
+            $plan = [];
+            foreach ($lines as $line) {
+                $need = (float) $line->qty;
+                if ($line->receipt_item_id) {
+                    $rl = $receiptLines->get($line->receipt_item_id);
+                    if ($rl === null) {
+                        if (! $strict) {
+                            continue;
+                        }
+                        throw new \DomainException("Bill {$bill->bill_no} line \"{$line->product_name}\" references a receipt line that is not on GRN {$receipt->receipt_no}.");
+                    }
+                    if ((int) $rl->product_id !== (int) $line->product_id || ($rl->variant_id ?? null) != ($line->variant_id ?? null)) {
+                        if (! $strict) {
+                            continue;
+                        }
+                        throw new \DomainException("Bill {$bill->bill_no} line \"{$line->product_name}\" is linked to a different product on GRN {$receipt->receipt_no}.");
+                    }
+                    $candidates = [$rl];
+                } else {
+                    $candidates = $receiptLines
+                        ->filter(fn ($rl) => (int) $rl->product_id === (int) $line->product_id && ($rl->variant_id ?? null) == ($line->variant_id ?? null))
+                        ->sortKeys()->all();
+                }
+                foreach ($candidates as $rl) {
+                    if ($need <= 0.0001) {
+                        break;
+                    }
+                    $take = min($room[$rl->id] ?? 0, $need);
+                    if ($strict && $rl->order_item_id && isset($poRoom[$rl->order_item_id])) {
+                        $take = min($take, max(0.0, $poRoom[$rl->order_item_id]));
+                    }
+                    if ($take <= 0) {
+                        continue;
+                    }
+                    $room[$rl->id] -= $take;
+                    $need -= $take;
+                    if ($rl->order_item_id) {
+                        if (isset($poRoom[$rl->order_item_id])) {
+                            $poRoom[$rl->order_item_id] -= $take;
+                        }
+                        $plan[$rl->order_item_id] = ($plan[$rl->order_item_id] ?? 0) + $take;
+                    }
+                }
+                if ($strict && $need > 0.0001) {
+                    $received = (float) collect($candidates)->sum('qty');
+                    // Which wall did the bill hit: the receipt's, or units already on another bill?
+                    // Quoting "received" when the goods arrived but are billed would send the clerk
+                    // to receive what is already on the shelf.
+                    $rcptLeft = 0.0;
+                    $poLeft = 0.0;
+                    $seenOid = [];
+                    foreach ($candidates as $rl) {
+                        $rcptLeft += $room[$rl->id] ?? 0;
+                        if ($rl->order_item_id && ! isset($seenOid[$rl->order_item_id]) && isset($poRoom[$rl->order_item_id])) {
+                            $seenOid[$rl->order_item_id] = true;
+                            // Plus what this bill itself just took: the refusal rolls everything
+                            // back, so the clerk is told what stays unbilled after it fails.
+                            $poLeft += $poRoom[$rl->order_item_id] + ($plan[$rl->order_item_id] ?? 0);
+                        }
+                    }
+                    if ($seenOid !== [] && $rcptLeft >= $need - 0.0001) {
+                        $poNo = $bill->order?->order_no ?? $receipt->order?->order_no ?? 'order';
+                        throw new \DomainException(sprintf(
+                            'Bill %s charges %.2f of "%s" but PO %s only has %.2f unbilled. The rest is already on another bill.',
+                            $bill->bill_no, (float) $line->qty, $line->product_name, $poNo, max(0.0, $poLeft)
+                        ));
+                    }
+                    throw new \DomainException(sprintf(
+                        'Bill %s charges %.2f of "%s" but GRN %s only received %.2f. Bill what arrived — extra units need their own receipt.',
+                        $bill->bill_no, (float) $line->qty, $line->product_name, $receipt->receipt_no, $received
+                    ));
+                }
+            }
+
+            return $plan;
+        }
+
+        if ($bill->order_id && $bill->order) {
+            $order = $bill->order;
+            if ($strict) {
+                if ((int) $bill->vendor_id !== (int) $order->vendor_id) {
+                    throw new \DomainException("Bill {$bill->bill_no} names a different vendor than PO {$order->order_no} — a bill charges the vendor who was ordered from.");
+                }
+                if ((int) $bill->warehouse_id !== (int) $order->warehouse_id) {
+                    throw new \DomainException("Bill {$bill->bill_no} names a different warehouse than PO {$order->order_no} — a bill follows its order.");
+                }
+            }
+            $poLines = PurchaseOrderItem::where('order_id', $order->id)->orderBy('id')->lockForUpdate()->get();
+            $room = [];
+            foreach ($poLines as $pl) {
+                // Posting consumes what is still unbilled; voiding gives back what is billed.
+                $room[$pl->id] = $strict ? (float) $pl->qty - (float) $pl->qty_billed : (float) $pl->qty_billed;
+            }
+            $plan = [];
+            foreach ($lines as $line) {
+                $need = (float) $line->qty;
+                foreach ($poLines as $pl) {
+                    if ($need <= 0.0001) {
+                        break;
+                    }
+                    if ((int) $pl->product_id !== (int) $line->product_id || ($pl->variant_id ?? null) != ($line->variant_id ?? null)) {
+                        continue;
+                    }
+                    $take = min($room[$pl->id] ?? 0, $need);
+                    if ($take <= 0) {
+                        continue;
+                    }
+                    $room[$pl->id] -= $take;
+                    $need -= $take;
+                    $plan[$pl->id] = ($plan[$pl->id] ?? 0) + $take;
+                }
+                if ($strict && $need > 0.0001) {
+                    $unbilled = 0.0;
+                    foreach ($poLines as $pl) {
+                        if ((int) $pl->product_id === (int) $line->product_id && ($pl->variant_id ?? null) == ($line->variant_id ?? null)) {
+                            $unbilled += (float) $pl->qty - (float) $pl->qty_billed;
+                        }
+                    }
+                    throw new \DomainException(sprintf(
+                        'Bill %s charges %.2f of "%s" but PO %s only has %.2f unbilled. The rest is already on another bill.',
+                        $bill->bill_no, (float) $line->qty, $line->product_name, $order->order_no, max(0.0, $unbilled)
+                    ));
+                }
+            }
+
+            return $plan;
+        }
+
+        // A bill with neither receipt nor order (services, utilities, ad-hoc purchases) has no
+        // source quantities to guard against.
+        return [];
     }
 
     private function enrichTotals(array $data): array

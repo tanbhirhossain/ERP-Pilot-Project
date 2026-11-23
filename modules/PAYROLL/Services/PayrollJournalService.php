@@ -429,7 +429,7 @@ final class PayrollJournalService
             if ($post->status === 'void') {
                 throw new \DomainException('Already voided');
             }
-            $this->posting->voidJournal($post->journal_id, $reason);
+            $this->posting->voidJournal($post->journal_id, $reason, true);
             $post->update(['status' => 'void']);
             Log::info('Payroll journal voided', ['post_id' => $post->id, 'journal_id' => $post->journal_id, 'reason' => $reason]);
 

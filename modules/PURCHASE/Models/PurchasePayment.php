@@ -13,7 +13,7 @@ class PurchasePayment extends Model
 
     protected $guarded = [];
 
-    protected $casts = ['payment_date' => 'date:Y-m-d', 'amount' => 'decimal:2'];
+    protected $casts = ['payment_date' => 'date:Y-m-d', 'amount' => 'decimal:2', 'voided_at' => 'datetime'];
 
     public function bill(): BelongsTo
     {

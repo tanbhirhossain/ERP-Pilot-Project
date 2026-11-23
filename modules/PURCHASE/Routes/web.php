@@ -54,6 +54,7 @@ Route::middleware(['web', 'auth'])->prefix('purchase')->name('purchase.')->group
     Route::post('bills/{bill}/post', [VendorBillController::class, 'post'])->middleware(PermissionMiddleware::class.':purchase.bills.post')->name('bills.post');
     Route::post('bills/{bill}/void', [VendorBillController::class, 'void'])->middleware(PermissionMiddleware::class.':purchase.bills.void')->name('bills.void');
     Route::post('bills/{bill}/pay', [VendorBillController::class, 'pay'])->middleware(PermissionMiddleware::class.':purchase.payments.manage')->name('bills.pay');
+    Route::post('bills/payments/{payment}/void', [VendorBillController::class, 'voidPayment'])->middleware(PermissionMiddleware::class.':purchase.payments.manage')->name('bills.payments.void');
 
     // Returns (Purchase Return / Debit Note)
     Route::get('returns', [PurchaseReturnController::class, 'index'])->middleware(PermissionMiddleware::class.':purchase.returns.view')->name('returns.index');

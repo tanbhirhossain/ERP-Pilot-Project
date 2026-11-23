@@ -4,6 +4,8 @@ namespace Modules\SALES\Services;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Modules\ACCOUNTS\Models\Bank;
+use Modules\ACCOUNTS\Models\Receivable;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\INVENTORY\Interfaces\InventoryStockProviderInterface;
 use Modules\INVENTORY\Interfaces\InventoryValuationProviderInterface;
@@ -75,7 +77,9 @@ class PosService
     public function closeSession(PosSession $s, array $data): PosSession
     {
         return DB::transaction(function () use ($s, $data): PosSession {
-            $session = $s->fresh() ?? $s;
+            // Locked: a sale rung up in the same instant waits here, then finds a closed drawer
+            // and is refused — instead of landing in a day whose journal has already posted.
+            $session = PosSession::whereKey($s->getKey())->lockForUpdate()->first() ?? $s;
 
             if (! $session->isOpen()) {
                 throw new \DomainException("Session {$session->session_no} is already {$session->status}. Only an open drawer can be closed.");
@@ -136,7 +140,9 @@ class PosService
                 );
             }
 
-            $session = PosSession::find($dto->sessionId);
+            // Locked: serializes against closeSession(), so a sale can never slip into a
+            // drawer that is closing in the same instant and miss the day's journal.
+            $session = PosSession::whereKey($dto->sessionId)->lockForUpdate()->first();
 
             if ($session === null) {
                 throw new \DomainException("Session {$dto->sessionId} does not exist.");
@@ -149,14 +155,43 @@ class PosService
                 );
             }
 
+            // A drawer belongs to one warehouse: its sales deduct that warehouse's shelf. Selling
+            // another warehouse's stock from this till would take goods off a shelf this drawer
+            // never counted while the money lands in it.
+            if ((int) $dto->warehouseId !== (int) $session->warehouse_id) {
+                throw new \DomainException(
+                    "Session {$session->session_no} belongs to {$session->warehouse?->name} — ring this sale there, or open a drawer for this warehouse first."
+                );
+            }
+
+            if ($dto->lines === []) {
+                throw new \DomainException('A sale needs at least one line — an empty ticket moves money without moving goods.');
+            }
+
             $items = [];
             $subtotalCents = 0;
             $discountCents = 0;
             $vatCents = 0;
             $costCents = 0;
+            $serviceProductIds = [];
 
             foreach ($dto->lines as $line) {
                 $product = Product::findOrFail($line->productId);
+
+                // The HTTP request validates these, but the till is not the only caller — offline
+                // replays and API sales arrive here directly, and a discount past 100% is the till
+                // paying the customer to take the goods.
+                if ($line->discountPct < 0 || $line->discountPct > 100) {
+                    throw new \DomainException("{$product->name}: a line discount must sit between 0 and 100 percent — {$line->discountPct} is not a discount, it is a payout.");
+                }
+
+                if ($line->vatRate < 0) {
+                    throw new \DomainException("{$product->name}: a VAT rate cannot be negative.");
+                }
+
+                if ($product->type === 'service') {
+                    $serviceProductIds[$line->productId] = true;
+                }
 
                 $grossCents = (int) round($line->qty * $line->unitPrice * 100);
                 $lineDiscountCents = (int) round($grossCents * ($line->discountPct / 100));
@@ -238,6 +273,17 @@ class PosService
                 }
             }
 
+            // Electronic money settles into a bank's own GL account at the close. Without a real
+            // bank the day-end posting used to fall back to cash, so card takings were counted as
+            // drawer cash and the Z-report reconciled to a count that never happened. Refuse at
+            // the counter instead — 10pm is too late to discover the till took money nowhere.
+            if ($bankCents > 0 || $isBankLike) {
+                $bank = $dto->bankId ? Bank::active()->find($dto->bankId) : null;
+                if (! $bank || ! $bank->account_id) {
+                    throw new \DomainException('Card, bank, mobile and split tenders need an active bank or wallet linked to a ledger account — choose one before ringing up.');
+                }
+            }
+
             if ($method === 'split' && abs(($cashCents + $bankCents) - $totalCents) > 1) {
                 throw new \DomainException(sprintf(
                     'Split amounts (%s cash + %s bank) must equal the total %s BDT. A part-paid sale is a credit sale: take what was paid and ring the rest up as due.',
@@ -277,16 +323,22 @@ class PosService
             ]);
 
             // Stock leaves now. Waiting for the day-end would let the till sell the same unit twice.
+            // Service lines hold no stock, so they move none — deducting them would refuse the sale
+            // against a shelf that was never meant to carry them.
             if (app()->bound(InventoryStockProviderInterface::class)) {
-                $stockItems = collect($items)->map(fn (array $it): array => [
-                    'product_id' => $it['product_id'],
-                    'variant_id' => $it['variant_id'],
-                    'warehouse_id' => $dto->warehouseId,
-                    'qty' => (float) $it['qty'],
-                    'unit_cost' => (float) $it['cost_price'],
-                ])->all();
+                $stockItems = collect($items)
+                    ->reject(fn (array $it): bool => isset($serviceProductIds[$it['product_id']]))
+                    ->map(fn (array $it): array => [
+                        'product_id' => $it['product_id'],
+                        'variant_id' => $it['variant_id'],
+                        'warehouse_id' => $dto->warehouseId,
+                        'qty' => (float) $it['qty'],
+                        'unit_cost' => (float) $it['cost_price'],
+                    ])->all();
 
-                app(InventoryStockProviderInterface::class)->deductStock($stockItems, $sale->pos_no, 'pos_sale');
+                if ($stockItems !== []) {
+                    app(InventoryStockProviderInterface::class)->deductStock($stockItems, $sale->pos_no, 'pos_sale');
+                }
             }
 
             return $sale->fresh(['items']);
@@ -304,17 +356,10 @@ class PosService
      */
     public function collectDue(PosSale $sale, array $data): PosCollection
     {
-        $session = PosSession::find((int) ($data['session_id'] ?? 0));
+        $method = $data['method'] ?? 'cash';
 
-        if ($session === null) {
-            throw new \DomainException('A collection must name the open session whose drawer is taking the money.');
-        }
-
-        if (! $session->isOpen()) {
-            throw new \DomainException(
-                "Session {$session->session_no} is {$session->status}, and its day is already in the ledger, so it cannot take money. "
-                .'Open a session for this till and collect it there.'
-            );
+        if (! in_array($method, ['cash', 'bank', 'bkash', 'card'], true)) {
+            throw new \DomainException("Unknown collection method '{$method}'.");
         }
 
         $amountCents = (int) round(((float) ($data['amount'] ?? 0)) * 100);
@@ -323,28 +368,61 @@ class PosService
             throw new \DomainException('A collection must be a positive amount.');
         }
 
-        $outstandingCents = $sale->outstandingDueCents();
+        return DB::transaction(function () use ($sale, $amountCents, $method, $data): PosCollection {
+            // Locked first: two tills collecting the same due in the same instant used to read the
+            // same outstanding figure and both take it. The second till now waits here, then sees
+            // what the first one left — and is refused if that is nothing.
+            $sale = PosSale::whereKey($sale->getKey())->lockForUpdate()->first() ?? $sale;
 
-        if ($outstandingCents <= 0) {
-            throw new \DomainException("POS {$sale->pos_no} has nothing outstanding to collect.");
-        }
+            if ($sale->status === 'void') {
+                throw new \DomainException(
+                    "POS {$sale->pos_no} is void — its sale was cancelled, so there is no due left to collect. "
+                    .'If the customer already paid against it, return the money through the customer ledger.'
+                );
+            }
 
-        if ($amountCents > $outstandingCents) {
-            throw new \DomainException(sprintf(
-                'POS %s owes %s BDT, so %s cannot be collected against it. Take the payment on account through the customer ledger instead.',
-                $sale->pos_no,
-                number_format($outstandingCents / 100, 2),
-                number_format($amountCents / 100, 2),
-            ));
-        }
+            // Locked for the same reason a sale locks it: a drawer closing in this instant posts
+            // its day while this money is still mid-air, and the collection would belong to a day
+            // that is already in the ledger.
+            $session = PosSession::whereKey((int) ($data['session_id'] ?? 0))->lockForUpdate()->first();
 
-        $method = $data['method'] ?? 'cash';
+            if ($session === null) {
+                throw new \DomainException('A collection must name the open session whose drawer is taking the money.');
+            }
 
-        if (! in_array($method, ['cash', 'bank', 'bkash', 'card'], true)) {
-            throw new \DomainException("Unknown collection method '{$method}'.");
-        }
+            if (! $session->isOpen()) {
+                throw new \DomainException(
+                    "Session {$session->session_no} is {$session->status}, and its day is already in the ledger, so it cannot take money. "
+                    .'Open a session for this till and collect it there.'
+                );
+            }
 
-        return DB::transaction(function () use ($sale, $session, $amountCents, $method, $data): PosCollection {
+            $outstandingCents = $sale->outstandingDueCents();
+
+            if ($outstandingCents <= 0) {
+                throw new \DomainException("POS {$sale->pos_no} has nothing outstanding to collect.");
+            }
+
+            if ($amountCents > $outstandingCents) {
+                throw new \DomainException(sprintf(
+                    'POS %s owes %s BDT, so %s cannot be collected against it. Take the payment on account through the customer ledger instead.',
+                    $sale->pos_no,
+                    number_format($outstandingCents / 100, 2),
+                    number_format($amountCents / 100, 2),
+                ));
+            }
+
+            // Electronic money settles into the bank's own GL account at the close. A collection
+            // taken "by card" with no bank used to fall back to cash at the day-end, counting money
+            // that never touched the drawer toward the cash the manager counts at 10pm.
+            if ($method !== 'cash') {
+                $bank = isset($data['bank_id']) ? Bank::active()->find($data['bank_id']) : null;
+
+                if ($bank === null || ! $bank->account_id) {
+                    throw new \DomainException('A card, bank or mobile collection needs an active bank or wallet linked to a ledger account — choose one before taking the money.');
+                }
+            }
+
             $collection = $this->repo->createCollection([
                 'session_id' => $session->id,
                 'pos_sale_id' => $sale->id,
@@ -368,6 +446,9 @@ class PosService
                 : null;
 
             if ($receivable !== null) {
+                // Locked: without it two tills settling the same receivable read the same received
+                // figure and one collection silently unhappens in the subledger.
+                $receivable = Receivable::whereKey($receivable->getKey())->lockForUpdate()->first() ?? $receivable;
                 $receivedCents = (int) round((float) $receivable->received_amount * 100) + $amountCents;
                 $owedCents = (int) round((float) $receivable->amount * 100);
 
@@ -393,22 +474,35 @@ class PosService
      */
     public function void(PosSale $sale): PosSale
     {
-        if ($sale->status === 'void') {
-            throw new \DomainException('Already voided.');
-        }
-
-        $session = $sale->session_id ? PosSession::find($sale->session_id) : null;
-
-        if ($session !== null && ! $session->isOpen()) {
-            throw new \DomainException(
-                "POS {$sale->pos_no} belongs to session {$session->session_no}, which is closed and its day has been "
-                .($session->isPosted() ? 'posted to the ledger' : 'closed').'. Voiding it now would put the stock back '
-                ."and leave the day's revenue, VAT and cash in the books with nothing reversing them. Raise a sales "
-                .'return in the current session instead.'
-            );
-        }
-
         return DB::transaction(function () use ($sale): PosSale {
+            // Locked: voiding while a collection lands, or while the drawer closes, used to race —
+            // the money counted in a day whose sale then unhappened, or the stock put back after
+            // the day had already posted its cost.
+            $sale = PosSale::whereKey($sale->getKey())->lockForUpdate()->first() ?? $sale;
+
+            if ($sale->status === 'void') {
+                throw new \DomainException('Already voided.');
+            }
+
+            if ($sale->collections()->exists()) {
+                throw new \DomainException(
+                    "POS {$sale->pos_no} already has money collected against its due, so it cannot be voided: cancelling "
+                    .'the sale would leave that collection in the day takings with no sale behind it. Refund the customer '
+                    .'through the customer ledger first, then void.'
+                );
+            }
+
+            $session = $sale->session_id ? PosSession::whereKey($sale->session_id)->lockForUpdate()->first() : null;
+
+            if ($session !== null && ! $session->isOpen()) {
+                throw new \DomainException(
+                    "POS {$sale->pos_no} belongs to session {$session->session_no}, which is closed and its day has been "
+                    .($session->isPosted() ? 'posted to the ledger' : 'closed').'. Voiding it now would put the stock back '
+                    ."and leave the day's revenue, VAT and cash in the books with nothing reversing them. Raise a sales "
+                    .'return in the current session instead.'
+                );
+            }
+
             if (app()->bound(InventoryStockProviderInterface::class)) {
                 $sale->load('items');
                 $items = $sale->items->map(fn ($it): array => [
@@ -470,23 +564,21 @@ class PosService
     }
 
     /**
-     * What one unit leaving the shelf costs, following the same order `InvoiceService::post()` uses:
-     * the product's own cost when it carries one, otherwise the warehouse valuation, with FIFO layers
-     * preferred for a FIFO product.
+     * What one unit leaving the shelf costs, in the same order the shelf itself relieves stock:
+     * FIFO layers for a FIFO product, otherwise the warehouse moving average, with the product
+     * master's cost as the last resort.
+     *
+     * The master cost used to come first, which was the whole drift between the stock ledger and
+     * the inventory account: the shelf gave up units at its average of 898 while the day-end
+     * journal relieved them at the master's 1,180, and every sale widened the gap. The master
+     * survives only for goods with no valuation at all — typically the first sale before any
+     * receipt has set an average.
      */
     private function unitCostFor(Product $product, ?int $variantId, int $warehouseId, float $qty): float
     {
-        $hasCost = $product->cost_price !== null && (float) $product->cost_price > 0.001;
-
-        if ($hasCost) {
-            return (float) $product->cost_price;
-        }
-
-        if (! app()->bound(InventoryValuationProviderInterface::class)) {
+        if ($product->type === 'service') {
             return 0.0;
         }
-
-        $valuator = app(InventoryValuationProviderInterface::class);
 
         if ($product->valuation_method === 'fifo' && app()->bound(ValuationService::class)) {
             $fifo = app(ValuationService::class)->getFifoCost($product->id, $variantId, $warehouseId, $qty);
@@ -497,6 +589,18 @@ class PosService
             }
         }
 
-        return $valuator->getUnitCost($product->id, $variantId, $warehouseId);
+        if (app()->bound(InventoryValuationProviderInterface::class)) {
+            $avg = (float) app(InventoryValuationProviderInterface::class)->getUnitCost($product->id, $variantId, $warehouseId);
+
+            if ($avg > 0.001) {
+                return $avg;
+            }
+        }
+
+        if ($product->cost_price !== null && (float) $product->cost_price > 0.001) {
+            return (float) $product->cost_price;
+        }
+
+        return 0.0;
     }
 }

@@ -23,7 +23,7 @@ interface AccountsPostingProviderInterface
      */
     public function postSimple(string $date, string $type, int $debitAccountId, int $creditAccountId, float $amount, string $narration, ?string $refNo = null, ?string $sourceType = null, ?int $sourceId = null): Journal;
 
-    public function voidJournal(int $journalId, string $reason): Journal;
+    public function voidJournal(int $journalId, string $reason, bool $viaSourceDoc = false): Journal;
 
     public function accountIdByCode(string $code): ?int;
 

@@ -20,6 +20,7 @@ use Modules\SALES\Interfaces\InvoiceRepositoryInterface;
 use Modules\SALES\Models\Delivery;
 use Modules\SALES\Models\Invoice;
 use Modules\SALES\Models\Order;
+use Modules\SALES\Models\OrderItem;
 use Modules\SALES\Models\Payment;
 use Modules\SALES\Support\LinePricer;
 
@@ -63,6 +64,19 @@ class InvoiceService
             throw new \DomainException('Only draft can be posted.');
         }
 
+        // An invoice charges for goods: every line carries a positive quantity. A zero or
+        // negative line would post a journal that still balances while deducting stock the wrong
+        // way. Credits travel as a sales return, not as a negative invoice line.
+        $invoice->loadMissing('items');
+        if ($invoice->items->isEmpty()) {
+            throw new \DomainException("Invoice {$invoice->invoice_no} has no lines — add what was sold before posting.");
+        }
+        foreach ($invoice->items as $line) {
+            if ((float) $line->qty <= 0) {
+                throw new \DomainException("Invoice {$invoice->invoice_no} line \"{$line->product_name}\" has quantity {$line->qty} — invoiced quantities must be positive.");
+            }
+        }
+
         // Generic approval matrix (Phase 1) — before the transaction so the
         // pending request survives a refusal. No-op without an active policy.
         app(ApprovalService::class)
@@ -76,8 +90,21 @@ class InvoiceService
             app(CreditControlService::class)->assertWithinLimit($invoice->customer_id, $due, 'invoice');
         }
 
+        // An invoice against a dead order is either a mistake or a back-door around the
+        // cancellation. Draft orders are not promises yet; cancelled and closed ones are over.
+        if ($invoice->order_id) {
+            $orderState = Order::whereKey($invoice->order_id)->value('status');
+            if (in_array($orderState, ['draft', 'cancelled', 'closed'], true)) {
+                throw new \DomainException("Order {$invoice->order?->order_no} is {$orderState} — only confirmed orders can be invoiced.");
+            }
+        }
+
         return DB::transaction(function () use ($invoice): Invoice {
             $invoice->load(['items.product', 'customer']);
+
+            // Refuse to invoice more than the order still owes, and work out per line what this
+            // invoice newly takes off the shelf versus what a delivery already carried out.
+            $plan = $this->planInvoiceQuantities($invoice);
 
             // 1) Snapshot cost_price BEFORE deduct — FIFO-aware (cost based on oldest layers)
             if (app()->bound(AccountsPostingProviderInterface::class)) {
@@ -109,18 +136,37 @@ class InvoiceService
             }
             $invoice->load('items');
 
-            // 2) Deduct stock via INVENTORY provider (skip if already delivered via DN)
-            $shouldDeduct = config('sales.stock.deduct_on_invoice', true);
-            if ($invoice->order_id) {
-                $shippedQty = Delivery::where('order_id', $invoice->order_id)->whereIn('status', ['shipped', 'delivered'])->with('items')->get()->flatMap->items->sum(fn ($it) => (float) $it->qty);
-                if ($shippedQty >= 0.001) {
-                    $shouldDeduct = false;
-                } // already shipped via delivery challan
-            }
-            if ($shouldDeduct && app()->bound(InventoryStockProviderInterface::class)) {
+            // 2) Deduct what this invoice newly takes off the shelf, per line. A line whose
+            // goods already left on a delivery challan deducts nothing — deducting again would
+            // take the same units off twice — while a line with no delivery deducts in full. The
+            // old rule skipped the WHOLE invoice when ANY delivery existed for the order, so one
+            // partially delivered order left every other line's stock standing while COGS still
+            // posted: phantom stock and a ledger that disagreed with the shelf.
+            //
+            // The move carries the line's snapshotted cost, so the movement ledger shows what the
+            // shelf actually gave up instead of a zero-cost row no audit can follow.
+            if (config('sales.stock.deduct_on_invoice', true) && app()->bound(InventoryStockProviderInterface::class)) {
                 $stockProvider = app(InventoryStockProviderInterface::class);
-                $items = $invoice->items->map(fn ($it) => ['product_id' => $it->product_id, 'variant_id' => $it->variant_id, 'warehouse_id' => $invoice->warehouse_id, 'qty' => (float) $it->qty])->toArray();
-                $stockProvider->deductStock($items, $invoice->invoice_no, 'sales_invoice');
+                $deductItems = [];
+                foreach ($invoice->items as $it) {
+                    $dq = (float) ($plan['deduct'][$it->id] ?? 0);
+                    if ($dq > 0.0001) {
+                        $deductItems[] = [
+                            'product_id' => $it->product_id, 'variant_id' => $it->variant_id,
+                            'warehouse_id' => $invoice->warehouse_id, 'qty' => $dq,
+                            'unit_cost' => (float) ($it->cost_price ?? 0),
+                        ];
+                    }
+                }
+                if ($deductItems !== []) {
+                    $stockProvider->deductStock($deductItems, $invoice->invoice_no, 'sales_invoice');
+                }
+                // Release exactly what left: the order's reservation covered these units until now.
+                // Releasing the whole order line instead would free stock that is still sitting on
+                // the shelf waiting for its delivery.
+                if ($plan['release'] !== []) {
+                    $stockProvider->releaseReservation($plan['release'], $invoice->invoice_no);
+                }
             }
 
             // 3) Create COGS + Sales + AR + VAT journal via ACCOUNTS provider
@@ -207,8 +253,16 @@ class InvoiceService
                 $order = Order::find($invoice->order_id);
                 if ($order) {
                     $order->increment('invoiced_amount', (float) $invoice->total_amount);
+                    if ($plan['invoiced'] !== []) {
+                        $ols = OrderItem::whereIn('id', array_keys($plan['invoiced']))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+                        foreach ($plan['invoiced'] as $id => $qty) {
+                            if ($qty > 0.0001 && $ols->has($id)) {
+                                $ols->get($id)->increment('qty_invoiced', $qty);
+                            }
+                        }
+                    }
                     $order->load('items');
-                    $allInvoiced = $order->items->every(fn ($it) => (float) $it->qty_invoiced >= (float) $it->qty);
+                    $allInvoiced = $order->items->every(fn ($it) => (float) $it->qty_invoiced >= (float) $it->qty - 0.001);
                     $order->update(['status' => $allInvoiced ? 'invoiced' : 'partially_invoiced']);
                 }
             }
@@ -219,13 +273,51 @@ class InvoiceService
 
     public function recordPayment(Invoice $invoice, array $data): Payment
     {
-        if (! $invoice->isPosted()) {
-            throw new \DomainException('Only posted invoices can receive payments.');
-        }
-
         return DB::transaction(function () use ($invoice, $data): Payment {
-            $paymentNo = 'PAY-'.str_pad((string) (Payment::max('id') + 1), 5, '0', STR_PAD_LEFT);
-            $payment = Payment::create($data + ['payment_no' => $paymentNo, 'invoice_id' => $invoice->id, 'customer_id' => $invoice->customer_id, 'created_by' => auth()->id()]);
+            // Check the latest balance under a row lock, not a stale form/model. This also
+            // serializes concurrent collections before either can move cash or the ledger.
+            $invoice = Invoice::whereKey($invoice->getKey())->lockForUpdate()->firstOrFail();
+            if (! $invoice->isPosted()) {
+                throw new \DomainException('Only posted invoices can receive payments.');
+            }
+            $amount = $data['amount'] ?? null;
+            if (! is_numeric($amount) || (float) $amount <= 0 || round((float) $amount, 2) != (float) $amount) {
+                throw new \DomainException('Payment must be a positive amount with at most two decimal places.');
+            }
+            $dueCents = (int) round((float) $invoice->total_amount * 100) - (int) round((float) $invoice->paid_amount * 100);
+            // A credit note reduces what the customer owes without touching paid_amount — that
+            // column is cash truth, what actually arrived — so the subledger is the final word on
+            // what is still due. Without this a payment the invoice header allows would settle
+            // against a smaller receivable and the surplus would vanish into FIFO.
+            if ($invoice->journal_id) {
+                $receivable = DB::table('acc_receivables')->where('journal_id', $invoice->journal_id)->lockForUpdate()->first();
+                if ($receivable) {
+                    $subledgerCents = (int) round(((float) $receivable->amount - (float) $receivable->received_amount) * 100);
+                    $dueCents = min($dueCents, $subledgerCents);
+                }
+            }
+            if ((int) round((float) $amount * 100) > $dueCents) {
+                throw new \DomainException('Payment cannot exceed the outstanding invoice balance.');
+            }
+            $method = $data['method'] ?? 'cash';
+            if (! in_array($method, ['cash', 'bank', 'bkash', 'card'], true)) {
+                throw new \DomainException('Invalid payment method.');
+            }
+            $bank = null;
+            if ($method !== 'cash') {
+                $bank = Bank::active()->find($data['bank_id'] ?? null);
+                if (! $bank || ! $bank->account_id) {
+                    throw new \DomainException('Choose an active bank or wallet linked to a ledger account for non-cash payment.');
+                }
+            } else {
+                $data['bank_id'] = null;
+            }
+
+            // The number comes from the row's own id, inside the same transaction: two tellers
+            // collecting at the same instant cannot mint the same `PAY-` number the way
+            // `max(id) + 1` let them, and the unique index stays a backstop rather than the plan.
+            $payment = Payment::create($data + ['payment_no' => 'PAY-PENDING', 'invoice_id' => $invoice->id, 'customer_id' => $invoice->customer_id, 'created_by' => auth()->id()]);
+            $payment->update(['payment_no' => 'PAY-'.str_pad((string) $payment->id, 5, '0', STR_PAD_LEFT)]);
 
             // post to ACCOUNTS: Cash/Bank Dr, AR Cr
             if (app()->bound(AccountsPostingProviderInterface::class)) {
@@ -233,7 +325,6 @@ class InvoiceService
                 $purpose = "payment {$payment->payment_no} against {$invoice->invoice_no}";
                 $cashCode = config('accounts.defaults.cash_code', '1001');
                 $arCode = config('accounts.defaults.receivable_code', '1100');
-                $bank = ($data['bank_id'] ?? null) ? Bank::find($data['bank_id']) : null;
 
                 // Both legs are required: the paid_amount increment and the 'paid' status below sit
                 // outside this block, so a miss used to mark the invoice settled for cash the
@@ -250,11 +341,177 @@ class InvoiceService
 
             $invoice->increment('paid_amount', (float) $data['amount']);
             $fresh = $invoice->fresh();
-            $newStatus = (float) $fresh->paid_amount >= (float) $fresh->total_amount ? 'paid' : 'partially_paid';
+            $paidCents = (int) round((float) $fresh->paid_amount * 100);
+            $totalCents = (int) round((float) $fresh->total_amount * 100);
+            $newStatus = $paidCents >= $totalCents ? 'paid' : 'partially_paid';
             $fresh->update(['payment_status' => $newStatus === 'paid' ? 'paid' : 'partial', 'status' => $newStatus]);
 
-            return $payment;
+            return $payment->fresh();
         });
+    }
+
+    /**
+     * Void a collection: reverse its journal (which un-settles the linked receivable), take the
+     * cash back off the invoice, and mark the payment void with an audit trail.
+     *
+     * A wrong collection previously had no way back. The payment row is kept, not deleted: the
+     * voided row is the evidence that money arrived and was then returned, and deleting it would
+     * renumber nothing but explain nothing either.
+     */
+    public function voidPayment(Payment $payment, string $reason): Payment
+    {
+        return DB::transaction(function () use ($payment, $reason): Payment {
+            $payment = Payment::whereKey($payment->getKey())->lockForUpdate()->firstOrFail();
+            if ($payment->status === 'void') {
+                throw new \DomainException("{$payment->payment_no} is already voided.");
+            }
+            $invoice = Invoice::whereKey($payment->invoice_id)->lockForUpdate()->firstOrFail();
+
+            if ($payment->journal_id && app()->bound(AccountsPostingProviderInterface::class)) {
+                try {
+                    app(AccountsPostingProviderInterface::class)
+                        ->voidJournal($payment->journal_id, "Void collection {$payment->payment_no}: {$reason}", true);
+                } catch (\Throwable $e) {
+                    // See VendorBillService::void(): swallowing here would mark the payment void
+                    // while its journal — and its receivable settlement — stayed posted.
+                    throw new \DomainException(
+                        "Could not reverse the journal for {$payment->payment_no}, so it was left posted: {$e->getMessage()}",
+                        0,
+                        $e
+                    );
+                }
+            }
+
+            $invoice->decrement('paid_amount', (float) $payment->amount);
+            $fresh = $invoice->fresh();
+            $paidCents = (int) round((float) $fresh->paid_amount * 100);
+            $totalCents = (int) round((float) $fresh->total_amount * 100);
+            if ($paidCents >= $totalCents) {
+                $fresh->update(['payment_status' => 'paid', 'status' => 'paid']);
+            } elseif ($paidCents > 0) {
+                $fresh->update(['payment_status' => 'partial', 'status' => 'partially_paid']);
+            } else {
+                $fresh->update(['payment_status' => 'unpaid', 'status' => 'posted']);
+            }
+
+            $payment->update(['status' => 'void', 'voided_by' => auth()->id(), 'voided_at' => now(), 'void_reason' => $reason]);
+
+            return $payment->fresh();
+        });
+    }
+
+    /**
+     * Resolve every invoice line against its order line and decide what moves.
+     *
+     * Lines link explicitly through `order_item_id`, or — for invoices typed by hand against an
+     * order — by product, oldest order line first. Each order line only has its uninvoiced
+     * remainder to give: invoicing past it is refused, because the extra units were never promised.
+     *
+     * What the invoice deducts is what its lines add beyond what deliveries already carried out.
+     * Delivery is the mirror image (`DeliveryService::ship()` deducts beyond what is invoiced), so
+     * the two together take each unit off the shelf exactly once no matter which posts first.
+     *
+     * Service lines carry no goods: they are neither capped nor deducted.
+     *
+     * @return array{invoiced: array<int, float>, deduct: array<int, float>, release: list<array<string, mixed>>}
+     */
+    private function planInvoiceQuantities(Invoice $invoice): array
+    {
+        $invoice->loadMissing(['items.product', 'order']);
+        $invoiced = [];
+        $deduct = [];
+        $release = [];
+
+        $order = $invoice->order_id ? $invoice->order : null;
+        $orderLines = collect();
+        $shipped = collect();
+        if ($order !== null) {
+            $freshStatus = Order::whereKey($order->id)->lockForUpdate()->value('status');
+            if (in_array($freshStatus, ['cancelled', 'closed'], true)) {
+                throw new \DomainException("Order {$order->order_no} is {$freshStatus} — it cannot take a new invoice.");
+            }
+            $orderLines = OrderItem::where('order_id', $order->id)->orderBy('id')->lockForUpdate()->get();
+            $shipped = DB::table('sales_delivery_items as di')
+                ->join('sales_deliveries as d', 'd.id', '=', 'di.delivery_id')
+                ->where('d.order_id', $order->id)->whereIn('d.status', ['shipped', 'delivered'])
+                ->whereNotNull('di.order_item_id')
+                // Aliased, not qualified: `pluck('qty', 'di.order_item_id')` would resolve every key
+                // through `data_get($row, 'di.order_item_id')`, find no `di` attribute on the row,
+                // and collapse the whole shipped pool into one null-keyed entry.
+                ->groupBy('di.order_item_id')->selectRaw('di.order_item_id AS order_item_id, SUM(di.qty) AS qty')
+                ->pluck('qty', 'order_item_id')->map(fn ($q) => (float) $q);
+        }
+
+        $room = [];
+        foreach ($orderLines as $ol) {
+            $room[$ol->id] = (float) $ol->qty - (float) $ol->qty_invoiced;
+        }
+
+        foreach ($invoice->items as $line) {
+            $need = (float) $line->qty;
+            $isService = ($line->product?->type ?? 'stockable') === 'service';
+            if ($isService || $order === null) {
+                $deduct[$line->id] = $isService ? 0.0 : $need;
+                continue;
+            }
+            if ($line->order_item_id) {
+                $ol = $orderLines->firstWhere('id', $line->order_item_id);
+                if ($ol === null) {
+                    throw new \DomainException("Invoice {$invoice->invoice_no} line \"{$line->product_name}\" references an order line that is not on order {$order->order_no}.");
+                }
+                if ((int) $ol->product_id !== (int) $line->product_id || ($ol->variant_id ?? null) != ($line->variant_id ?? null)) {
+                    throw new \DomainException("Invoice {$invoice->invoice_no} line \"{$line->product_name}\" is linked to a different product on order {$order->order_no}.");
+                }
+                $candidates = collect([$ol]);
+            } else {
+                $candidates = $orderLines
+                    ->filter(fn ($ol) => (int) $ol->product_id === (int) $line->product_id && ($ol->variant_id ?? null) == ($line->variant_id ?? null))
+                    ->values();
+            }
+            $remaining = $need;
+            $lineLinks = [];
+            foreach ($candidates as $ol) {
+                if ($remaining <= 0.0001) {
+                    break;
+                }
+                $take = min($room[$ol->id] ?? 0, $remaining);
+                if ($take <= 0) {
+                    continue;
+                }
+                $room[$ol->id] -= $take;
+                $remaining -= $take;
+                $invoiced[$ol->id] = ($invoiced[$ol->id] ?? 0) + $take;
+                $lineLinks[$ol->id] = ($lineLinks[$ol->id] ?? 0) + $take;
+            }
+            if ($remaining > 0.0001) {
+                $uninvoiced = 0.0;
+                foreach ($candidates as $ol) {
+                    $uninvoiced += (float) $ol->qty - (float) $ol->qty_invoiced;
+                }
+                throw new \DomainException(sprintf(
+                    'Invoice %s charges %.2f of "%s" but order %s only has %.2f uninvoiced. The rest is already on another invoice.',
+                    $invoice->invoice_no, $need, $line->product_name, $order->order_no, max(0.0, $uninvoiced)
+                ));
+            }
+            // Deduct what this line adds beyond its order lines' shipped pools; consume the pools
+            // so a second line for the same goods does not deduct them again.
+            $deductQty = 0.0;
+            foreach ($lineLinks as $olId => $linkedQty) {
+                $covered = min((float) ($shipped[$olId] ?? 0), $linkedQty);
+                $shipped[$olId] = (float) ($shipped[$olId] ?? 0) - $covered;
+                $deductQty += $linkedQty - $covered;
+                if ($linkedQty - $covered > 0.0001) {
+                    $ol = $orderLines->firstWhere('id', $olId);
+                    $release[] = [
+                        'product_id' => $ol->product_id, 'variant_id' => $ol->variant_id,
+                        'warehouse_id' => $invoice->warehouse_id, 'qty' => $linkedQty - $covered,
+                    ];
+                }
+            }
+            $deduct[$line->id] = $deductQty;
+        }
+
+        return ['invoiced' => $invoiced, 'deduct' => $deduct, 'release' => $release];
     }
 
     private function enrichTotals(array $data): array
