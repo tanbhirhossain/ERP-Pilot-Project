@@ -201,29 +201,32 @@ class GoodsReceiptService
      */
     private function assertNotOverReceiving(GoodsReceipt $receipt): void
     {
-        foreach ($receipt->items as $line) {
-            if (! $line->order_item_id) {
-                continue; // not tied to an order line, so there is nothing to over-receive against
-            }
-
-            $ordered = PurchaseOrderItem::find($line->order_item_id);
-
-            if ($ordered === null) {
+        // Lock all linked PO lines in a stable order so two different draft receipts
+        // cannot both consume the same outstanding quantity concurrently.
+        $groups = $receipt->items->filter(fn ($line) => $line->order_item_id)
+            ->groupBy('order_item_id');
+        $orderedLines = PurchaseOrderItem::whereIn('id', $groups->keys()->all())
+            ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        foreach ($groups as $id => $lines) {
+            $ordered = $orderedLines->get($id);
+            $first = $lines->first();
+            if ($ordered === null || (int) $ordered->order_id !== (int) $receipt->order_id) {
                 throw new \DomainException(sprintf(
-                    'Line "%s" points at an order line that no longer exists — reload the order before receiving.',
-                    $line->product_name,
+                    'Line "%s" does not belong to this purchase order — reload the order before receiving.',
+                    $first->product_name,
                 ));
             }
-
+            foreach ($lines as $line) {
+                if ((int) $line->product_id !== (int) $ordered->product_id) {
+                    throw new \DomainException('Receipt product does not match the linked purchase order line.');
+                }
+            }
             $outstanding = round((float) $ordered->qty - (float) $ordered->qty_received, 4);
-            $arriving = round((float) $line->qty, 4);
-
+            $arriving = round((float) $lines->sum('qty'), 4);
             if ($arriving > $outstanding + 0.0001) {
                 throw new \DomainException(sprintf(
                     'Cannot receive %.2f of "%s": the order still owes %.2f. Receive the outstanding quantity, or raise the order first if a bigger delivery was agreed.',
-                    $arriving,
-                    $line->product_name,
-                    max(0.0, $outstanding),
+                    $arriving, $first->product_name, max(0.0, $outstanding),
                 ));
             }
         }

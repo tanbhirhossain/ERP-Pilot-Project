@@ -293,7 +293,7 @@ class JournalService
         $byCode = fn (string $code) => $lines->first(fn ($l) => $l->account && $l->account->code === $code);
 
         if ($journal->partner_type === 'vendor') {
-            $control = $byCode('2100');
+            $control = $byCode((string) config('accounts.defaults.payable_code', '2100'));
             if ($control === null) {
                 return;
             }
@@ -309,14 +309,29 @@ class JournalService
                     'amount' => $credit, 'status' => 'open',
                 ]);
             } elseif ($debit > 0) {
-                $this->settleOpen(Payable::query(), $journal, $debit);
+                $query = Payable::query();
+                if ($journal->source_type === 'purchase_payment') {
+                    // This payment was explicitly made against a bill; FIFO could close a
+                    // different vendor bill and make the purchase and AP registers disagree.
+                    $billJournalId = DB::table('purchase_payments as p')
+                        ->join('purchase_bills as b', 'b.id', '=', 'p.bill_id')
+                        ->where('p.id', $journal->source_id)->value('b.journal_id');
+                    if (! $billJournalId) {
+                        throw new \DomainException('Payment has no posted vendor bill journal to settle.');
+                    }
+                    $query->where('journal_id', $billJournalId);
+                }
+                $unapplied = $this->settleOpen($query, $journal, $debit, 'bill_date');
+                if ($journal->source_type === 'purchase_payment' && $unapplied > 0.005) {
+                    throw new \DomainException('Payment exceeds the linked payable balance; reconcile the bill before paying.');
+                }
             }
 
             return;
         }
 
         if ($journal->partner_type === 'customer') {
-            $control = $byCode('1100');
+            $control = $byCode((string) config('accounts.defaults.receivable_code', '1100'));
             if ($control === null) {
                 return;
             }
@@ -332,7 +347,7 @@ class JournalService
                     'amount' => $debit, 'status' => 'open',
                 ]);
             } elseif ($credit > 0) {
-                $this->settleOpen(Receivable::query(), $journal, $credit);
+                $this->settleOpen(Receivable::query(), $journal, $credit, 'invoice_date');
             }
         }
     }
@@ -344,11 +359,11 @@ class JournalService
      * turned into a negative-balance row: a partner who has paid more than they owed is an advance,
      * which belongs in its own accounting treatment, not in the receivables list as a phantom debt.
      */
-    private function settleOpen($query, Journal $journal, float $amount): void
+    private function settleOpen($query, Journal $journal, float $amount, string $dateColumn): float
     {
         $open = $query->where('partner_id', $journal->partner_id)
             ->whereNotIn('status', ['paid', 'cancelled', 'void'])
-            ->orderBy('invoice_date')->orderBy('id')->get();
+            ->orderBy($dateColumn)->orderBy('id')->lockForUpdate()->get();
 
         $left = $amount;
         foreach ($open as $doc) {
@@ -370,5 +385,7 @@ class JournalService
             ]);
             $left = round($left - $applied, 2);
         }
+
+        return $left;
     }
 }

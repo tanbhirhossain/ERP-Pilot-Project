@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import type { VendorBill } from '@purchase/types';
 import AdminLayout from '@core/Layouts/AdminLayout.vue';
 import PageHeader from '@core/Components/PageHeader.vue';
@@ -7,13 +7,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import StatusBadge from '@core/Components/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@core/Utils/format';
-import { ref } from 'vue';
+import { computed } from 'vue';
+import SearchableSelect from '@core/Components/SearchableSelect.vue';
 import { FileText } from 'lucide-vue-next';
 import StaticTable from '@core/Components/StaticTable.vue';
-const props = defineProps<{ bill: VendorBill }>();
-const pay = ref({ amount: '', payment_date: new Date().toISOString().slice(0,10), method: 'bank', reference_no: '' });
+const props = defineProps<{ bill: VendorBill; canPay: boolean; paymentAccounts: { value: number; label: string }[] }>();
+const page = usePage() as any;
+const paymentError = computed(() => page.props.flash?.error || Object.values(pay.errors)[0]);
+const pay = useForm({ amount: '', payment_date: new Date().toISOString().slice(0,10), method: 'cash', bank_id: null as number | null, reference_no: '' });
 function tone(s:string){ if(s==='posted') return 'success'; if(s==='draft') return 'warning'; if(s==='paid') return 'success'; return 'neutral'; }
-function submitPay(){ router.post(route('purchase.bills.pay', props.bill.id), pay.value); }
+function submitPay(){ pay.transform(data => ({ ...data, bank_id: data.method === 'cash' ? null : data.bank_id })).post(route('purchase.bills.pay', props.bill.id), { preserveScroll: true }); }
 </script>
 <template>
   <AdminLayout :breadcrumbs="[{ title: 'Purchase' }, { title: 'Vendor Bills', href: route('purchase.bills.index') }, { title: bill.bill_no }]">
@@ -57,14 +60,17 @@ function submitPay(){ router.post(route('purchase.bills.pay', props.bill.id), pa
         <h3 class="font-semibold mb-2">Payments</h3>
         <div v-for="p in bill.payments" :key="p.id" class="text-sm border-b py-1 flex justify-between"><span>{{ p.payment_no }} · {{ formatDate(p.payment_date) }} · {{ p.method }}</span><span class="font-mono font-bold">{{ formatCurrency(Number(p.amount)) }}</span></div>
       </div>
-      <div v-if="bill.status==='posted' && bill.payment_status!=='paid'" class="bg-card border rounded-xl shadow-sm p-4">
+      <div v-if="bill.status==='posted' && bill.payment_status!=='paid' && canPay" class="bg-card border rounded-xl shadow-sm p-4">
         <h3 class="font-semibold mb-2 text-sm">Record Payment</h3>
-        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <div><label class="text-xs">Amount *</label><Input v-model="pay.amount" type="number" step="0.01" placeholder="0.00"/></div>
-          <div><label class="text-xs">Date *</label><Input v-model="pay.payment_date" type="date"/></div>
-          <div><label class="text-xs">Method</label><select v-model="pay.method" class="w-full h-9 rounded-md border bg-background px-3 text-sm"><option value="cash">Cash</option><option value="bank">Bank</option><option value="bkash">bKash</option></select></div>
-          <div class="flex items-end"><Button size="sm" @click="submitPay">Pay</Button></div>
-        </div>
+        <p v-if="paymentError" role="alert" class="mb-3 text-sm text-destructive">{{ paymentError }}</p>
+        <form class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" @submit.prevent="submitPay">
+          <div><label for="payment-amount" class="text-xs">Amount *</label><Input id="payment-amount" v-model="pay.amount" type="number" min="0.01" step="0.01" placeholder="0.00" required/></div>
+          <div><label for="payment-date" class="text-xs">Date *</label><Input id="payment-date" v-model="pay.payment_date" type="date" required/></div>
+          <div><label for="payment-method" class="text-xs">Method *</label><select id="payment-method" v-model="pay.method" class="w-full h-9 rounded-md border bg-background px-3 text-sm"><option value="cash">Cash</option><option value="bank">Bank</option><option value="bkash">bKash</option><option value="card">Card</option></select></div>
+          <div v-if="pay.method !== 'cash'"><label for="payment-bank" class="text-xs">Bank / wallet account *</label><SearchableSelect id="payment-bank" v-model="pay.bank_id" :options="paymentAccounts" placeholder="Select account" /></div>
+          <div><label for="payment-ref" class="text-xs">Reference</label><Input id="payment-ref" v-model="pay.reference_no" placeholder="Transaction reference" /></div>
+          <div class="flex items-end"><Button type="submit" size="sm" :disabled="pay.processing || (pay.method !== 'cash' && !pay.bank_id)">{{ pay.processing ? 'Recording…' : 'Record Payment' }}</Button></div>
+        </form>
       </div>
     </div>
       </PageHeader>

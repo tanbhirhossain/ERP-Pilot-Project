@@ -255,3 +255,15 @@ test('a fully depreciated asset cannot be capitalised again and lose its balance
         ->and((float) $asset->net_book_value)->toBe(0.0)
         ->and($asset->status)->toBe('fully_depreciated');
 });
+
+test('depreciation periods must follow the last run without gaps or going backwards', function () {
+    p3faFiscalYear();
+    p3faAsset(p3faCategory());
+    p3faSvc()->run('2026-04');
+    foreach (['2026-03', '2026-06', '2026-13'] as $bad) {
+        try { p3faSvc()->run($bad); $this->fail("Period {$bad} must be refused."); }
+        catch (HttpException $e) { expect($e->getStatusCode())->toBe(422); }
+    }
+    expect(DepreciationRun::count())->toBe(1);
+    expect(p3faSvc()->run('2026-05')->period)->toBe('2026-05');
+});

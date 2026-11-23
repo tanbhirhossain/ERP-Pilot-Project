@@ -172,11 +172,34 @@ class VendorBillService
 
     public function recordPayment(VendorBill $bill, array $data): PurchasePayment
     {
-        if (! $bill->isPosted()) {
-            throw new \DomainException('Only posted bills can receive payments.');
-        }
-
         return DB::transaction(function () use ($bill, $data): PurchasePayment {
+            // Check the latest balance under a row lock, not a stale form/model. This also
+            // serializes concurrent payments before either can move cash or the ledger.
+            $bill = VendorBill::whereKey($bill->getKey())->lockForUpdate()->firstOrFail();
+            if (! $bill->isPosted()) {
+                throw new \DomainException('Only posted bills can receive payments.');
+            }
+            $amount = $data['amount'] ?? null;
+            if (! is_numeric($amount) || (float) $amount <= 0 || round((float) $amount, 2) != (float) $amount) {
+                throw new \DomainException('Payment must be a positive amount with at most two decimal places.');
+            }
+            $dueCents = (int) round((float) $bill->total_amount * 100) - (int) round((float) $bill->paid_amount * 100);
+            if ((int) round((float) $amount * 100) > $dueCents) {
+                throw new \DomainException('Payment cannot exceed the outstanding bill balance.');
+            }
+            $method = $data['method'] ?? 'cash';
+            if (! in_array($method, ['cash', 'bank', 'bkash', 'card'], true)) {
+                throw new \DomainException('Invalid payment method.');
+            }
+            $bank = null;
+            if ($method !== 'cash') {
+                $bank = Bank::active()->find($data['bank_id'] ?? null);
+                if (! $bank || ! $bank->account_id) {
+                    throw new \DomainException('Choose an active bank or wallet linked to a ledger account for non-cash payment.');
+                }
+            } else {
+                $data['bank_id'] = null;
+            }
             $payNo = 'PP-'.str_pad((string) (PurchasePayment::max('id') + 1), 5, '0', STR_PAD_LEFT);
             $payment = PurchasePayment::create($data + ['payment_no' => $payNo, 'bill_id' => $bill->id, 'vendor_id' => $bill->vendor_id, 'created_by' => auth()->id()]);
             if (app()->bound(AccountsPostingProviderInterface::class)) {
@@ -184,7 +207,6 @@ class VendorBillService
                 $purpose = "payment {$payment->payment_no} against {$bill->bill_no}";
                 $apCode = config('accounts.defaults.payable_code', '2100');
                 $cashCode = config('accounts.defaults.cash_code', '1001');
-                $bank = ($data['bank_id'] ?? null) ? Bank::find($data['bank_id']) : null;
 
                 // Both legs are required. On a miss this used to skip the journal while the
                 // increment below still ran, so the bill reported paid_amount and payment_status

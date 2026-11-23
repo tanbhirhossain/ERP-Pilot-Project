@@ -48,7 +48,7 @@ class DepreciationService
 
     private function assertPeriod(string $period): void
     {
-        if (! preg_match('/^\d{4}-\d{2}$/', $period)) {
+        if (! preg_match('/^(\d{4})-(\d{2})$/', $period, $m) || ! checkdate((int) $m[2], 1, (int) $m[1])) {
             abort(422, 'Period must be YYYY-MM.');
         }
     }
@@ -245,6 +245,15 @@ class DepreciationService
         $runNo = 'DEP-'.str_replace('-', '', $period);
 
         return DB::transaction(function () use ($period, $runDate, $runNo, $userId, $notes): DepreciationRun {
+            // Running balances are current, not historical snapshots. Processing a prior
+            // month, or silently skipping a month, would calculate from the wrong NBV.
+            // The first recorded period establishes the starting point; subsequent runs
+            // must be sequential, including empty runs.
+            $last = DepreciationRun::orderByDesc('period')->lockForUpdate()->first();
+            if ($last !== null) {
+                $next = Carbon::createFromFormat('Y-m-d', $last->period.'-01')->addMonthNoOverflow()->format('Y-m');
+                abort_unless($period === $next, 422, "Depreciation must run in order without gaps. Next period is {$next}.");
+            }
             /** @var array<int,int> $expenseByAccount account_id => paise */
             $expenseByAccount = [];
             /** @var array<int,int> $accumByAccount */

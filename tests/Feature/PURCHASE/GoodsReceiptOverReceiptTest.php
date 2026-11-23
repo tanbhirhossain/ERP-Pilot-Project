@@ -285,3 +285,60 @@ test('a receipt stays draft until the authorised confirm receive action posts it
     $this->actingAs(User::first())->post(route('purchase.receipts.post', $draft->id))->assertRedirect();
     expect($draft->fresh()->status)->toBe('posted')->and(p3grnOnHand($product->id, $warehouse->id))->toBe(4.0);
 });
+
+test('a vendor payment cannot exceed the bill due or be repeated using stale state', function () {
+    [$order] = p3grnOrder(qty: 10.0, price: 100.0);
+    $receipt = p3grnPost(p3grnDraft($order));
+    $bill = app(VendorBillService::class)->post(p3grnBill($receipt)->fresh());
+    Account::firstOrCreate(['code' => config('accounts.defaults.cash_code', '1001')], [
+        'name' => 'Cash test', 'account_type' => 'asset', 'nature' => 'debit', 'level' => 1,
+        'is_group' => false, 'is_posting' => true, 'is_active' => true, 'currency' => 'BDT', 'opening_balance' => 0,
+    ]);
+    $svc = app(VendorBillService::class);
+    $args = ['amount' => 1001, 'payment_date' => now()->toDateString(), 'method' => 'cash'];
+    expect(fn () => $svc->recordPayment($bill, $args))->toThrow(\DomainException::class);
+    expect((float) $bill->fresh()->paid_amount)->toBe(0.0);
+    $stale = $bill->fresh();
+    $svc->recordPayment($bill, ['amount' => 1000, 'payment_date' => now()->toDateString(), 'method' => 'cash']);
+    expect(fn () => $svc->recordPayment($stale, ['amount' => 1, 'payment_date' => now()->toDateString(), 'method' => 'cash']))->toThrow(\DomainException::class);
+    expect((float) $bill->fresh()->paid_amount)->toBe(1000.0);
+});
+
+test('paying a particular vendor bill settles that bill payable rather than an older one', function () {
+    [$order] = p3grnOrder(qty: 10.0, price: 100.0);
+    $receipt1 = p3grnPost(p3grnDraft($order, qty: 5.0));
+    $receipt2 = p3grnPost(p3grnDraft($order->fresh('items'), qty: 5.0));
+    $svc = app(VendorBillService::class);
+    $bill1 = $svc->post(p3grnBill($receipt1)->fresh());
+    $bill2 = $svc->post(p3grnBill($receipt2)->fresh());
+    Account::firstOrCreate(['code' => config('accounts.defaults.cash_code', '1001')], [
+        'name' => 'Cash test', 'account_type' => 'asset', 'nature' => 'debit', 'level' => 1,
+        'is_group' => false, 'is_posting' => true, 'is_active' => true, 'currency' => 'BDT', 'opening_balance' => 0,
+    ]);
+    $svc->recordPayment($bill2, ['amount' => 200, 'payment_date' => now()->toDateString(), 'method' => 'cash']);
+    $ap1 = \Modules\ACCOUNTS\Models\Payable::where('journal_id', $bill1->journal_id)->firstOrFail();
+    $ap2 = \Modules\ACCOUNTS\Models\Payable::where('journal_id', $bill2->journal_id)->firstOrFail();
+    expect((float) $ap1->paid_amount)->toBe(0.0)->and((float) $ap1->balance)->toBe(500.0)
+        ->and((float) $ap2->paid_amount)->toBe(200.0)->and((float) $ap2->balance)->toBe(300.0)
+        ->and((float) $bill2->fresh()->paid_amount)->toBe(200.0);
+});
+
+test('multiple receipt lines for one order item cannot collectively exceed the remaining quantity', function () {
+    [$order, $warehouse, $product] = p3grnOrder(qty: 10.0, price: 100.0);
+    $line = $order->items->first();
+    $row = ['order_item_id'=>$line->id, 'product_id'=>$product->id, 'product_name'=>$product->name, 'sku'=>$product->sku, 'qty'=>6, 'unit_price'=>100, 'discount_pct'=>0, 'vat_rate'=>0];
+    $draft = app(GoodsReceiptService::class)->create(['order_id'=>$order->id, 'vendor_id'=>$order->vendor_id, 'warehouse_id'=>$warehouse->id, 'receipt_date'=>now()->toDateString(), 'items'=>[$row,$row]]);
+    expect(fn () => p3grnPost($draft))->toThrow(\DomainException::class, 'the order still owes');
+    expect(p3grnOnHand($product->id,$warehouse->id))->toBe(0.0)->and($draft->fresh()->status)->toBe('draft');
+});
+
+test('a noncash vendor payment requires a valid ledger-linked bank or wallet', function () {
+    [$order] = p3grnOrder(qty: 10.0, price: 100.0);
+    $bill = app(VendorBillService::class)->post(p3grnBill(p3grnPost(p3grnDraft($order)))->fresh());
+    $svc = app(VendorBillService::class);
+    foreach (['bank', 'bkash', 'card'] as $method) {
+        expect(fn () => $svc->recordPayment($bill, ['amount'=>100, 'payment_date'=>now()->toDateString(), 'method'=>$method]))
+            ->toThrow(\DomainException::class, 'active bank or wallet');
+    }
+    expect((float) $bill->fresh()->paid_amount)->toBe(0.0);
+});

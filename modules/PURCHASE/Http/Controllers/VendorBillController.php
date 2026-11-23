@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Modules\ACCOUNTS\Models\Bank;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\CORE\Support\PaginatedResource;
 use Modules\PURCHASE\Models\GoodsReceipt;
@@ -49,7 +50,13 @@ class VendorBillController extends Controller
     {
         $bill->load(['vendor', 'warehouse', 'order', 'receipt', 'items.product', 'payments', 'journal']);
 
-        return Inertia::render('PURCHASE::Bills/Show', ['bill' => $bill]);
+        return Inertia::render('PURCHASE::Bills/Show', [
+            'bill' => $bill,
+            'canPay' => (bool) request()->user()?->can('purchase.payments.manage'),
+            'paymentAccounts' => request()->user()?->can('purchase.payments.manage')
+                ? Bank::active()->whereNotNull('account_id')->orderBy('name')->get(['id', 'name'])->map(fn ($b) => ['value' => $b->id, 'label' => $b->name])
+                : [],
+        ]);
     }
 
     public function edit(VendorBill $bill): Response
