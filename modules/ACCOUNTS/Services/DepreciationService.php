@@ -176,8 +176,8 @@ class DepreciationService
         if ($asset->status === 'in_use') {
             return $asset; // already live
         }
-        if ($asset->status === 'disposed') {
-            abort(422, 'A disposed asset cannot be capitalised.');
+        if ($asset->status !== 'draft') {
+            abort(422, 'Only a draft asset can be capitalised; existing depreciation cannot be reset.');
         }
         if ($this->cents((float) $asset->cost) <= 0) {
             abort(422, 'An asset needs a cost greater than zero before it can be capitalised.');

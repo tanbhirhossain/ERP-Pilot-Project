@@ -8,8 +8,14 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// HRM Automated Attendance Sync every 15 minutes
-Schedule::command('hrm:sync-attendance')->everyFifteenMinutes()->withoutOverlapping();
+// One shared lock prevents the scheduled raw sync and pipeline from using devices concurrently.
+// Put the full pipeline first when both are due; preserve the existing 15-minute incremental sync.
+Schedule::command('hrm:pipeline --from=yesterday --to=today')
+    ->cron('0 9,14,22 * * *')->timezone('Asia/Dhaka')
+    ->createMutexNameUsing('hrm-attendance-scheduled-device-sync')->withoutOverlapping(180)
+    ->appendOutputTo(storage_path('logs/hrm-pipeline-scheduled.log'));
+Schedule::command('hrm:sync-attendance')->everyFifteenMinutes()
+    ->createMutexNameUsing('hrm-attendance-scheduled-device-sync')->withoutOverlapping(180);
 
 // ------------------------------------------------ Phase 2 (F21) business jobs
 // Each command is idempotent (daily cache lock / firstOrCreate) and logs its

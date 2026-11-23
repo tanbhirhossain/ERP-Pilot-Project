@@ -15,6 +15,7 @@ import { buildSalePayload, cartLabel } from '@sales/offline/payload';
 import { offlineStockWarning } from '@sales/offline/catalog';
 import { useOfflineTill } from '@sales/offline/useOfflineTill';
 import { unwrapOptions } from '@core/Utils/optionsPayload';
+import { readWarehouse, saveWarehouse } from '@sales/offline/posWarehousePreference';
 // The house unwrapper: INVENTORY answers `{data:[…]}`, CORE and HRM answer `{items:[…]}`, and a
 // paginated resource nests twice. Hand-rolling one shape here is how a picker comes to look empty.
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
@@ -78,6 +79,14 @@ const catalogError = ref('');
 let catalogTimer: number | undefined;
 
 const page = usePage() as any;
+// Remember only a currently active option, scoped to this signed-in user on this browser.
+const warehouseUserId = page.props.auth?.user?.id;
+if (warehouseUserId != null) {
+  try { warehouseId.value = readWarehouse(window.localStorage, warehouseUserId, props.warehouses); } catch { /* storage may be blocked */ }
+  watch(warehouseId, (value) => {
+    try { saveWarehouse(window.localStorage, warehouseUserId, value, props.warehouses); } catch { /* storage may be blocked */ }
+  });
+}
 
 /*
  * F22 — the offline till.
@@ -621,7 +630,7 @@ onMounted(() => {
               </p>
             </div>
             <div class="ml-auto flex flex-wrap items-center gap-2">
-              <div class="w-48"><Label class="sr-only">Warehouse</Label><SearchableSelect v-model="warehouseId" :options="warehouses" placeholder="Warehouse *" /></div>
+              <div class="w-48"><Label class="sr-only">Warehouse</Label><SearchableSelect v-model="warehouseId" :options="warehouses" placeholder="Warehouse *" /><p class="mt-0.5 text-[10px] text-muted-foreground">Selection remembered on this browser</p></div>
               <div class="w-48"><Label class="sr-only">Customer</Label><SearchableSelect v-model="customerId" :options="customers" placeholder="Walk-in" clearable /></div>
             </div>
           </div>

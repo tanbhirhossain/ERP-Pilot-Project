@@ -240,3 +240,18 @@ test('a drafted asset can be created and appears with a generated code', functio
     expect($asset)->not->toBeNull()->and($asset->status)->toBe('draft')
         ->and($asset->asset_code)->toMatch('/^FA-\d{4}-\d{4}$/');
 });
+
+
+test('a fully depreciated asset cannot be capitalised again and lose its balances', function () {
+    $asset = p3faAsset(p3faCategory(), ['status' => 'fully_depreciated', 'cost' => 120000, 'accumulated_dep' => 120000, 'net_book_value' => 0]);
+    try {
+        p3faSvc()->capitalize($asset);
+        $this->fail('A fully depreciated asset must not be re-capitalised.');
+    } catch (HttpException $e) {
+        expect($e->getStatusCode())->toBe(422);
+    }
+    $asset->refresh();
+    expect((float) $asset->accumulated_dep)->toBe(120000.0)
+        ->and((float) $asset->net_book_value)->toBe(0.0)
+        ->and($asset->status)->toBe('fully_depreciated');
+});
