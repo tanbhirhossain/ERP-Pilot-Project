@@ -52,9 +52,12 @@ final class LeaveBalanceService
             'working_days' => is_array($setting->working_days) && $setting->working_days !== []
                 ? array_map('intval', $setting->working_days)
                 : self::DEFAULT_WORKING_DAYS,
-            'approval_steps' => is_array($setting->approval_steps) && $setting->approval_steps !== []
-                ? $setting->approval_steps
-                : ['HR'],
+            // Phase-2 engine: an active chain owns the stages; per-type settings stay
+            // as the fallback (and the only source when no chain is configured).
+            'approval_steps' => app(\Modules\HRM\Services\ApprovalEngine::class)->chainLabels('leave')
+                ?? (is_array($setting->approval_steps) && $setting->approval_steps !== []
+                    ? $setting->approval_steps
+                    : ['HR']),
             'is_carry_forward' => (bool) $setting->is_carry_forward,
             'max_carry_days' => $setting->max_carry_days === null ? null : (float) $setting->max_carry_days,
             'carry_expiry_months' => (int) ($setting->carry_expiry_months ?? 3),

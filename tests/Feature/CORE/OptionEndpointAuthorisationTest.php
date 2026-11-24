@@ -272,7 +272,10 @@ test('no permission named by an option controller is a phantom', function () {
     // 196 since the cutlist review stage: payroll.cutlists.review joins the vocabulary, gating the
     // review desk (index/show/approve/reopen/adjust). It is deliberately NOT in any option map — the
     // cutlist pages take no pickers — the pin exists so the map audit stays exhaustive.
-    expect($known)->toHaveCount(196, 'the seeded permission vocabulary changed; re-check the option maps against it');
+    // 198 since the Phase-2 approval engine: hrm.approval-chains.view/manage join it, gating the
+    // chain admin API (checked in-controller against the token user). No option endpoint is gated
+    // on them, so the maps below are unchanged.
+    expect($known)->toHaveCount(198, 'the seeded permission vocabulary changed; re-check the option maps against it');
 
     $phantoms = [];
 

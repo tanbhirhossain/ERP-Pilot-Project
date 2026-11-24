@@ -70,6 +70,9 @@ final class LeaveRequestService
                 'current_stage' => 0,
             ]);
 
+            // Phase-2 engine: ping the first stage's desk (no-op without a chain).
+            app(\Modules\HRM\Services\ApprovalEngine::class)->notifyNewLeave($leave);
+
             return $leave;
         });
     }
@@ -115,9 +118,9 @@ final class LeaveRequestService
      * previous version re-derived the stage from "how many approvals exist" when the row was missing,
      * which double-counted on a retry.
      */
-    public function approve(LeaveRequest $r): LeaveRequest
+    public function approve(LeaveRequest $r, ?string $comments = null): LeaveRequest
     {
-        return DB::transaction(function () use ($r) {
+        return DB::transaction(function () use ($r, $comments) {
             $locked = LeaveRequest::query()->whereKey($r->id)->lockForUpdate()->firstOrFail();
             if ($locked->status !== 'Pending') {
                 throw ValidationException::withMessages(['status' => "This application is already {$locked->status}."]);
@@ -160,6 +163,7 @@ final class LeaveRequestService
                 'stage_name' => $steps[$step] ?? 'HR',
                 'decision' => 'Approved',
                 'actor_id' => auth()->id(),
+                'comments' => $comments,
                 'decided_at' => now(),
             ]);
             $workflow->update(['current_stage' => $step + 1]);

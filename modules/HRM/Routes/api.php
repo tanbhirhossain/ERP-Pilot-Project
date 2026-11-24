@@ -1,9 +1,11 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\HRM\Http\Controllers\Api\V1\ApprovalApiController;
 use Modules\HRM\Http\Controllers\Api\V1\AttendanceApiController;
 use Modules\HRM\Http\Controllers\Api\V1\AuthController;
 use Modules\HRM\Http\Controllers\Api\V1\CertificateApiController;
+use Modules\HRM\Http\Controllers\Api\V1\ChainAdminApiController;
 use Modules\HRM\Http\Controllers\Api\V1\DashboardController;
 use Modules\HRM\Http\Controllers\Api\V1\InformedApiController;
 use Modules\HRM\Http\Controllers\Api\V1\LeaveApiController;
@@ -91,6 +93,19 @@ Route::middleware(['api'])->prefix('api')->group(function (): void {
             Route::get('notifications/unread-count', [NotificationApiController::class, 'unreadCount'])->name('notifications.unread-count');
             Route::post('notifications/{id}/read', [NotificationApiController::class, 'markRead'])->name('notifications.read');
             Route::post('notifications/read-all', [NotificationApiController::class, 'markAllRead'])->name('notifications.read-all');
+
+            // Phase 2 — approval desks (stage membership authorizes, not a permission).
+            Route::get('approvals/pending', [ApprovalApiController::class, 'pending'])->name('approvals.pending');
+            Route::get('approvals/history', [ApprovalApiController::class, 'history'])->name('approvals.history');
+            Route::post('approvals/leaves/{id}/approve', [ApprovalApiController::class, 'approveLeave'])->name('approvals.leaves.approve');
+            Route::post('approvals/leaves/{id}/reject', [ApprovalApiController::class, 'rejectLeave'])->name('approvals.leaves.reject');
+            Route::post('approvals/overtimes/{id}/approve', [ApprovalApiController::class, 'approveOvertime'])->name('approvals.overtimes.approve');
+            Route::post('approvals/overtimes/{id}/reject', [ApprovalApiController::class, 'rejectOvertime'])->name('approvals.overtimes.reject');
+
+            // Phase 2 — chain admin (hrm.approval-chains.view/.manage).
+            Route::get('admin/chains', [ChainAdminApiController::class, 'index'])->name('admin.chains.index');
+            Route::get('admin/chains/{key}', [ChainAdminApiController::class, 'show'])->name('admin.chains.show');
+            Route::put('admin/chains/{key}', [ChainAdminApiController::class, 'update'])->name('admin.chains.update');
         });
     });
 });

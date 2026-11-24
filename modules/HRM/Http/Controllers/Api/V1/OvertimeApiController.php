@@ -119,6 +119,9 @@ class OvertimeApiController extends Controller
 
         $ot->load('approver:id,name');
 
+        // Phase-2 engine: ping the first stage's desk (no-op without a chain).
+        app(\Modules\HRM\Services\ApprovalEngine::class)->notifyNewOvertime($ot);
+
         return ApiResponse::ok($ot, ucfirst(strtolower($data['overtime_type'])).' claim submitted.', [], 201);
     }
 
