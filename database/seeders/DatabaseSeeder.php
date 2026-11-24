@@ -8,6 +8,7 @@ use Modules\ACCOUNTS\Database\Seeders\AccountsPermissionSeeder;
 use Modules\CORE\Database\Seeders\CoreSeeder;
 use Modules\CORE\Database\Seeders\MakerCheckerSeeder;
 use Modules\HRM\Database\Seeders\ApprovalChainSeeder;
+use Modules\HRM\Database\Seeders\TeamWorkNoticeSeeder;
 use Modules\CORE\Database\Seeders\Phase1Seeder;
 use Modules\CORE\Database\Seeders\SuperAdminSeeder;
 use Modules\HRM\Database\Seeders\AMZOctober2026CalendarSeeder;
@@ -50,6 +51,8 @@ class DatabaseSeeder extends Seeder
             MakerCheckerSeeder::class,
             // Approval engine: approver roles + leave/overtime chains (Phase 2).
             ApprovalChainSeeder::class,
+            // Team work/notice permissions (Phase 3).
+            TeamWorkNoticeSeeder::class,
             HRMPermissionSeeder::class,
             PAYROLLPermissionSeeder::class,
             // The fallback shift attendance classification depends on. Extracted from migration

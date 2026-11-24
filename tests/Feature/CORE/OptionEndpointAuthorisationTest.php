@@ -275,7 +275,10 @@ test('no permission named by an option controller is a phantom', function () {
     // 198 since the Phase-2 approval engine: hrm.approval-chains.view/manage join it, gating the
     // chain admin API (checked in-controller against the token user). No option endpoint is gated
     // on them, so the maps below are unchanged.
-    expect($known)->toHaveCount(198, 'the seeded permission vocabulary changed; re-check the option maps against it');
+    // 200 since Phase-3 team domains: hrm.tasks.manage and hrm.notices.manage join it, gating
+    // work assignment and notice posting (checked in-controller). Again no picker reads them,
+    // so the maps below are unchanged.
+    expect($known)->toHaveCount(200, 'the seeded permission vocabulary changed; re-check the option maps against it');
 
     $phantoms = [];
 

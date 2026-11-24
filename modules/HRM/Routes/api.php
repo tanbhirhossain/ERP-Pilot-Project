@@ -4,15 +4,21 @@ use Illuminate\Support\Facades\Route;
 use Modules\HRM\Http\Controllers\Api\V1\ApprovalApiController;
 use Modules\HRM\Http\Controllers\Api\V1\AttendanceApiController;
 use Modules\HRM\Http\Controllers\Api\V1\AuthController;
+use Modules\HRM\Http\Controllers\Api\V1\CeoApiController;
 use Modules\HRM\Http\Controllers\Api\V1\CertificateApiController;
 use Modules\HRM\Http\Controllers\Api\V1\ChainAdminApiController;
 use Modules\HRM\Http\Controllers\Api\V1\DashboardController;
 use Modules\HRM\Http\Controllers\Api\V1\InformedApiController;
 use Modules\HRM\Http\Controllers\Api\V1\LeaveApiController;
+use Modules\HRM\Http\Controllers\Api\V1\NoticeApiController;
 use Modules\HRM\Http\Controllers\Api\V1\NotificationApiController;
+use Modules\HRM\Http\Controllers\Api\V1\OrgApiController;
 use Modules\HRM\Http\Controllers\Api\V1\OvertimeApiController;
 use Modules\HRM\Http\Controllers\Api\V1\RegularizationApiController;
+use Modules\HRM\Http\Controllers\Api\V1\RosterApiController;
 use Modules\HRM\Http\Controllers\Api\V1\ResignationApiController;
+use Modules\HRM\Http\Controllers\Api\V1\TaskApiController;
+use Modules\HRM\Http\Controllers\Api\V1\TeamApiController;
 use Modules\PAYROLL\Http\Controllers\Api\V1\LoanApiController;
 use Modules\PAYROLL\Http\Controllers\Api\V1\PayslipApiController;
 use Modules\PAYROLL\Http\Controllers\Api\V1\ProvidentFundApiController;
@@ -106,6 +112,51 @@ Route::middleware(['api'])->prefix('api')->group(function (): void {
             Route::get('admin/chains', [ChainAdminApiController::class, 'index'])->name('admin.chains.index');
             Route::get('admin/chains/{key}', [ChainAdminApiController::class, 'show'])->name('admin.chains.show');
             Route::put('admin/chains/{key}', [ChainAdminApiController::class, 'update'])->name('admin.chains.update');
+
+            // Phase 3 — team (direct reports, or everyone for HR/DGM/GM/CEO/Admins).
+            Route::get('team/members', [TeamApiController::class, 'members'])->name('team.members');
+            Route::get('team/attendance/logs', [TeamApiController::class, 'attendanceLogs'])->name('team.attendance.logs');
+            Route::get('team/attendance/pairs', [TeamApiController::class, 'attendancePairs'])->name('team.attendance.pairs');
+            Route::get('team/attendance/daily', [TeamApiController::class, 'attendanceDaily'])->name('team.attendance.daily');
+            Route::get('team/attendance/summary', [TeamApiController::class, 'attendanceSummary'])->name('team.attendance.summary');
+            Route::get('team/leaves', [TeamApiController::class, 'leaves'])->name('team.leaves');
+            Route::post('team/leaves/apply', [TeamApiController::class, 'applyLeave'])->name('team.leaves.apply');
+            Route::get('team/overtimes', [TeamApiController::class, 'overtimes'])->name('team.overtimes');
+            Route::get('team/roster', [TeamApiController::class, 'roster'])->name('team.roster');
+
+            // Phase 3 — roster writes (team scope, via RosterDutyService).
+            Route::get('roster/shifts', [RosterApiController::class, 'shifts'])->name('roster.shifts');
+            Route::post('roster/duties/bulk', [RosterApiController::class, 'bulkAssign'])->name('roster.duties.bulk');
+            Route::post('roster/duties', [RosterApiController::class, 'store'])->name('roster.duties.store');
+            Route::delete('roster/duties/{id}', [RosterApiController::class, 'destroy'])->name('roster.duties.destroy');
+
+            // Phase 3 — work assignment (hrm.tasks.manage + scope).
+            Route::post('tasks', [TaskApiController::class, 'store'])->name('tasks.store');
+            Route::get('tasks/mine', [TaskApiController::class, 'mine'])->name('tasks.mine');
+            Route::get('tasks/assigned', [TaskApiController::class, 'assigned'])->name('tasks.assigned');
+            Route::get('tasks/team', [TaskApiController::class, 'team'])->name('tasks.team');
+            Route::get('tasks/{id}', [TaskApiController::class, 'show'])->name('tasks.show');
+            Route::patch('tasks/{id}/progress', [TaskApiController::class, 'progress'])->name('tasks.progress');
+            Route::post('tasks/{id}/verify', [TaskApiController::class, 'verify'])->name('tasks.verify');
+            Route::post('tasks/{id}/close', [TaskApiController::class, 'close'])->name('tasks.close');
+            Route::post('tasks/{id}/reopen', [TaskApiController::class, 'reopen'])->name('tasks.reopen');
+            Route::post('tasks/{id}/cancel', [TaskApiController::class, 'cancel'])->name('tasks.cancel');
+
+            // Phase 3 — notices (hrm.notices.manage + audience scope).
+            Route::post('notices', [NoticeApiController::class, 'store'])->name('notices.store');
+            Route::get('notices/mine', [NoticeApiController::class, 'mine'])->name('notices.mine');
+            Route::get('notices/posted', [NoticeApiController::class, 'posted'])->name('notices.posted');
+            Route::patch('notices/{id}', [NoticeApiController::class, 'update'])->name('notices.update');
+            Route::post('notices/{id}/retract', [NoticeApiController::class, 'retract'])->name('notices.retract');
+
+            // Phase 3 — organisation directory.
+            Route::get('org/departments', [OrgApiController::class, 'departments'])->name('org.departments');
+            Route::get('org/employees', [OrgApiController::class, 'employees'])->name('org.employees');
+
+            // Phase 3 — CEO cockpit (CEO role only).
+            Route::get('ceo/dashboard', [CeoApiController::class, 'dashboard'])->name('ceo.dashboard');
+            Route::get('ceo/statistics', [CeoApiController::class, 'statistics'])->name('ceo.statistics');
+            Route::get('ceo/report', [CeoApiController::class, 'report'])->name('ceo.report');
         });
     });
 });

@@ -24,6 +24,7 @@ class HRMPermissionSeeder extends Seeder
             'hrm.leave-types.view', 'hrm.leave-types.manage',
             'hrm.leaves.view', 'hrm.leaves.manage', 'hrm.leaves.approve', 'hrm.leaves.balance.view',
             'hrm.approval-chains.view', 'hrm.approval-chains.manage',
+            'hrm.tasks.manage', 'hrm.notices.manage',
             'hrm.documents.view', 'hrm.documents.manage', 'hrm.documents.verify',
             'hrm.assets.view', 'hrm.assets.manage',
             'hrm.probations.view', 'hrm.probations.manage',
