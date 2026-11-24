@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HRM\Support\Api\ApiResponse;
@@ -20,6 +21,15 @@ use Modules\HRM\Support\Api\ApiResponse;
  */
 class NotificationApiController extends Controller
 {
+    #[ApiEndpoint(
+        summary: 'My notifications (the bell)',
+        description: 'Newest first. Each row carries ref_type + ref_id so the app deep-links the tap; push carries the same pair.',
+        query: [
+            ['name' => 'unread_only', 'in' => 'query', 'schema' => ['type' => 'boolean']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -36,6 +46,11 @@ class NotificationApiController extends Controller
         return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'Notifications.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Unread badge count',
+        description: 'The single number the app badge polls.',
+        response: 'MobileEnvelope',
+    )]
     public function unreadCount(Request $request): JsonResponse
     {
         return ApiResponse::ok(
@@ -44,6 +59,13 @@ class NotificationApiController extends Controller
         );
     }
 
+    #[ApiEndpoint(
+        summary: 'Mark one notification read',
+        description: 'The id is the notification UUID. Another user\'s id answers 404.',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'uuid']]],
+    )]
     public function markRead(Request $request, string $id): JsonResponse
     {
         $notification = $request->user()->notifications()->find($id);
@@ -57,6 +79,12 @@ class NotificationApiController extends Controller
         return ApiResponse::ok(null, 'Marked as read.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Mark all notifications read',
+        description: 'Clears the badge in one call.',
+        response: 'MobileEnvelope',
+        status: '200',
+    )]
     public function markAllRead(Request $request): JsonResponse
     {
         $request->user()->unreadNotifications()->update(['read_at' => now()]);

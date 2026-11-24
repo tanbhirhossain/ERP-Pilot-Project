@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HRM\Models\Attendance\AttendanceDaily;
@@ -23,6 +24,16 @@ class AttendanceApiController extends Controller
 {
     use ResolvesApiEmployee;
 
+    #[ApiEndpoint(
+        summary: 'My punch log',
+        description: 'Raw IN/OUT punches, newest first. Defaults to this month; pages hold up to 200 rows.',
+        query: [
+            ['name' => 'from', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'to', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 200]],
+        ],
+        response: 'MobilePage',
+    )]
     public function logs(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -41,6 +52,16 @@ class AttendanceApiController extends Controller
         return ApiResponse::paginated($page, 'My attendance log.');
     }
 
+    #[ApiEndpoint(
+        summary: 'My IN/OUT pairs',
+        description: 'Matched punch pairs per duty date, newest first. Defaults to this month.',
+        query: [
+            ['name' => 'from', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'to', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 200]],
+        ],
+        response: 'MobilePage',
+    )]
     public function pairs(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -60,6 +81,16 @@ class AttendanceApiController extends Controller
         return ApiResponse::paginated($page, 'My attendance pairs.');
     }
 
+    #[ApiEndpoint(
+        summary: 'My daily verdicts',
+        description: 'The per-day attendance verdict (Present, Late, Absent, On Leave, …), newest first. Defaults to this month.',
+        query: [
+            ['name' => 'from', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'to', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 200]],
+        ],
+        response: 'MobilePage',
+    )]
     public function daily(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -78,6 +109,14 @@ class AttendanceApiController extends Controller
         return ApiResponse::paginated($page, 'My daily attendance.');
     }
 
+    #[ApiEndpoint(
+        summary: 'My monthly attendance summary',
+        description: 'Counts by verdict plus worked, overtime and total hours for the month.',
+        query: [
+            ['name' => 'month', 'in' => 'query', 'schema' => ['type' => 'string', 'pattern' => '^\\d{4}-\\d{2}$'], 'description' => 'YYYY-MM, defaults to this month.'],
+        ],
+        response: 'MobileEnvelope',
+    )]
     public function summary(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);

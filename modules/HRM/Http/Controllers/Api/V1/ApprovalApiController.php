@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,6 +32,14 @@ class ApprovalApiController extends Controller
 {
     public function __construct(private readonly ApprovalEngine $engine) {}
 
+    #[ApiEndpoint(
+        summary: 'My approval desk',
+        description: 'Leave and overtime items sitting on the caller\'s stage right now — stage-exact, both flows. Approving itself is per-item below.',
+        query: [
+            ['name' => 'type', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['leave', 'overtime']], 'description' => 'Omit for both flows.'],
+        ],
+        response: 'MobileEnvelope',
+    )]
     public function pending(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -62,6 +71,16 @@ class ApprovalApiController extends Controller
         ]);
     }
 
+    #[ApiEndpoint(
+        summary: 'Decisions I have taken',
+        description: 'My approval trail across both flows, newest first.',
+        query: [
+            ['name' => 'type', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['leave', 'overtime']]],
+            ['name' => 'page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1]],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function history(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -85,6 +104,14 @@ class ApprovalApiController extends Controller
         return ApiResponse::paginated($paginator, 'My approval history.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Approve a leave stage',
+        description: 'Moves the application to the next stage or approves it finally. From the wrong stage answers 403 NOT_YOUR_STAGE naming the desk it waits on.',
+        request: 'MobileApprove',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function approveLeave(Request $request, int $id): JsonResponse
     {
         $leave = LeaveRequest::find($id);
@@ -113,6 +140,14 @@ class ApprovalApiController extends Controller
         ], $leave->status === 'Pending' ? "Approved. Moved to {$stage['label']}." : 'Final approval complete.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Reject a leave application',
+        description: 'Ends the walk wherever it stands; the comments travel to the applicant as the reason. From the wrong stage answers 403 NOT_YOUR_STAGE.',
+        request: 'MobileLeaveReject',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function rejectLeave(Request $request, int $id): JsonResponse
     {
         $leave = LeaveRequest::find($id);
@@ -134,6 +169,14 @@ class ApprovalApiController extends Controller
         return ApiResponse::ok(['id' => $leave->id, 'status' => $leave->status], 'Leave application rejected.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Approve an overtime stage',
+        description: 'Optionally adjusts the hours before passing it on. From the wrong stage answers 403 NOT_YOUR_STAGE.',
+        request: 'MobileOvertimeApprove',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function approveOvertime(Request $request, int $id): JsonResponse
     {
         $overtime = RosterOvertime::find($id);
@@ -171,6 +214,14 @@ class ApprovalApiController extends Controller
         ], $overtime->status === 'Pending' ? "Approved. Moved to {$stage['label']}." : 'Final approval complete.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Reject an overtime record',
+        description: 'Ends the record; the reason is required and travels to the claimant. From the wrong stage answers 403 NOT_YOUR_STAGE.',
+        request: 'MobileOvertimeReject',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function rejectOvertime(Request $request, int $id): JsonResponse
     {
         $overtime = RosterOvertime::find($id);

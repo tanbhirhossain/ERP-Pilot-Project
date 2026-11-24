@@ -75,7 +75,7 @@ test('login returns a bearer token and the profile payload', function (): void {
     expect($res->json('data.token'))->toBeString()->not->toBe('');
 
     // The token really authenticates.
-    $me = $this->withToken($res->json('data.token'))->getJson('/api/v1/auth/me');
+    $me = $this->withToken($res->json('data.token'))->getJson('/api/v1/auth/profile');
     $me->assertOk()->assertJsonPath('data.employee.employee_id', 'EMP-T01');
 });
 
@@ -90,7 +90,7 @@ test('login rejects a wrong password with 401', function (): void {
 });
 
 test('guest requests answer 401', function (): void {
-    $this->getJson('/api/v1/auth/me')->assertStatus(401);
+    $this->getJson('/api/v1/auth/profile')->assertStatus(401);
     $this->getJson('/api/v1/dashboard')->assertStatus(401);
 });
 

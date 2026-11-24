@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HRM\Models\Employee\EmployeeResignation;
@@ -25,6 +26,11 @@ class ResignationApiController extends Controller
 
     public function __construct(private readonly EmployeeResignationService $resignations) {}
 
+    #[ApiEndpoint(
+        summary: 'My resignation requests',
+        description: 'Usually zero or one rows — a second pending request is refused.',
+        response: 'MobileEnvelope',
+    )]
     public function index(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -40,6 +46,12 @@ class ResignationApiController extends Controller
         return ApiResponse::ok($rows, 'My resignation requests.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Submit resignation',
+        description: 'Last working date must be after today. Only one pending request at a time — a second answers 422.',
+        request: 'MobileResignationApply',
+        response: 'MobileEnvelope',
+    )]
     public function store(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);

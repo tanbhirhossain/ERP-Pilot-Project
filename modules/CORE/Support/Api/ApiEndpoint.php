@@ -17,6 +17,11 @@ use Attribute;
  * in the generated document are read back out of the route's real middleware list, so the
  * spec can only ever describe what is actually enforced.
  *
+ * `$status` overrides the derived success code (201 for POST/PUT/PATCH, else 200) for
+ * the endpoints that genuinely differ — action POSTs that answer 200 with no resource
+ * created. Only 200/201 are allowed, so the override can correct the derivation but
+ * never invent a status the framework would not return.
+ *
  * A v1 route whose handler lacks this attribute makes `php artisan api:spec` throw, which
  * is the point: undocumented endpoints should fail a build, not degrade the docs.
  */
@@ -35,5 +40,6 @@ final class ApiEndpoint
         public array $query = [],
         public array $path = [],
         public bool $public = false,
+        public ?string $status = null,
     ) {}
 }

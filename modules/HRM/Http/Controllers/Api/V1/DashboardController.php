@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HRM\Models\Attendance\AttendanceDaily;
@@ -27,6 +28,11 @@ class DashboardController extends Controller
 {
     use ResolvesApiEmployee;
 
+    #[ApiEndpoint(
+        summary: 'Employee home screen',
+        description: 'Employee card, last 6 payslips, leave taken/pending, this-month attendance, and the pending-count badges for every self-service queue.',
+        response: 'MobileEnvelope',
+    )]
     public function __invoke(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);

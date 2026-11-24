@@ -4,9 +4,10 @@ namespace Modules\HRM\Notifications;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use Modules\HRM\Notifications\Channels\FcmChannel;
 
 /**
- * Generic in-app desk events (database channel; FCM is Phase 4).
+ * Generic desk events: in-app bell (database) + push (FCM, Phase 4).
  *
  * ref_type carries the domain (task|notice|roster|...), ref_id the row — the
  * bell deep-links off the pair. ApprovalNotification stays approval-shaped;
@@ -29,7 +30,19 @@ class DeskNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return ['database', FcmChannel::class];
+    }
+
+    /**
+     * @return array{title: string, body: string, data: array<string, mixed>}
+     */
+    public function toPush(object $notifiable): array
+    {
+        return [
+            'title' => $this->title,
+            'body' => $this->body,
+            'data' => array_merge($this->toArray($notifiable), ['ref_id' => (string) $this->refId]),
+        ];
     }
 
     /**

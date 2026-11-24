@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -35,6 +36,12 @@ class NoticeApiController extends Controller
 {
     use ResolvesTeamScope;
 
+    #[ApiEndpoint(
+        summary: 'Post a notice',
+        description: 'Needs hrm.notices.manage. Audiences: all, department (ids are department ids), employees (ids are employee codes). A supervisor may only address their own reports; HR/DGM/GM/CEO may target anything.',
+        request: 'MobileNoticePost',
+        response: 'MobileEnvelope',
+    )]
     public function store(Request $request): JsonResponse
     {
         if (! $request->user()->can(TeamWorkNoticeSeeder::PERM_NOTICES)) {
@@ -109,6 +116,15 @@ class NoticeApiController extends Controller
         return ApiResponse::ok($notice, 'Notice posted.', [], 201);
     }
 
+    #[ApiEndpoint(
+        summary: 'Notices visible to me',
+        description: 'Live only (active and unexpired), newest first — exactly what the app board shows.',
+        query: [
+            ['name' => 'page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1]],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function mine(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -149,6 +165,14 @@ class NoticeApiController extends Controller
         return ApiResponse::paginated($paginator, 'My notices.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Notices I posted',
+        description: 'Including retracted and expired ones, so the poster can audit their own board.',
+        query: [
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function posted(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -163,6 +187,14 @@ class NoticeApiController extends Controller
         return ApiResponse::paginated($page, 'Notices I posted.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Edit a notice',
+        description: 'Poster or all-scope roles only. Title, body, expiry and the active flag are editable; the audience is fixed at post time.',
+        request: 'MobileNoticeUpdate',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function update(Request $request, int $id): JsonResponse
     {
         $notice = Notice::find($id);
@@ -187,6 +219,13 @@ class NoticeApiController extends Controller
         return ApiResponse::ok($notice->fresh(), 'Notice updated.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Retract a notice',
+        description: 'Poster or all-scope roles only. The row stays for audit; it simply stops being visible.',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function retract(Request $request, int $id): JsonResponse
     {
         $notice = Notice::find($id);

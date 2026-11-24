@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -36,6 +37,11 @@ class LeaveApiController extends Controller
         private readonly LeaveWorkspaceService $workspace,
     ) {}
 
+    #[ApiEndpoint(
+        summary: 'Active leave types',
+        description: 'The catalogue the apply form offers. Inactive types never appear here.',
+        response: 'MobileEnvelope',
+    )]
     public function types(): JsonResponse
     {
         $types = LeaveType::where('is_active', true)
@@ -45,6 +51,14 @@ class LeaveApiController extends Controller
         return ApiResponse::ok($types, 'Leave types.');
     }
 
+    #[ApiEndpoint(
+        summary: 'My leave balances',
+        description: 'Per-type entitlement, taken and remaining for the year. Defaults to the current year.',
+        query: [
+            ['name' => 'year', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 2000, 'maximum' => 2100]],
+        ],
+        response: 'MobileEnvelope',
+    )]
     public function balances(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -61,6 +75,17 @@ class LeaveApiController extends Controller
         );
     }
 
+    #[ApiEndpoint(
+        summary: 'Estimate days and sufficiency',
+        description: 'How many days a range would charge (half-day aware) and whether the balance covers it — the pre-flight check before POST leaves.',
+        query: [
+            ['name' => 'leave_type_id', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'integer']],
+            ['name' => 'from_date', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'to_date', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'is_half_day', 'in' => 'query', 'schema' => ['type' => 'boolean']],
+        ],
+        response: 'MobileEnvelope',
+    )]
     public function estimate(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -97,6 +122,17 @@ class LeaveApiController extends Controller
         ], 'Leave estimate.');
     }
 
+    #[ApiEndpoint(
+        summary: 'My leave applications',
+        description: 'Tracking list, newest first. A login with no linked employee answers 409 EMPLOYEE_NOT_LINKED here and on every employee endpoint.',
+        query: [
+            ['name' => 'status', 'in' => 'query', 'schema' => ['type' => 'string'], 'description' => 'Pending, Approved, Rejected, Cancelled.'],
+            ['name' => 'year', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 2000, 'maximum' => 2100]],
+            ['name' => 'leave_type_id', 'in' => 'query', 'schema' => ['type' => 'integer']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function index(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -135,6 +171,12 @@ class LeaveApiController extends Controller
         return ApiResponse::paginated($page, 'My leave applications.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Apply for leave',
+        description: 'Files an application for the token employee and snapshots the current approval chain onto it. Overlaps, insufficient balance and backdated ranges answer 422 with the reason.',
+        request: 'MobileLeaveApply',
+        response: 'MobileEnvelope',
+    )]
     public function store(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -164,6 +206,12 @@ class LeaveApiController extends Controller
         return ApiResponse::ok($this->workspace->requestRow($leave), 'Leave application submitted.', [], 201);
     }
 
+    #[ApiEndpoint(
+        summary: 'Track one application',
+        description: 'Detail + approval history + `current_stage` naming whose desk it sits on. Another employee\'s id answers 404.',
+        response: 'MobileEnvelope',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function show(Request $request, int $id): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -185,6 +233,12 @@ class LeaveApiController extends Controller
         ], 'Leave application.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Withdraw a pending application',
+        description: 'Pending only — anything already decided answers 422.',
+        response: 'MobileEnvelope',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function destroy(Request $request, int $id): JsonResponse
     {
         $employee = $this->apiEmployee($request);

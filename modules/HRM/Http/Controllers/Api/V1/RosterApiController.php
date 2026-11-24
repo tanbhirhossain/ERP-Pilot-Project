@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HRM\Models\Roster\RosterDuty;
@@ -30,6 +31,11 @@ class RosterApiController extends Controller
 
     public function __construct(private readonly RosterDutyService $duties) {}
 
+    #[ApiEndpoint(
+        summary: 'Roster shift catalogue',
+        description: 'Every shift the set-duty forms can offer. Any signed-in user may read it.',
+        response: 'MobileEnvelope',
+    )]
     public function shifts(): JsonResponse
     {
         $shifts = RosterShift::orderBy('shift_name')
@@ -38,6 +44,12 @@ class RosterApiController extends Controller
         return ApiResponse::ok($shifts, 'Roster shifts.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Bulk-set roster duties',
+        description: 'One shift across a date range (≤60 days) for up to 500 employees — the web bulk rules, scope-checked per employee. One outsider rejects the whole batch before anything writes.',
+        request: 'MobileRosterBulk',
+        response: 'MobileEnvelope',
+    )]
     public function bulkAssign(Request $request): JsonResponse
     {
         // Same rules as the web BulkRosterAssignRequest (incl. the 60-day cap).
@@ -80,6 +92,12 @@ class RosterApiController extends Controller
         return ApiResponse::ok(['assigned' => $count], "Roster set for {$count} duty row(s).", [], 201);
     }
 
+    #[ApiEndpoint(
+        summary: 'Set one roster duty',
+        description: 'Single employee, single date. Outside scope answers 403.',
+        request: 'MobileRosterDuty',
+        response: 'MobileEnvelope',
+    )]
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -97,6 +115,12 @@ class RosterApiController extends Controller
         return ApiResponse::ok($duty->fresh(), 'Roster duty set.', [], 201);
     }
 
+    #[ApiEndpoint(
+        summary: 'Remove a roster duty',
+        description: 'Scope is checked against the duty\'s employee — outside scope answers 403.',
+        response: 'MobileEnvelope',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function destroy(Request $request, int $id): JsonResponse
     {
         $duty = RosterDuty::find($id);

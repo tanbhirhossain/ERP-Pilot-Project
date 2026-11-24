@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -43,6 +44,11 @@ class TeamApiController extends Controller
         private readonly LeaveWorkspaceService $workspace,
     ) {}
 
+    #[ApiEndpoint(
+        summary: 'My team',
+        description: 'Direct reports for a supervisor; everyone for HR, DGM, GM, CEO and Admins.',
+        response: 'MobileEnvelope',
+    )]
     public function members(Request $request): JsonResponse
     {
         $codes = $this->teamCodes($request->user());
@@ -71,6 +77,17 @@ class TeamApiController extends Controller
         return ApiResponse::ok($members->values()->all(), 'Team members.', ['total' => $members->count()]);
     }
 
+    #[ApiEndpoint(
+        summary: 'A report\'s punch log',
+        description: 'Outside the caller\'s scope answers 403, never a leak.',
+        query: [
+            ['name' => 'employee_id', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string'], 'description' => 'Report code, e.g. EMP-001.'],
+            ['name' => 'from', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'to', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 200]],
+        ],
+        response: 'MobilePage',
+    )]
     public function attendanceLogs(Request $request): JsonResponse
     {
         [$code, $error] = $this->scopedCode($request);
@@ -89,6 +106,17 @@ class TeamApiController extends Controller
         return ApiResponse::paginated($page, "Attendance log for {$code}.");
     }
 
+    #[ApiEndpoint(
+        summary: 'A report\'s IN/OUT pairs',
+        description: 'Outside the caller\'s scope answers 403.',
+        query: [
+            ['name' => 'employee_id', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string']],
+            ['name' => 'from', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'to', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 200]],
+        ],
+        response: 'MobilePage',
+    )]
     public function attendancePairs(Request $request): JsonResponse
     {
         [$code, $error] = $this->scopedCode($request);
@@ -107,6 +135,17 @@ class TeamApiController extends Controller
         return ApiResponse::paginated($page, "Attendance pairs for {$code}.");
     }
 
+    #[ApiEndpoint(
+        summary: 'A report\'s daily verdicts',
+        description: 'Outside the caller\'s scope answers 403.',
+        query: [
+            ['name' => 'employee_id', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string']],
+            ['name' => 'from', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'to', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 200]],
+        ],
+        response: 'MobilePage',
+    )]
     public function attendanceDaily(Request $request): JsonResponse
     {
         [$code, $error] = $this->scopedCode($request);
@@ -125,6 +164,15 @@ class TeamApiController extends Controller
         return ApiResponse::paginated($page, "Daily attendance for {$code}.");
     }
 
+    #[ApiEndpoint(
+        summary: 'A report\'s monthly summary',
+        description: 'Counts by verdict plus worked/overtime hours. Outside the caller\'s scope answers 403.',
+        query: [
+            ['name' => 'employee_id', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string']],
+            ['name' => 'month', 'in' => 'query', 'schema' => ['type' => 'string', 'pattern' => '^\\d{4}-\\d{2}$'], 'description' => 'YYYY-MM, defaults to this month.'],
+        ],
+        response: 'MobileEnvelope',
+    )]
     public function attendanceSummary(Request $request): JsonResponse
     {
         [$code, $error] = $this->scopedCode($request);
@@ -154,6 +202,16 @@ class TeamApiController extends Controller
         ], "Attendance summary for {$code}.");
     }
 
+    #[ApiEndpoint(
+        summary: 'Reports\' leave applications',
+        description: 'Scope-filtered register; pass employee_id for one report. Outside scope answers 403.',
+        query: [
+            ['name' => 'employee_id', 'in' => 'query', 'schema' => ['type' => 'string']],
+            ['name' => 'status', 'in' => 'query', 'schema' => ['type' => 'string']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function leaves(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -190,6 +248,12 @@ class TeamApiController extends Controller
         return ApiResponse::paginated($page, 'Team leave applications.');
     }
 
+    #[ApiEndpoint(
+        summary: 'File leave for a report',
+        description: 'On-behalf filing through the same service as self-apply, chain snapshot included. Outside scope answers 403.',
+        request: 'MobileTeamLeaveApply',
+        response: 'MobileEnvelope',
+    )]
     public function applyLeave(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -218,6 +282,17 @@ class TeamApiController extends Controller
         return ApiResponse::ok($this->workspace->requestRow($leave), "Leave filed for {$data['employee_id']}.", [], 201);
     }
 
+    #[ApiEndpoint(
+        summary: 'Reports\' overtime records',
+        description: 'Scope-filtered register. Outside scope answers 403.',
+        query: [
+            ['name' => 'employee_id', 'in' => 'query', 'schema' => ['type' => 'string']],
+            ['name' => 'status', 'in' => 'query', 'schema' => ['type' => 'string']],
+            ['name' => 'overtime_type', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['Overtime', 'Extra Duty', 'Holiday Duty']]],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function overtimes(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -255,6 +330,17 @@ class TeamApiController extends Controller
         return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'Team overtime records.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Reports\' roster duties',
+        description: 'Scope-filtered duty rows in roster-date order. Outside scope answers 403.',
+        query: [
+            ['name' => 'employee_id', 'in' => 'query', 'schema' => ['type' => 'string']],
+            ['name' => 'from', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'to', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 200]],
+        ],
+        response: 'MobilePage',
+    )]
     public function roster(Request $request): JsonResponse
     {
         $data = $request->validate([

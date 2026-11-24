@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,13 +15,23 @@ use Modules\HRM\Support\Api\ApiResponse;
 /**
  * Mobile authentication (Sanctum personal access tokens).
  *
- * POST /api/v1/auth/login    {email, password, device_name?} → {token, user}
- * POST /api/v1/auth/logout   (revokes the calling token only)
- * GET  /api/v1/auth/me       user + roles + linked employee + flags the app
- *                            needs to draw its menu (is_supervisor, unread count)
+ * POST /api/v1/auth/login     {email, password, device_name?} → {token, user}
+ * POST /api/v1/auth/logout    (revokes the calling token only)
+ * GET  /api/v1/auth/profile   user + roles + linked employee + flags the app
+ *                             needs to draw its menu (is_supervisor, unread count).
+ *                             Named `profile`, not `me`: GET auth/me is the F13
+ *                             integrator endpoint (CallerIdentity) on this same v1.
  */
 class AuthController extends Controller
 {
+    #[ApiEndpoint(
+        summary: 'Log in (mobile)',
+        description: 'Email + password for a Sanctum token carrying the `mobile` ability. Wrong credentials answer 401; the token is rate-limited to 10 attempts a minute. Distinct from the F13 `POST auth/token` exchange, which mints ability-scoped integrator tokens.',
+        request: 'MobileLogin',
+        response: 'MobileEnvelope',
+        status: '200',
+        public: true,
+    )]
     public function login(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -44,6 +55,12 @@ class AuthController extends Controller
         ], 'Logged in.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Log out (revoke this token)',
+        description: 'Deletes only the calling token, so other devices stay signed in. The app should also DELETE its device row so pushes stop.',
+        response: 'MobileEnvelope',
+        status: '200',
+    )]
     public function logout(Request $request): JsonResponse
     {
         $request->user()?->currentAccessToken()?->delete();
@@ -51,7 +68,12 @@ class AuthController extends Controller
         return ApiResponse::ok(null, 'Logged out.');
     }
 
-    public function me(Request $request): JsonResponse
+    #[ApiEndpoint(
+        summary: 'My profile, employee link and badge counts',
+        description: 'User + roles + linked employee + `is_supervisor` + unread bell count — everything the app menu needs in one call. Named `profile` because GET auth/me is the F13 integrator endpoint on this same v1.',
+        response: 'MobileEnvelope',
+    )]
+    public function profile(Request $request): JsonResponse
     {
         return ApiResponse::ok($this->userPayload($request->user()), 'Profile.');
     }

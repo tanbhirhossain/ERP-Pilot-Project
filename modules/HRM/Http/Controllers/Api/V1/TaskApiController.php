@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -41,6 +42,12 @@ class TaskApiController extends Controller
     use ResolvesApiEmployee;
     use ResolvesTeamScope;
 
+    #[ApiEndpoint(
+        summary: 'Assign work',
+        description: 'Needs hrm.tasks.manage, and the target must sit inside the assigner\'s scope — a supervisor can only task their own reports. The assignee\'s bell is pinged.',
+        request: 'MobileTaskAssign',
+        response: 'MobileEnvelope',
+    )]
     public function store(Request $request): JsonResponse
     {
         if (! $request->user()->can(TeamWorkNoticeSeeder::PERM_TASKS)) {
@@ -76,6 +83,15 @@ class TaskApiController extends Controller
         return ApiResponse::ok($task, "Work assigned to {$data['employee_id']}.", [], 201);
     }
 
+    #[ApiEndpoint(
+        summary: 'Tasks assigned to me',
+        description: 'The assignee\'s work queue, newest first.',
+        query: [
+            ['name' => 'status', 'in' => 'query', 'schema' => ['type' => 'string'], 'description' => 'Open, In Progress, Done, Verified, Closed, Cancelled.'],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function mine(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -100,6 +116,15 @@ class TaskApiController extends Controller
         return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'My tasks.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Work I assigned',
+        description: 'Everything the caller handed out, newest first.',
+        query: [
+            ['name' => 'status', 'in' => 'query', 'schema' => ['type' => 'string']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function assigned(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -118,6 +143,16 @@ class TaskApiController extends Controller
         return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'Work I assigned.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Team task register',
+        description: 'Scope-filtered: a supervisor sees their reports\' tasks, HR/DGM/GM/CEO see everything.',
+        query: [
+            ['name' => 'employee_id', 'in' => 'query', 'schema' => ['type' => 'string']],
+            ['name' => 'status', 'in' => 'query', 'schema' => ['type' => 'string']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function team(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -150,6 +185,12 @@ class TaskApiController extends Controller
         return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'Team tasks.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Read one task',
+        description: 'Visible to the assignee, the assigner, and in-scope managers — anyone else answers 403.',
+        response: 'MobileEnvelope',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function show(Request $request, int $id): JsonResponse
     {
         $task = WorkTask::with(['employee:employee_id,full_name,first_name,last_name', 'assigner:id,name', 'verifier:id,name'])->find($id);
@@ -165,6 +206,14 @@ class TaskApiController extends Controller
         return ApiResponse::ok($task, 'Task.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Move my task (assignee lanes)',
+        description: 'Assignee only: Open ↔ In Progress → Done. Done lands on the assigner\'s bell; anything past Done is the assigner\'s call below.',
+        request: 'MobileTaskProgress',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function progress(Request $request, int $id): JsonResponse
     {
         $task = WorkTask::find($id);
@@ -208,21 +257,49 @@ class TaskApiController extends Controller
         return ApiResponse::ok($task->fresh(), "Task moved to {$data['status']}.");
     }
 
+    #[ApiEndpoint(
+        summary: 'Verify a done task',
+        description: 'Assigner (or HR/DGM/GM/CEO) accepts Done → Verified. Anything not Done answers 422.',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function verify(Request $request, int $id): JsonResponse
     {
         return $this->transition($request, $id, 'verify');
     }
 
+    #[ApiEndpoint(
+        summary: 'Close a task',
+        description: 'Assigner (or HR/DGM/GM/CEO) closes Done/Verified → Closed.',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function close(Request $request, int $id): JsonResponse
     {
         return $this->transition($request, $id, 'close');
     }
 
+    #[ApiEndpoint(
+        summary: 'Reopen a task',
+        description: 'Assigner (or HR/DGM/GM/CEO) reopens Done/Verified/Closed/Cancelled → Open, clearing the tail stamps.',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function reopen(Request $request, int $id): JsonResponse
     {
         return $this->transition($request, $id, 'reopen');
     }
 
+    #[ApiEndpoint(
+        summary: 'Cancel a task',
+        description: 'Assigner (or HR/DGM/GM/CEO) cancels from any open state.',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function cancel(Request $request, int $id): JsonResponse
     {
         return $this->transition($request, $id, 'cancel');

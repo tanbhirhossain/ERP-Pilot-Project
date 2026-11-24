@@ -3,6 +3,7 @@
 namespace Modules\PAYROLL\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HRM\Support\Api\ApiResponse;
@@ -20,6 +21,11 @@ class ProvidentFundApiController extends Controller
 {
     use ResolvesApiEmployee;
 
+    #[ApiEndpoint(
+        summary: 'My PF account and policy',
+        description: 'Balances plus the contribution policy. No account answers 404.',
+        response: 'MobileEnvelope',
+    )]
     public function account(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -48,6 +54,17 @@ class ProvidentFundApiController extends Controller
         ], 'Provident fund account.');
     }
 
+    #[ApiEndpoint(
+        summary: 'My PF contribution ledger',
+        description: 'Every contribution row, newest first. No account answers 404.',
+        query: [
+            ['name' => 'from', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'to', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'entry_type', 'in' => 'query', 'schema' => ['type' => 'string']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function ledger(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -86,6 +103,11 @@ class ProvidentFundApiController extends Controller
         return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'Provident fund ledger.');
     }
 
+    #[ApiEndpoint(
+        summary: 'My PF withdrawals',
+        description: 'Every withdrawal against the account. No account answers 404.',
+        response: 'MobileEnvelope',
+    )]
     public function withdrawals(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);

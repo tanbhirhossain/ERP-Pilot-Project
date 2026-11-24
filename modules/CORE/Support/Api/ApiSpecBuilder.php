@@ -239,6 +239,234 @@ final class ApiSpecBuilder
                 ]],
             ],
         ],
+        // ── Mobile surface (Phases 0–4): one envelope, per-form request bodies. ──
+        'MobileEnvelope' => [
+            'type' => 'object',
+            'description' => 'Every mobile endpoint answers this shape. `data` is the payload (object, list or null per endpoint); `meta` appears on paged endpoints and a few counted ones; `errors` appears on 422 with field keys matching the request body.',
+            'properties' => [
+                'success' => ['type' => 'boolean'],
+                'message' => ['type' => 'string'],
+                'data' => ['description' => 'Payload, shape per endpoint.'],
+                'meta' => ['type' => 'object', 'description' => 'Page cursors (current_page, per_page, total, last_page) or small counters.'],
+                'errors' => ['type' => 'object', 'description' => 'Validation failures; occasionally carries a machine `code` (NOT_YOUR_STAGE, EMPLOYEE_NOT_LINKED, …).'],
+            ],
+            'required' => ['success', 'message'],
+        ],
+        'MobilePage' => [
+            'type' => 'object',
+            'description' => 'A paged mobile list: the envelope with `data` always a list and `meta` always the page cursors.',
+            'properties' => [
+                'success' => ['type' => 'boolean'],
+                'message' => ['type' => 'string'],
+                'data' => ['type' => 'array', 'items' => ['type' => 'object']],
+                'meta' => ['type' => 'object', 'properties' => [
+                    'current_page' => ['type' => 'integer'], 'per_page' => ['type' => 'integer'],
+                    'total' => ['type' => 'integer'], 'last_page' => ['type' => 'integer'],
+                ], 'required' => ['current_page', 'per_page', 'total', 'last_page']],
+            ],
+            'required' => ['success', 'message', 'data', 'meta'],
+        ],
+        'MobileLogin' => [
+            'type' => 'object',
+            'required' => ['email', 'password'],
+            'properties' => [
+                'email' => ['type' => 'string', 'format' => 'email'],
+                'password' => ['type' => 'string'],
+                'device_name' => ['type' => 'string', 'maxLength' => 100, 'description' => 'Labels the token; defaults to `mobile`.'],
+            ],
+        ],
+        'MobileLeaveApply' => [
+            'type' => 'object',
+            'required' => ['leave_type_id', 'from_date', 'to_date'],
+            'properties' => [
+                'leave_type_id' => ['type' => 'integer'],
+                'from_date' => ['type' => 'string', 'format' => 'date'],
+                'to_date' => ['type' => 'string', 'format' => 'date'],
+                'is_half_day' => ['type' => 'boolean'],
+                'reason' => ['type' => 'string', 'maxLength' => 1000],
+            ],
+        ],
+        'MobileOvertimeClaim' => [
+            'type' => 'object',
+            'required' => ['overtime_date', 'overtime_type'],
+            'properties' => [
+                'overtime_date' => ['type' => 'string', 'format' => 'date', 'description' => 'Today or earlier.'],
+                'overtime_type' => ['type' => 'string', 'enum' => ['Overtime', 'Extra Duty', 'Holiday Duty']],
+                'shift_id' => ['type' => 'integer'],
+                'start_time' => ['type' => 'string', 'description' => 'HH:MM, 24-hour. Give this + end_time, or hours.'],
+                'end_time' => ['type' => 'string', 'description' => 'HH:MM, 24-hour.'],
+                'hours' => ['type' => 'number', 'minimum' => 0.25, 'maximum' => 24],
+                'reason' => ['type' => 'string', 'maxLength' => 1000],
+            ],
+        ],
+        'MobileRegularizationApply' => [
+            'type' => 'object',
+            'required' => ['duty_date', 'regularization_type', 'reason'],
+            'properties' => [
+                'duty_date' => ['type' => 'string', 'format' => 'date', 'description' => 'Today or earlier.'],
+                'regularization_type' => ['type' => 'string', 'enum' => ['Missing In', 'Missing Out', 'Wrong Shift', 'Late Correction', 'Early Out Correction', 'On Duty', 'Work From Home', 'Remote Punch']],
+                'assigned_shift_id' => ['type' => 'integer'],
+                'requested_in_time' => ['type' => 'string', 'description' => 'HH:MM, 24-hour.'],
+                'requested_out_time' => ['type' => 'string', 'description' => 'HH:MM, 24-hour.'],
+                'reason' => ['type' => 'string', 'maxLength' => 2000],
+            ],
+        ],
+        'MobileInformedApply' => [
+            'type' => 'object',
+            'required' => ['informed_date', 'informed_type'],
+            'properties' => [
+                'informed_date' => ['type' => 'string', 'format' => 'date'],
+                'informed_type' => ['type' => 'string', 'enum' => ['Late Coming', 'Early Out', 'Absent Informed', 'Field Work', 'On Duty', 'Other']],
+                'expected_time' => ['type' => 'string', 'description' => 'HH:MM, 24-hour.'],
+                'reason' => ['type' => 'string', 'maxLength' => 2000],
+            ],
+        ],
+        'MobileResignationApply' => [
+            'type' => 'object',
+            'required' => ['last_working_date', 'reason'],
+            'properties' => [
+                'last_working_date' => ['type' => 'string', 'format' => 'date', 'description' => 'Must be after today.'],
+                'reason' => ['type' => 'string', 'maxLength' => 2000],
+            ],
+        ],
+        'MobileCertificateApply' => [
+            'type' => 'object',
+            'required' => ['certificate_type', 'purpose'],
+            'properties' => [
+                'certificate_type' => ['type' => 'string', 'enum' => ['Salary Certificate', 'NOC Certificate', 'Experience Certificate']],
+                'purpose' => ['type' => 'string', 'minLength' => 5, 'maxLength' => 1000, 'description' => 'Printed on the certificate.'],
+            ],
+        ],
+        'MobileLoanApply' => [
+            'type' => 'object',
+            'required' => ['principal_amount', 'installment_count', 'first_due_date', 'purpose'],
+            'properties' => [
+                'principal_amount' => ['type' => 'number', 'exclusiveMinimum' => 0],
+                'installment_count' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 120],
+                'first_due_date' => ['type' => 'string', 'format' => 'date'],
+                'purpose' => ['type' => 'string', 'minLength' => 5, 'maxLength' => 1000],
+            ],
+        ],
+        'MobileDeviceRegister' => [
+            'type' => 'object',
+            'required' => ['token'],
+            'properties' => [
+                'token' => ['type' => 'string', 'minLength' => 20, 'maxLength' => 2048, 'description' => 'The FCM registration token. Re-registering transfers ownership.'],
+                'platform' => ['type' => 'string', 'enum' => ['android', 'ios', 'web'], 'description' => 'Defaults to android.'],
+                'device_name' => ['type' => 'string', 'maxLength' => 120],
+            ],
+        ],
+        'MobileApprove' => [
+            'type' => 'object',
+            'properties' => [
+                'comments' => ['type' => 'string', 'maxLength' => 2000],
+            ],
+        ],
+        'MobileLeaveReject' => [
+            'type' => 'object',
+            'required' => ['comments'],
+            'properties' => [
+                'comments' => ['type' => 'string', 'minLength' => 3, 'maxLength' => 2000, 'description' => 'Travels to the applicant as the reason.'],
+            ],
+        ],
+        'MobileOvertimeApprove' => [
+            'type' => 'object',
+            'properties' => [
+                'adjusted_hours' => ['type' => 'number', 'minimum' => 0, 'maximum' => 24],
+                'comments' => ['type' => 'string', 'maxLength' => 2000],
+            ],
+        ],
+        'MobileOvertimeReject' => [
+            'type' => 'object',
+            'required' => ['reason'],
+            'properties' => [
+                'reason' => ['type' => 'string', 'minLength' => 3, 'maxLength' => 2000, 'description' => 'Travels to the claimant.'],
+            ],
+        ],
+        'MobileChainUpdate' => [
+            'type' => 'object',
+            'required' => ['steps'],
+            'properties' => [
+                'name' => ['type' => 'string', 'maxLength' => 150],
+                'is_active' => ['type' => 'boolean'],
+                'steps' => ['type' => 'array', 'minItems' => 1, 'maxItems' => 10, 'description' => 'Ordered stages; position is the array order.', 'items' => ['type' => 'object', 'required' => ['stage_key', 'stage_label', 'resolver'], 'properties' => [
+                    'stage_key' => ['type' => 'string', 'enum' => ['supervisor', 'hr', 'dgm', 'gm', 'ceo']],
+                    'stage_label' => ['type' => 'string', 'maxLength' => 100, 'description' => 'The desk name the app shows.'],
+                    'resolver' => ['type' => 'string', 'enum' => ['supervisor', 'role'], 'description' => '`supervisor` resolves from the applicant\'s mapping; `role` from role_name.'],
+                    'role_name' => ['type' => 'string', 'description' => 'Required for role steps (must exist); forbidden on supervisor steps.'],
+                ]]],
+            ],
+        ],
+        'MobileTeamLeaveApply' => [
+            'type' => 'object',
+            'required' => ['employee_id', 'leave_type_id', 'from_date', 'to_date'],
+            'properties' => [
+                'employee_id' => ['type' => 'string', 'description' => 'Report code, inside the caller\'s scope.'],
+                'leave_type_id' => ['type' => 'integer'],
+                'from_date' => ['type' => 'string', 'format' => 'date'],
+                'to_date' => ['type' => 'string', 'format' => 'date'],
+                'is_half_day' => ['type' => 'boolean'],
+                'reason' => ['type' => 'string', 'maxLength' => 1000],
+            ],
+        ],
+        'MobileRosterBulk' => [
+            'type' => 'object',
+            'required' => ['employee_ids', 'shift_id', 'from_date', 'to_date'],
+            'properties' => [
+                'employee_ids' => ['type' => 'array', 'minItems' => 1, 'maxItems' => 500, 'items' => ['type' => 'string'], 'description' => 'Employee codes, each scope-checked.'],
+                'shift_id' => ['type' => 'integer'],
+                'from_date' => ['type' => 'string', 'format' => 'date'],
+                'to_date' => ['type' => 'string', 'format' => 'date', 'description' => 'Range may not exceed 60 days.'],
+            ],
+        ],
+        'MobileRosterDuty' => [
+            'type' => 'object',
+            'required' => ['employee_id', 'roster_date'],
+            'properties' => [
+                'employee_id' => ['type' => 'string'],
+                'roster_date' => ['type' => 'string', 'format' => 'date'],
+                'shift_id' => ['type' => 'integer'],
+            ],
+        ],
+        'MobileTaskAssign' => [
+            'type' => 'object',
+            'required' => ['employee_id', 'title'],
+            'properties' => [
+                'employee_id' => ['type' => 'string', 'description' => 'Assignee code, inside the caller\'s scope.'],
+                'title' => ['type' => 'string', 'maxLength' => 200],
+                'description' => ['type' => 'string', 'maxLength' => 5000],
+                'priority' => ['type' => 'string', 'enum' => ['Low', 'Medium', 'High', 'Urgent'], 'description' => 'Defaults to Medium.'],
+                'due_date' => ['type' => 'string', 'format' => 'date'],
+            ],
+        ],
+        'MobileTaskProgress' => [
+            'type' => 'object',
+            'required' => ['status'],
+            'properties' => [
+                'status' => ['type' => 'string', 'enum' => ['Open', 'In Progress', 'Done'], 'description' => 'Assignee lanes only; Verified/Closed are the assigner\'s.'],
+                'remarks' => ['type' => 'string', 'maxLength' => 2000],
+            ],
+        ],
+        'MobileNoticePost' => [
+            'type' => 'object',
+            'required' => ['title', 'body', 'audience_type'],
+            'properties' => [
+                'title' => ['type' => 'string', 'maxLength' => 200],
+                'body' => ['type' => 'string', 'maxLength' => 10000],
+                'audience_type' => ['type' => 'string', 'enum' => ['all', 'department', 'employees']],
+                'audience_ids' => ['type' => 'array', 'maxItems' => 1000, 'description' => 'Department ids or employee codes; required unless audience is all.'],
+                'expire_at' => ['type' => 'string', 'format' => 'date-time', 'description' => 'Must be in the future.'],
+            ],
+        ],
+        'MobileNoticeUpdate' => [
+            'type' => 'object',
+            'properties' => [
+                'title' => ['type' => 'string', 'maxLength' => 200],
+                'body' => ['type' => 'string', 'maxLength' => 10000],
+                'expire_at' => ['type' => 'string', 'format' => 'date-time'],
+                'is_active' => ['type' => 'boolean'],
+            ],
+        ],
     ];
 
     public function __construct(private readonly Router $router) {}
@@ -268,12 +496,12 @@ final class ApiSpecBuilder
             'info' => [
                 'title' => 'ERP Pilot — v1 API',
                 'version' => self::VERSION,
-                'summary' => 'Reads across the modules, drafts into the ledger, nothing that posts',
+                'summary' => 'Ledger reads and draft journals for integrators, plus the full mobile app surface',
                 'description' => <<<'TXT'
 Authentication is a Sanctum bearer token (`Authorization: Bearer erp_…`), obtained from
 `POST /api/v1/auth/token` with credentials or from **Settings → API Tokens** in the app.
 
-Three rules explain almost every design decision below.
+Four rules explain almost every design decision below — three for the integrator surface, one for the mobile surface.
 
 **Abilities narrow, roles authorise.** A token can only ever reach what its owning user
 could reach, and only the subset its abilities name. A stolen accountant's token mints no
@@ -282,9 +510,19 @@ invoices; a Super Admin's token with `sales:read` posts no journals.
 **Money is a string.** Amounts arrive as two-decimal strings — `decimal:2` is the cast on
 every model column in this application. Parse them with a decimal type, not a float.
 
-**Reads are free, writes are drafts.** The only mutating endpoint in v1 creates an
-unposted draft journal, validated by the same form request the screen uses. Posting a
-journal, voiding one, and touching the ledger require a person.
+**Reads are free, writes are drafts — on the integrator surface.** Its only mutating
+endpoint creates an unposted draft journal, validated by the same form request the
+screen uses. Posting a journal, voiding one, and touching the ledger require a person.
+
+**The mobile surface is a second contract on the same v1.** Its endpoints answer one
+envelope — `{ success, message, data, meta? }` on success, `{ success: false, message,
+data: null, errors? }` on failure — and always resolve the employee from the bearer
+token, never from request input: there is no `employee_id` parameter on self-service
+endpoints, and a colleague's record answers 404. A login with no linked employee
+answers 409 `EMPLOYEE_NOT_LINKED`. Supervisors see their direct reports only (403
+outside scope); HR, DGM, GM, CEO and Admins see everyone. Push (FCM) mirrors the
+in-app bell: every notification carries `ref_type` + `ref_id` so the app deep-links
+the tap, whether it arrived as push or poll.
 
 Pagination, search and filtering use the same query vocabulary as the tables in the
 application itself — `search`, `sort`, `dir`, `page`, `per_page`, `filters[...]` — so one
@@ -293,9 +531,30 @@ TXT,
             ],
             'servers' => [['url' => rtrim((string) config('app.url'), '/'), 'description' => 'This deployment']],
             'tags' => [
-                ['name' => 'Authentication', 'description' => 'Tokens and identity'],
+                ['name' => 'Authentication', 'description' => 'Tokens and identity (integrator exchange and mobile login)'],
                 ['name' => 'Sales', 'description' => 'Invoices'],
                 ['name' => 'Accounts', 'description' => 'Ledger, budgets, journals'],
+                ['name' => 'Dashboard', 'description' => 'Employee home'],
+                ['name' => 'Leave', 'description' => 'My leave, mobile'],
+                ['name' => 'Overtime', 'description' => 'My overtime / extra / holiday duty, mobile'],
+                ['name' => 'Attendance', 'description' => 'My punches, pairs, verdicts, mobile'],
+                ['name' => 'Regularization', 'description' => 'My attendance corrections, mobile'],
+                ['name' => 'Informed', 'description' => 'My advance notices, mobile'],
+                ['name' => 'Resignation', 'description' => 'My resignation, mobile'],
+                ['name' => 'Certificates', 'description' => 'My certificate requests, mobile'],
+                ['name' => 'Payslips', 'description' => 'My payslips, mobile'],
+                ['name' => 'Loans', 'description' => 'My payroll loans, mobile'],
+                ['name' => 'Provident Fund', 'description' => 'My PF account, mobile'],
+                ['name' => 'Notifications', 'description' => 'The in-app bell, mobile'],
+                ['name' => 'Devices', 'description' => 'Push device registry, mobile'],
+                ['name' => 'Approvals', 'description' => 'Approval desks, mobile'],
+                ['name' => 'Approval Chains', 'description' => 'Chain administration, mobile'],
+                ['name' => 'Team', 'description' => 'Reports and on-behalf work, mobile'],
+                ['name' => 'Roster', 'description' => 'Roster writes, mobile'],
+                ['name' => 'Tasks', 'description' => 'Work assignment, mobile'],
+                ['name' => 'Notices', 'description' => 'Notice board, mobile'],
+                ['name' => 'Organisation', 'description' => 'Directory, mobile'],
+                ['name' => 'CEO', 'description' => 'CEO cockpit, mobile'],
             ],
             'paths' => $paths,
             'components' => [
@@ -337,8 +596,19 @@ TXT,
         $ability = $this->middlewareArgument($middleware, 'ability');
 
         // 201 for the writes, 200 for the reads. Derived from the method rather than
-        // declared, so a documented endpoint cannot claim 200 while returning 201.
-        $success = array_intersect($route->methods(), ['POST', 'PUT', 'PATCH']) !== [] ? '201' : '200';
+        // declared, so a documented endpoint cannot claim 200 while returning 201 —
+        // except where #[ApiEndpoint(status: ...)] says otherwise: action POSTs that
+        // answer 200 with no resource created (approvals, cancels, progress moves).
+        // The override is fenced to 200/201 so it can correct the derivation, never
+        // invent a status.
+        $success = $endpoint->status
+            ?? (array_intersect($route->methods(), ['POST', 'PUT', 'PATCH']) !== [] ? '201' : '200');
+
+        if (! in_array($success, ['200', '201'], true)) {
+            throw new RuntimeException(
+                "Route [$path] declares #[ApiEndpoint(status: ...)] '{$endpoint->status}' — only 200 and 201 are allowed."
+            );
+        }
 
         $operation = [
             'operationId' => $route->getName(),
@@ -439,9 +709,32 @@ TXT,
 
     private function tagFor(string $path): string
     {
+        // Order matters: /team/leaves contains /leaves, so the team prefix wins first.
         return match (true) {
             str_contains($path, '/sales/') => 'Sales',
             str_contains($path, '/accounts/') => 'Accounts',
+            str_contains($path, '/team/') => 'Team',
+            str_contains($path, '/approvals/') => 'Approvals',
+            str_contains($path, '/admin/chains') => 'Approval Chains',
+            str_contains($path, '/auth/') => 'Authentication',
+            str_contains($path, '/dashboard') => 'Dashboard',
+            str_contains($path, '/leaves') => 'Leave',
+            str_contains($path, '/overtimes') => 'Overtime',
+            str_contains($path, '/attendance') => 'Attendance',
+            str_contains($path, '/regularizations') => 'Regularization',
+            str_contains($path, '/informed') => 'Informed',
+            str_contains($path, '/resignations') => 'Resignation',
+            str_contains($path, '/certificates') => 'Certificates',
+            str_contains($path, '/payslips') => 'Payslips',
+            str_contains($path, '/loans') => 'Loans',
+            str_contains($path, '/pf/') => 'Provident Fund',
+            str_contains($path, '/notifications') => 'Notifications',
+            str_contains($path, '/devices') => 'Devices',
+            str_contains($path, '/roster') => 'Roster',
+            str_contains($path, '/tasks') => 'Tasks',
+            str_contains($path, '/notices') => 'Notices',
+            str_contains($path, '/org/') => 'Organisation',
+            str_contains($path, '/ceo/') => 'CEO',
             default => 'Authentication',
         };
     }

@@ -8,6 +8,7 @@ use Modules\HRM\Http\Controllers\Api\V1\CeoApiController;
 use Modules\HRM\Http\Controllers\Api\V1\CertificateApiController;
 use Modules\HRM\Http\Controllers\Api\V1\ChainAdminApiController;
 use Modules\HRM\Http\Controllers\Api\V1\DashboardController;
+use Modules\HRM\Http\Controllers\Api\V1\DeviceApiController;
 use Modules\HRM\Http\Controllers\Api\V1\InformedApiController;
 use Modules\HRM\Http\Controllers\Api\V1\LeaveApiController;
 use Modules\HRM\Http\Controllers\Api\V1\NoticeApiController;
@@ -42,7 +43,9 @@ Route::middleware(['api'])->prefix('api')->group(function (): void {
 
         Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
-            Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
+            // NOTE: GET auth/me belongs to the F13 integrator surface (CallerIdentity);
+            // the mobile profile lives at auth/profile so the two never collide.
+            Route::get('auth/profile', [AuthController::class, 'profile'])->name('auth.profile');
 
             Route::get('dashboard', DashboardController::class)->name('dashboard');
 
@@ -99,6 +102,11 @@ Route::middleware(['api'])->prefix('api')->group(function (): void {
             Route::get('notifications/unread-count', [NotificationApiController::class, 'unreadCount'])->name('notifications.unread-count');
             Route::post('notifications/{id}/read', [NotificationApiController::class, 'markRead'])->name('notifications.read');
             Route::post('notifications/read-all', [NotificationApiController::class, 'markAllRead'])->name('notifications.read-all');
+
+            // Phase 4 — push device registry (FCM).
+            Route::get('devices', [DeviceApiController::class, 'index'])->name('devices.index');
+            Route::post('devices', [DeviceApiController::class, 'store'])->name('devices.store');
+            Route::delete('devices/{id}', [DeviceApiController::class, 'destroy'])->name('devices.destroy');
 
             // Phase 2 — approval desks (stage membership authorizes, not a permission).
             Route::get('approvals/pending', [ApprovalApiController::class, 'pending'])->name('approvals.pending');

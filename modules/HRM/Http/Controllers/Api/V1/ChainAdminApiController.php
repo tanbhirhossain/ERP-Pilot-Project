@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,11 @@ use Modules\HRM\Support\Api\ApiResponse;
  */
 class ChainAdminApiController extends Controller
 {
+    #[ApiEndpoint(
+        summary: 'Read all approval chains',
+        description: 'The live leave (5 stages) and overtime (4 stages) chains with their steps. Needs hrm.approval-chains.view.',
+        response: 'MobileEnvelope',
+    )]
     public function index(Request $request): JsonResponse
     {
         if (! $request->user()->can(ApprovalChainSeeder::PERM_VIEW)) {
@@ -43,6 +49,12 @@ class ChainAdminApiController extends Controller
         );
     }
 
+    #[ApiEndpoint(
+        summary: 'Read one approval chain',
+        description: 'Needs hrm.approval-chains.view.',
+        response: 'MobileEnvelope',
+        path: [['name' => 'key', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'enum' => ['leave', 'overtime']]]],
+    )]
     public function show(Request $request, string $key): JsonResponse
     {
         if (! $request->user()->can(ApprovalChainSeeder::PERM_VIEW)) {
@@ -58,6 +70,14 @@ class ChainAdminApiController extends Controller
         return ApiResponse::ok($chain, 'Approval chain.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Replace a chain\'s steps',
+        description: 'Up to 10 ordered steps; a role step needs a role_name, a supervisor step takes none. Moves new requests only — in-flight ones keep their snapshot. Needs hrm.approval-chains.manage.',
+        request: 'MobileChainUpdate',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'key', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'enum' => ['leave', 'overtime']]]],
+    )]
     public function update(Request $request, string $key): JsonResponse
     {
         if (! $request->user()->can(ApprovalChainSeeder::PERM_MANAGE)) {

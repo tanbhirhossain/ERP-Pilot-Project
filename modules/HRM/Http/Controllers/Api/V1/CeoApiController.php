@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\CORE\Models\User;
@@ -43,6 +44,11 @@ class CeoApiController extends Controller
         return null;
     }
 
+    #[ApiEndpoint(
+        summary: 'CEO dashboard',
+        description: 'Headcount, today\'s attendance, who is on leave, approvals by stage, month overtime, latest payroll and PF totals. CEO role only.',
+        response: 'MobileEnvelope',
+    )]
     public function dashboard(Request $request): JsonResponse
     {
         if ($denied = $this->gate($request->user())) {
@@ -127,6 +133,14 @@ class CeoApiController extends Controller
         ], 'CEO dashboard.');
     }
 
+    #[ApiEndpoint(
+        summary: 'CEO statistics',
+        description: 'Monthly trend series: joined, exits, attendance rate, leave days, overtime hours. CEO role only.',
+        query: [
+            ['name' => 'months', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 12], 'description' => 'Trailing months, default 6.'],
+        ],
+        response: 'MobileEnvelope',
+    )]
     public function statistics(Request $request): JsonResponse
     {
         if ($denied = $this->gate($request->user())) {
@@ -163,6 +177,14 @@ class CeoApiController extends Controller
         return ApiResponse::ok($series, 'CEO statistics.');
     }
 
+    #[ApiEndpoint(
+        summary: 'CEO monthly report',
+        description: 'Attendance by verdict with top absentees/late, leave by type, overtime by department, approval aging and movement. CEO role only.',
+        query: [
+            ['name' => 'month', 'in' => 'query', 'schema' => ['type' => 'string', 'pattern' => '^\\d{4}-\\d{2}$'], 'description' => 'YYYY-MM, defaults to this month.'],
+        ],
+        response: 'MobileEnvelope',
+    )]
     public function report(Request $request): JsonResponse
     {
         if ($denied = $this->gate($request->user())) {

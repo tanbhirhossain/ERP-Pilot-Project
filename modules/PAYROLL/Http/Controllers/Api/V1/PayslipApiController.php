@@ -3,6 +3,7 @@
 namespace Modules\PAYROLL\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HRM\Support\Api\ApiResponse;
@@ -20,6 +21,15 @@ class PayslipApiController extends Controller
 {
     use ResolvesApiEmployee;
 
+    #[ApiEndpoint(
+        summary: 'My payslips',
+        description: 'Newest first, each with its sheet status so the app can badge unreleased months.',
+        query: [
+            ['name' => 'year', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 2000, 'maximum' => 2100]],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function index(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -46,6 +56,12 @@ class PayslipApiController extends Controller
         return ApiResponse::paginated($query->paginate($data['per_page'] ?? 12), 'My payslips.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Read one payslip, full breakdown',
+        description: 'Earnings, deductions and net for the slip. Another employee\'s id answers 404.',
+        response: 'MobileEnvelope',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function show(Request $request, int $id): JsonResponse
     {
         $employee = $this->apiEmployee($request);

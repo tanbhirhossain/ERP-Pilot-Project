@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HRM\Models\Department;
@@ -22,6 +23,11 @@ class OrgApiController extends Controller
 {
     use ResolvesTeamScope;
 
+    #[ApiEndpoint(
+        summary: 'Departments',
+        description: 'Every department. Any signed-in user may read it — forms and filters need it.',
+        response: 'MobileEnvelope',
+    )]
     public function departments(): JsonResponse
     {
         return ApiResponse::ok(
@@ -30,6 +36,17 @@ class OrgApiController extends Controller
         );
     }
 
+    #[ApiEndpoint(
+        summary: 'Organisation directory',
+        description: 'Searchable employee directory for HR, DGM, GM, CEO and Admins only — supervisors use team/members for their own people.',
+        query: [
+            ['name' => 'search', 'in' => 'query', 'schema' => ['type' => 'string'], 'description' => 'Code, name or phone fragment.'],
+            ['name' => 'department_id', 'in' => 'query', 'schema' => ['type' => 'integer']],
+            ['name' => 'status', 'in' => 'query', 'schema' => ['type' => 'string']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function employees(Request $request): JsonResponse
     {
         if (! $this->hasAllScope($request->user())) {

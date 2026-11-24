@@ -3,6 +3,7 @@
 namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,6 +30,18 @@ class OvertimeApiController extends Controller
 
     public const TYPES = ['Overtime', 'Extra Duty', 'Holiday Duty'];
 
+    #[ApiEndpoint(
+        summary: 'My overtime / extra duty / holiday duty',
+        description: 'Auto-includes attendance-synced records; POST claims duty the sync missed.',
+        query: [
+            ['name' => 'overtime_type', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['Overtime', 'Extra Duty', 'Holiday Duty']]],
+            ['name' => 'status', 'in' => 'query', 'schema' => ['type' => 'string'], 'description' => 'Pending, Approved, Rejected, Cancelled.'],
+            ['name' => 'from', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'to', 'in' => 'query', 'schema' => ['type' => 'string', 'format' => 'date']],
+            ['name' => 'per_page', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100]],
+        ],
+        response: 'MobilePage',
+    )]
     public function index(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -69,6 +82,12 @@ class OvertimeApiController extends Controller
         return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'My overtime records.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Claim overtime / extra / holiday duty',
+        description: 'Date must be today or earlier; give either hours or start/end time (hours are computed). A pending/approved record for the same date and type answers 422.',
+        request: 'MobileOvertimeClaim',
+        response: 'MobileEnvelope',
+    )]
     public function store(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -125,6 +144,12 @@ class OvertimeApiController extends Controller
         return ApiResponse::ok($ot, ucfirst(strtolower($data['overtime_type'])).' claim submitted.', [], 201);
     }
 
+    #[ApiEndpoint(
+        summary: 'Read one overtime record',
+        description: 'Includes the approver once decided. Another employee\'s id answers 404.',
+        response: 'MobileEnvelope',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function show(Request $request, int $id): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -144,6 +169,13 @@ class OvertimeApiController extends Controller
         return ApiResponse::ok($ot, 'Overtime record.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Cancel a pending record',
+        description: 'Pending only — anything already decided answers 422.',
+        response: 'MobileEnvelope',
+        status: '200',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function cancel(Request $request, int $id): JsonResponse
     {
         $employee = $this->apiEmployee($request);

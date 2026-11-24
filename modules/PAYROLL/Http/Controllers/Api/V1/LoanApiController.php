@@ -3,6 +3,7 @@
 namespace Modules\PAYROLL\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -27,6 +28,11 @@ class LoanApiController extends Controller
 
     public function __construct(private readonly PayrollLoanService $loans) {}
 
+    #[ApiEndpoint(
+        summary: 'My loans, recovery and trail',
+        description: 'Every loan with its instalment schedule and approval trail.',
+        response: 'MobileEnvelope',
+    )]
     public function index(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -44,6 +50,12 @@ class LoanApiController extends Controller
         return ApiResponse::ok($rows->values()->all(), 'My loans.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Apply for a loan',
+        description: 'Goes to the approval queue; the purpose (min 5 characters) travels with it.',
+        request: 'MobileLoanApply',
+        response: 'MobileEnvelope',
+    )]
     public function store(Request $request): JsonResponse
     {
         $employee = $this->apiEmployee($request);
@@ -76,6 +88,12 @@ class LoanApiController extends Controller
         return ApiResponse::ok($this->loanRow($loan), 'Loan request submitted for approval.', [], 201);
     }
 
+    #[ApiEndpoint(
+        summary: 'Read one loan with its schedule',
+        description: 'Another employee\'s id answers 404.',
+        response: 'MobileEnvelope',
+        path: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+    )]
     public function show(Request $request, int $id): JsonResponse
     {
         $employee = $this->apiEmployee($request);
