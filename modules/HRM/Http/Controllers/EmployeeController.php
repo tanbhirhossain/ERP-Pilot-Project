@@ -78,9 +78,16 @@ class EmployeeController extends Controller
         if ($req->hasFile('photo')) {
             $data['photo'] = $req->file('photo')->store('employees', 'public');
         }
-        $this->svc->create($data);
+        $result = $this->svc->createWithLogin($data);
 
-        return redirect()->route('hrm.employees.index')->with('success', 'Employee created successfully.');
+        $message = 'Employee created successfully.';
+        if (($result['tempPassword'] ?? null) !== null) {
+            $message .= ' Login for '.$result['employee']->employee_id.' created — temporary password: '.$result['tempPassword'].'. It must be changed on first sign-in, so share it now: it cannot be shown again.';
+        } elseif ($result['loginLinked'] ?? false) {
+            $message .= ' Linked to the existing user account.';
+        }
+
+        return redirect()->route('hrm.employees.index')->with('success', $message);
     }
 
     public function edit(Employee $employee): Response

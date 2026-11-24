@@ -270,9 +270,18 @@ final class ApiSpecBuilder
             'type' => 'object',
             'required' => ['email', 'password'],
             'properties' => [
-                'email' => ['type' => 'string', 'format' => 'email'],
+                'email' => ['type' => 'string', 'description' => 'Email address or employee code (e.g. EMP-0042).'],
                 'password' => ['type' => 'string'],
                 'device_name' => ['type' => 'string', 'maxLength' => 100, 'description' => 'Labels the token; defaults to `mobile`.'],
+            ],
+        ],
+        'MobilePasswordChange' => [
+            'type' => 'object',
+            'required' => ['current_password', 'password', 'password_confirmation'],
+            'properties' => [
+                'current_password' => ['type' => 'string'],
+                'password' => ['type' => 'string', 'minLength' => 8],
+                'password_confirmation' => ['type' => 'string'],
             ],
         ],
         'MobileLeaveApply' => [

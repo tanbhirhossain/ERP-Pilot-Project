@@ -102,4 +102,20 @@ return [
 
     ],
 
+    /*
+    |----------------------------------------------------------------------
+    | Employee login provisioning
+    |----------------------------------------------------------------------
+    |
+    | `placeholder_domain` receives the synthetic addresses of employees who
+    | have no email: `emp-0042@employees.local` is unique and visibly not a
+    | mailbox, and it is replaced the moment HR records a real address.
+    |
+    */
+
+    'logins' => [
+        'placeholder_domain' => env('HRM_LOGIN_PLACEHOLDER_DOMAIN', 'employees.local'),
+        'temp_password_length' => (int) env('HRM_LOGIN_TEMP_PASSWORD_LENGTH', 12),
+    ],
+
 ];

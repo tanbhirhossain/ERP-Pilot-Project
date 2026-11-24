@@ -34,9 +34,10 @@ class PasswordController extends Controller
             'password' => ['required', Password::defaults(), 'confirmed'],
         ]);
 
-        $request->user()->update([
+        $request->user()->forceFill([
             'password' => Hash::make($validated['password']),
-        ]);
+            'force_password_change' => false,
+        ])->save();
 
         return back();
     }

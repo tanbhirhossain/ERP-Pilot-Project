@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Hash;
 use Modules\CORE\Models\User;
 use Modules\CORE\Services\ApiTokenService;
 use Modules\CORE\Support\Api\ApiEndpoint;
+use Modules\HRM\Services\EmployeeLoginService;
 
 /**
  * F13 — the credentials-for-a-token exchange, plus "who am I as this token?".
@@ -32,7 +33,7 @@ class AuthTokenController extends Controller
 
     #[ApiEndpoint(
         summary: 'Exchange credentials for a token',
-        description: 'The secret is returned once — only its sha256 hash is stored, so it can never be read back. `abilities` narrows what this token may reach and can never widen what the owning user\'s roles allow. Bad credentials answer 401 with the same message whether the address is unknown or the password is wrong.',
+        description: 'The secret is returned once — only its sha256 hash is stored, so it can never be read back. `abilities` narrows what this token may reach and can never widen what the owning user\'s roles allow. Bad credentials answer 401 with the same message whether the address is unknown or the password is wrong. The email field also accepts the employee code.',
         request: 'TokenIssued',
         response: 'TokenIssued',
         public: true,
@@ -40,7 +41,7 @@ class AuthTokenController extends Controller
     public function issue(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'email' => ['required', 'email'],
+            'email' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
             'device_name' => ['required', 'string', 'max:120'],
             'abilities' => ['nullable', 'array'],
@@ -48,7 +49,9 @@ class AuthTokenController extends Controller
             'expires_in_days' => ['nullable', 'integer', 'min:1', 'max:'.ApiTokenService::MAX_LIFETIME_DAYS],
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        $loginEmail = app(EmployeeLoginService::class)->resolveEmail($data['email']);
+
+        $user = $loginEmail !== null ? User::where('email', $loginEmail)->first() : null;
 
         if ($user === null) {
             Hash::check($data['password'], self::TIMING_HASH);
@@ -57,6 +60,12 @@ class AuthTokenController extends Controller
         }
 
         if (! Hash::check($data['password'], $user->password)) {
+            return $this->refused();
+        }
+
+        // A leaver's password still matches, so the lockout answers exactly
+        // like bad credentials: nothing about who left leaks through here.
+        if (app(EmployeeLoginService::class)->isLeaverLocked($user)) {
             return $this->refused();
         }
 

@@ -59,6 +59,12 @@ class SsoController extends Controller
                 ->with('success', "Linked {$result['identity']->email} from {$provider} to this account.");
         }
 
+        // SSO must not resurrect a leaver: the provider deprovisions on its own
+        // schedule, so the employment date has the final word here too.
+        if (app(\Modules\HRM\Services\EmployeeLoginService::class)->isLeaverLocked($result['user'])) {
+            return $this->failure($request, new \DomainException('This account has been deactivated. Please contact HR.'));
+        }
+
         Auth::login($result['user'], true);
         $request->session()->regenerate();
 

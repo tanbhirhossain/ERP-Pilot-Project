@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Modules\CORE\Support\PublishedCredentialGuard;
+use Modules\HRM\Services\EmployeeLoginService;
 
 class LoginRequest extends FormRequest
 {
@@ -29,7 +30,7 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => ['required', 'string', 'email'],
+            'email' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
         ];
     }
@@ -43,7 +44,15 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        // The login box speaks employee code as well as email. A code resolves to
+        // the linked user's address so every guard below keeps speaking email;
+        // an unknown code fails exactly like an unknown address.
+        $logins = app(EmployeeLoginService::class);
+        $login = (string) $this->string('email');
+        $password = (string) $this->string('password');
+        $email = $logins->resolveEmail($login);
+
+        if ($email === null || ! Auth::attempt(['email' => $email, 'password' => $password], $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -51,13 +60,21 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        // A leaver's credentials still match — the row is untouched — so the
+        // lockout is checked after a real authentication, and answered like
+        // any other failure.
+        if ($logins->isLeaverLocked(Auth::user())) {
+            Auth::guard('web')->logout();
+
+            throw ValidationException::withMessages([
+                'email' => 'This account has been deactivated. Please contact HR.',
+            ]);
+        }
+
         // The credentials matched. In production, refuse the ones this repository publishes —
         // `password` is in config/core.php, .env.example and both seeders, and the account it
         // belongs to holds the `*` wildcard permission. Checked *after* Auth::attempt so the
         // message only appears for a login that really would have succeeded.
-        $email = (string) $this->string('email');
-        $password = (string) $this->string('password');
-
         if (PublishedCredentialGuard::shouldRefuse($email, $password)) {
             PublishedCredentialGuard::report($email);
             Auth::guard('web')->logout();

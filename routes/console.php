@@ -29,3 +29,8 @@ Schedule::command('erp:leave-balance-accrual')->monthlyOn(1, '01:00')->withoutOv
 // no-op success, so a repeated tick never double-posts.
 Schedule::command('erp:depreciation-run')->monthlyOn(1, '02:00')->timezone('Asia/Dhaka')->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/depreciation-scheduled.log'));
+
+// A last day can arrive months after the resignation was approved, and nothing
+// else settles access on the day itself: this sweep retires the leavers'
+// tokens, sessions and push rows every morning.
+Schedule::command('hrm:employee-logins --revoke-leavers')->dailyAt('01:30')->timezone('Asia/Dhaka')->withoutOverlapping();

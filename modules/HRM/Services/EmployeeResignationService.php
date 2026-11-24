@@ -108,5 +108,11 @@ final class EmployeeResignationService
         }
 
         $employee->update($updates);
+
+        // A last day that has arrived ends access in the same transaction as
+        // the employment: tokens, sessions and pushes die with the approval.
+        if ($employee->user !== null && $employee->hasLeftOnOrBefore(now()->toDateString())) {
+            app(EmployeeLoginService::class)->revokeAccess($employee->user);
+        }
     }
 }

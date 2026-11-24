@@ -3,6 +3,7 @@
 namespace Modules\HRM\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Modules\HRM\Console\Commands\EmployeeLoginsCommand;
 use Modules\HRM\Console\Commands\FixAttendancePairingCommand;
 use Modules\HRM\Console\Commands\FixBiometricMappingCommand;
 use Modules\HRM\Console\Commands\MapDeviceUsersCommand;
@@ -87,6 +88,7 @@ class HRMServiceProvider extends ServiceProvider
         $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
         if ($this->app->runningInConsole()) {
             $this->commands([
+                EmployeeLoginsCommand::class,
                 ReprocessOrphansCommand::class,
                 RunAttendancePipelineCommand::class,
                 SyncAttendanceCommand::class,

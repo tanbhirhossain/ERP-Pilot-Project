@@ -1287,6 +1287,62 @@
                 "description": "Counts by verdict plus worked, overtime and total hours for the month."
             }
         },
+        "/api/v1/auth/change-password": {
+            "post": {
+                "operationId": "api.v1.auth.password",
+                "summary": "Change my password",
+                "tags": [
+                    "Authentication"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": null,
+                "x-required-ability": null,
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum"
+                ],
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MobileEnvelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/UnprocessableEntity"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "Current + new (confirmed) password. Clears the first-login force flag, so this is the screen the app must show when `must_change_password` is true or any endpoint answers PASSWORD_CHANGE_REQUIRED.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MobilePasswordChange"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/login": {
             "post": {
                 "operationId": "api.v1.auth.login",
@@ -1323,7 +1379,7 @@
                         "$ref": "#/components/responses/TooManyRequests"
                     }
                 },
-                "description": "Email + password for a Sanctum token carrying the `mobile` ability. Wrong credentials answer 401; the token is rate-limited to 10 attempts a minute. Distinct from the F13 `POST auth/token` exchange, which mints ability-scoped integrator tokens.",
+                "description": "Email or employee code + password for a Sanctum token carrying the `mobile` ability. Wrong credentials answer 401; the token is rate-limited to 10 attempts a minute. Distinct from the F13 `POST auth/token` exchange, which mints ability-scoped integrator tokens.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -1501,7 +1557,7 @@
                         "$ref": "#/components/responses/TooManyRequests"
                     }
                 },
-                "description": "The secret is returned once — only its sha256 hash is stored, so it can never be read back. `abilities` narrows what this token may reach and can never widen what the owning user's roles allow. Bad credentials answer 401 with the same message whether the address is unknown or the password is wrong.",
+                "description": "The secret is returned once — only its sha256 hash is stored, so it can never be read back. `abilities` narrows what this token may reach and can never widen what the owning user's roles allow. Bad credentials answer 401 with the same message whether the address is unknown or the password is wrong. The email field also accepts the employee code.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -6964,7 +7020,7 @@
                 "properties": {
                     "email": {
                         "type": "string",
-                        "format": "email"
+                        "description": "Email address or employee code (e.g. EMP-0042)."
                     },
                     "password": {
                         "type": "string"
@@ -6973,6 +7029,26 @@
                         "type": "string",
                         "maxLength": 100,
                         "description": "Labels the token; defaults to `mobile`."
+                    }
+                }
+            },
+            "MobilePasswordChange": {
+                "type": "object",
+                "required": [
+                    "current_password",
+                    "password",
+                    "password_confirmation"
+                ],
+                "properties": {
+                    "current_password": {
+                        "type": "string"
+                    },
+                    "password": {
+                        "type": "string",
+                        "minLength": 8
+                    },
+                    "password_confirmation": {
+                        "type": "string"
                     }
                 }
             },

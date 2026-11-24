@@ -220,8 +220,13 @@ test('one employee is hired, rostered, punched, granted leave, paid and can read
     // Her biometric id is mapped for the device, which is how a punch finds her at all.
     expect(DB::table('device_users')->where('device_user_id', '9001')->value('employee_id'))->toBe('LIFE-001');
 
-    // She has no sign-in account yet; the HR desk links one later. Until then ESS tells her to ask.
-    expect($employee->user_id)->toBeNull();
+    // Hiring provisions her sign-in on the spot: one linked user on her address, temporary
+    // password, forced change. There is no separate "create the account" step anymore.
+    expect($employee->user_id)->not->toBeNull();
+    $provisioned = User::find($employee->user_id);
+    expect($provisioned->email)->toBe('noorjahan.akter@example.test')
+        ->and((bool) $provisioned->force_password_change)->toBeTrue()
+        ->and($provisioned->provisioned_employee_code)->toBe('LIFE-001');
 
     // ── 2. A shift, and the October duty roster ────────────────────────────────────────────────
     $this->post(route('hrm.shifts.store'), [
@@ -551,25 +556,15 @@ test('one employee is hired, rostered, punched, granted leave, paid and can read
         ->and(round((float) $ledger->sum('amount'), 2))->toBe(2000.0);
 
     // ── 11. She signs in and reads it herself ───────────────────────────────────────────────
-    $herAccount = User::create([
-        'name' => 'Noorjahan Akter',
-        'email' => 'noorjahan.akter@example.test',
+    // Her login is the one hiring provisioned. The temporary password was shown once, at
+    // hire, and cannot be read back — so the test stands in HR's shoes and sets a known
+    // one the way the reset command would, including clearing the forced change.
+    $herAccount = User::find(Employee::query()->find($employee->id)->user_id);
+    $herAccount->forceFill([
         'password' => bcrypt('secret-password'),
+        'force_password_change' => false,
         'email_verified_at' => now(),
-    ]);
-
-    // Linking the account is an edit on her employee page, not a database step.
-    $this->put(route('hrm.employees.update', $employee->id), [
-        'first_name' => $employee->first_name,
-        'last_name' => $employee->last_name,
-        'employment_type' => $employee->employment_type,
-        'status' => $employee->status,
-        'joining_date' => '2026-10-01',
-        'gender' => $employee->gender,
-        'user_id' => $herAccount->id,
-    ])->assertRedirect(route('hrm.employees.index'));
-
-    expect(Employee::query()->find($employee->id)->user_id)->toBe($herAccount->id);
+    ])->save();
 
     $this->actingAs($herAccount);
     $this->get(route('hrm.my.dashboard'))->assertOk();

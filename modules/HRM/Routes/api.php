@@ -43,6 +43,7 @@ Route::middleware(['api'])->prefix('api')->group(function (): void {
 
         Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
+            Route::post('auth/change-password', [AuthController::class, 'changePassword'])->name('auth.password');
             // NOTE: GET auth/me belongs to the F13 integrator surface (CallerIdentity);
             // the mobile profile lives at auth/profile so the two never collide.
             Route::get('auth/profile', [AuthController::class, 'profile'])->name('auth.profile');

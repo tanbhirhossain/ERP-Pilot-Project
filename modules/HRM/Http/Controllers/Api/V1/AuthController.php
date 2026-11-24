@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Hash;
 use Modules\CORE\Models\User;
 use Modules\HRM\Models\Employee\Employee;
 use Modules\HRM\Support\Api\ApiResponse;
+use Illuminate\Validation\Rules\Password;
+use Modules\HRM\Services\EmployeeLoginService;
 
 /**
  * Mobile authentication (Sanctum personal access tokens).
@@ -26,7 +28,7 @@ class AuthController extends Controller
 {
     #[ApiEndpoint(
         summary: 'Log in (mobile)',
-        description: 'Email + password for a Sanctum token carrying the `mobile` ability. Wrong credentials answer 401; the token is rate-limited to 10 attempts a minute. Distinct from the F13 `POST auth/token` exchange, which mints ability-scoped integrator tokens.',
+        description: 'Email or employee code + password for a Sanctum token carrying the `mobile` ability. Wrong credentials answer 401; the token is rate-limited to 10 attempts a minute. Distinct from the F13 `POST auth/token` exchange, which mints ability-scoped integrator tokens.',
         request: 'MobileLogin',
         response: 'MobileEnvelope',
         status: '200',
@@ -35,14 +37,16 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'email' => ['required', 'email'],
+            'email' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
             'device_name' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        $logins = app(EmployeeLoginService::class);
+        $loginEmail = $logins->resolveEmail($data['email']);
+        $user = $loginEmail !== null ? User::where('email', $loginEmail)->first() : null;
 
-        if ($user === null || ! Hash::check($data['password'], (string) $user->password)) {
+        if ($user === null || ! Hash::check($data['password'], (string) $user->password) || $logins->isLeaverLocked($user)) {
             return ApiResponse::error('Invalid email or password.', 401, ['code' => 'INVALID_CREDENTIALS']);
         }
 
@@ -78,6 +82,36 @@ class AuthController extends Controller
         return ApiResponse::ok($this->userPayload($request->user()), 'Profile.');
     }
 
+    #[ApiEndpoint(
+        summary: 'Change my password',
+        description: 'Current + new (confirmed) password. Clears the first-login force flag, so this is the screen the app must show when `must_change_password` is true or any endpoint answers PASSWORD_CHANGE_REQUIRED.',
+        request: 'MobilePasswordChange',
+        response: 'MobileEnvelope',
+        status: '200',
+    )]
+    public function changePassword(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'confirmed', Password::defaults()],
+        ]);
+
+        $user = $request->user();
+
+        if (! Hash::check($data['current_password'], (string) $user->password)) {
+            return ApiResponse::error('The current password is incorrect.', 422, [
+                'current_password' => ['The current password is incorrect.'],
+            ]);
+        }
+
+        $user->forceFill([
+            'password' => Hash::make($data['password']),
+            'force_password_change' => false,
+        ])->save();
+
+        return ApiResponse::ok(null, 'Password changed.');
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -89,6 +123,7 @@ class AuthController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
+            'must_change_password' => (bool) ($user->force_password_change ?? false),
             'roles' => $user->getRoleNames()->values()->all(),
             'is_supervisor' => DB::table('employee_supervisors')->where('supervisor_id', $user->id)->exists(),
             'employee' => $employee !== null ? [

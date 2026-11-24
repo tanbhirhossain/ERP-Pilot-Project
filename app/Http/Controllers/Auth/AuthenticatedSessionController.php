@@ -42,6 +42,12 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // First sign-in with a temporary password goes straight to the change
+        // screen; the login-policy middleware keeps it there.
+        if ((bool) $request->user()->force_password_change) {
+            return redirect()->route('password.edit');
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

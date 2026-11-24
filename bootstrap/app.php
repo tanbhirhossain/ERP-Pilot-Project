@@ -9,6 +9,7 @@ use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Modules\CORE\Http\Middleware\CheckApiAbility;
 use Modules\CORE\Http\Middleware\ForceApiJson;
 use Modules\CORE\Http\Middleware\SetLocale;
+use Modules\HRM\Http\Middleware\EnforceLoginPolicy;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             SetLocale::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            EnforceLoginPolicy::class,
         ]);
 
         // F13: the token-authenticated surface. This app has no root routes/api.php
@@ -33,7 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // append the limiter so a runaway integration costs requests, not database.
         $middleware->alias(['ability' => CheckApiAbility::class]);
         $middleware->api(prepend: [ForceApiJson::class]);
-        $middleware->api(append: ['throttle:api']);
+        $middleware->api(append: ['throttle:api', EnforceLoginPolicy::class]);
 
         // Runs on every response, including downloads and JSON, so security
         // headers cannot be missed by a route that skips the `web` group.
