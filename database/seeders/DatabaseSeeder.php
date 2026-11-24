@@ -6,6 +6,7 @@ use Illuminate\Database\Seeder;
 use Modules\ACCOUNTS\Database\Seeders\AccountsDemoSeeder;
 use Modules\ACCOUNTS\Database\Seeders\AccountsPermissionSeeder;
 use Modules\CORE\Database\Seeders\CoreSeeder;
+use Modules\CORE\Database\Seeders\MakerCheckerSeeder;
 use Modules\CORE\Database\Seeders\Phase1Seeder;
 use Modules\CORE\Database\Seeders\SuperAdminSeeder;
 use Modules\HRM\Database\Seeders\AMZOctober2026CalendarSeeder;
@@ -43,6 +44,9 @@ class DatabaseSeeder extends Seeder
         $this->call([
             CoreSeeder::class,
             SuperAdminSeeder::class,
+            // Maker-checker roles + demo users for the Purchase/Accounting two-door rule.
+            // Idempotent: safe on dev AND production; re-runs converge, never strip.
+            MakerCheckerSeeder::class,
             HRMPermissionSeeder::class,
             PAYROLLPermissionSeeder::class,
             // The fallback shift attendance classification depends on. Extracted from migration
