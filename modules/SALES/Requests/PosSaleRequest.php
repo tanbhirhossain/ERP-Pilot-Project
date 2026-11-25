@@ -71,8 +71,14 @@ class PosSaleRequest extends FormRequest
              * Sell twice over a slow network is one sale, not two. That is not a nicety: before this,
              * the only thing standing between an impatient cashier and a double charge was the button's
              * own disabled state, which a 3-second response reliably outruns.
+             *
+             * Shaped as `string`, not `uuid`: tills served over plain HTTP have no
+             * `crypto.randomUUID`, so they queue tickets under `t-<millis>-<rand>` references — and
+             * those tickets are money already in a drawer. Refusing them at validation would orphan
+             * real sales with "The client ref field must be a valid UUID". New refs are still UUIDs
+             * (see `offline/clientRef.ts`); the column is `string(36)`, hence the only bound left.
              */
-            'client_ref' => ['nullable', 'uuid'],
+            'client_ref' => ['nullable', 'string', 'max:36'],
             'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.product_id' => ['required', 'exists:inventory_products,id'],
             'items.*.variant_id' => ['nullable', 'exists:inventory_product_variants,id'],

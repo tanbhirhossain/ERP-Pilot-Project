@@ -34,8 +34,10 @@ class PosOfflineSyncRequest extends FormRequest
             'sales' => ['required', 'array', 'min:1', 'max:'.PosOfflineSyncService::MAX_ROWS],
             // Required, not inferred from the payload's hash: two tabs on one device queue distinct
             // tickets that can look identical (same cart, same minute), and a hash would merge them
-            // into one sale. The UUID is minted once, at the moment the cashier presses Sell.
-            'sales.*.client_ref' => ['required', 'string', 'uuid'],
+            // into one sale. The reference is minted once, at the moment the cashier presses Sell.
+            // A string, not a UUID: tills without `crypto.randomUUID` queue under `t-<millis>-<rand>`
+            // refs, and a queued ticket is money already in a drawer — see `PosSaleRequest::rowRules()`.
+            'sales.*.client_ref' => ['required', 'string', 'max:36'],
             'sales.*.rang_up_at' => ['nullable', 'date'],
             // Set only when a human has read the "this was rung up on 7 Nov" refusal and chosen to
             // post it into today anyway. Never set by the device on its own.
@@ -48,7 +50,7 @@ class PosOfflineSyncRequest extends FormRequest
         return [
             'sales.max' => 'A sync may carry at most '.PosOfflineSyncService::MAX_ROWS.' tickets. The rest will go on the next flush.',
             'sales.*.client_ref.required' => 'Every queued ticket must carry its device reference — without it a retry would double the sale.',
-            'sales.*.client_ref.uuid' => 'A ticket reference must be the UUID the till generated when the sale was queued.',
+            'sales.*.client_ref.max' => 'A ticket reference is at most 36 characters.',
         ];
     }
 }

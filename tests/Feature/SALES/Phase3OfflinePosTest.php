@@ -608,3 +608,31 @@ test('electronic tender references survive live and offline sales', function () 
     pofSync([$queued])->assertOk()->assertJsonPath('synced', 1);
     expect(PosSale::where('client_ref', $queued['client_ref'])->firstOrFail()->transaction_ref)->toBe('BANK-OFFLINE-456');
 });
+
+test('a ticket queued by a till without crypto still sells, live and on sync', function () {
+    // Tills served over plain HTTP have no `crypto.randomUUID`, so they queue under `t-<millis>-<rand>`
+    // references — and a queued ticket is money already in a drawer. The server accepts the reference
+    // the till minted instead of demanding a UUID ("The client ref field must be a valid UUID" was the
+    // till's own wrapper around the 422 this used to be); the column is `string(36)`, which is the only
+    // bound left.
+    [$warehouse, $product] = pofTill();
+    $session = pofSession($warehouse->id);
+    $legacy = 't-'.(int) (microtime(true) * 1000).'-'.Str::random(8);
+
+    $live = pofRow($product, $warehouse->id, ['client_ref' => $legacy, 'session_id' => $session->id]);
+    $this->post('/sales/pos/sell', $live)->assertRedirect()->assertSessionHasNoErrors();
+    expect(PosSale::where('client_ref', $legacy)->count())->toBe(1);
+
+    $queued = pofRow($product, $warehouse->id, ['client_ref' => $legacy.'-q']);
+    pofSync([$queued])->assertOk()->assertJsonPath('synced', 1);
+    expect(PosSale::where('client_ref', $legacy.'-q')->count())->toBe(1);
+});
+
+test('a reference longer than the column is still refused at the door', function () {
+    [$warehouse, $product] = pofTill();
+    pofOpenDrawer($warehouse->id);
+
+    $tooLong = pofSync([pofRow($product, $warehouse->id, ['client_ref' => 't-'.str_repeat('9', 40)])])->assertStatus(422);
+
+    expect($tooLong->json('errors'))->toHaveKey('sales.0.client_ref');
+});

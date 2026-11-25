@@ -34,6 +34,7 @@ import {
 } from './queue';
 import { createStore, type CreatedStore } from './store';
 import { describeCatalog, findInCatalog, loadCatalog, saveCatalog, searchCatalog, type CatalogRow, type CatalogState } from './catalog';
+import { newClientRef } from './clientRef';
 
 export interface OfflineTillOptions {
   /** `route('sales.pos.offline.sync')`, resolved by the page so this file stays route-agnostic. */
@@ -243,7 +244,7 @@ export function useOfflineTill(options: OfflineTillOptions) {
       store: created.store,
       send: transport,
       now: () => Date.now(),
-      newRef: () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `t-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`),
+      newRef: () => newClientRef(),
       maxBatch: options.maxBatch,
       onChange: (s) => {
         summary.value = s;

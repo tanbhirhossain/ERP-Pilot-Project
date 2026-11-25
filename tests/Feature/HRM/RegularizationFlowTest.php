@@ -21,7 +21,9 @@
  */
 
 use Modules\CORE\Models\User;
+use Modules\HRM\Interfaces\Attendance\AttendanceDailyRepositoryInterface;
 use Modules\HRM\Models\Attendance\AttendanceDaily;
+use Modules\HRM\Models\Attendance\AttendancePair;
 use Modules\HRM\Models\AttendanceRegularization;
 use Modules\HRM\Models\Employee\Employee;
 use Spatie\Permission\Models\Permission;
@@ -336,4 +338,86 @@ test('the queue list names the reviewer instead of throwing on a missing relatio
         ->get(route('hrm.regularizations.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->has('regularizations.data', 2));
+});
+
+test('an approved fix survives the next pipeline run', function () {
+    // The reported bug, end to end: the approval rewrote the day, and the next pipeline run — a
+    // reprocess, a repair, a late-arriving punch — recomputed the punches from the raw pairs and
+    // silently reverted the manager's decision. A regularized day is decided: the engine no longer
+    // recomputes it, and a later correction comes through a new regularization instead.
+    $e = regEmployee();
+    $approver = regApprover();
+
+    AttendancePair::query()->create([
+        'employee_id' => $e->employee_id,
+        'duty_date' => REG_DATE,
+        'duty_type' => 'Primary',
+        'punch_in' => REG_DATE.' 10:42:00',
+        'punch_out' => REG_DATE.' 18:06:00',
+        'worked_hours' => 7.4,
+    ]);
+
+    $pair = AttendancePair::query()->firstOrFail();
+    app(AttendanceDailyRepositoryInterface::class)->upsertForPair($pair);
+
+    $this->actingAs($approver)->post(route('hrm.regularizations.store'), regPayload($e, [
+        'regularization_type' => 'Late Correction',
+        'requested_in_time' => '09:05',
+        'requested_out_time' => '',
+        'reason' => 'The gate queue ran late; supervisor confirms I was there at 09:05.',
+    ]));
+
+    $reg = AttendanceRegularization::firstOrFail();
+
+    $this->actingAs($approver)
+        ->post(route('hrm.regularizations.review', $reg), ['decision' => 'Approved'])
+        ->assertRedirect()->assertSessionHas('success');
+
+    // The pipeline runs again over the same raw pairs — exactly what a reprocess does.
+    app(AttendanceDailyRepositoryInterface::class)->upsertForPair($pair->fresh());
+
+    $daily = AttendanceDaily::query()
+        ->where('employee_id', $e->employee_id)->whereDate('duty_date', REG_DATE)->firstOrFail();
+
+    expect((string) $daily->primary_punch_in)->toContain('09:05')
+        ->and((string) $daily->primary_punch_out)->toContain('18:06')
+        ->and((float) $daily->primary_worked_hours)->toBe(9.02)
+        ->and((bool) $daily->is_regularized)->toBeTrue()
+        ->and($daily->regularization_id)->toBe($reg->id);
+});
+
+test('a one-sided approval onto a punch-less day names the side still missing', function () {
+    // The daily exists but the engine never gave it punches (an Absent-marked day): there is no status
+    // worth keeping, so the approval writes the punch, the hours and the status together — the day says
+    // which side is still missing instead of keeping yesterday's verdict over today's punch.
+    $e = regEmployee();
+    $approver = regApprover();
+
+    AttendanceDaily::query()->create([
+        'employee_id' => $e->employee_id,
+        'duty_date' => REG_DATE,
+        'status' => 'Absent',
+        'primary_worked_hours' => 0,
+    ]);
+
+    $this->actingAs($approver)->post(route('hrm.regularizations.store'), regPayload($e, [
+        'requested_in_time' => '',
+        'requested_out_time' => '18:00',
+        'reason' => 'My in-punch at 09:00 was never captured by the old device.',
+    ]));
+
+    $reg = AttendanceRegularization::firstOrFail();
+
+    $this->actingAs($approver)
+        ->post(route('hrm.regularizations.review', $reg), ['decision' => 'Approved'])
+        ->assertRedirect()->assertSessionHas('success');
+
+    $daily = AttendanceDaily::query()
+        ->where('employee_id', $e->employee_id)->whereDate('duty_date', REG_DATE)->firstOrFail();
+
+    expect($daily->primary_punch_in)->toBeNull()
+        ->and((string) $daily->primary_punch_out)->toContain('18:00')
+        ->and($daily->status)->toBe('Missing In')
+        ->and((float) $daily->primary_worked_hours)->toBe(0.0)
+        ->and((bool) $daily->is_regularized)->toBeTrue();
 });

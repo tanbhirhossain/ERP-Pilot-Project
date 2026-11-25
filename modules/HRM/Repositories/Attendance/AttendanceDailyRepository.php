@@ -76,9 +76,16 @@ class AttendanceDailyRepository implements AttendanceDailyRepositoryInterface
                 $allPrimary = AttendancePair::where('employee_id', $pair->employee_id)->where('duty_date', $pair->duty_date)->where('duty_type', 'Primary')->get();
                 $earliestIn = $allPrimary->min('punch_in');
                 $latestOut = $allPrimary->whereNotNull('punch_out')->max('punch_out');
-                $daily->primary_punch_in = $earliestIn;
-                $daily->primary_punch_out = $latestOut;
-                $this->syncWorkedHours($daily, $pair, $primaryPairs, $otPairs);
+                // A regularized day carries a manager's approved times, not the device's raw ones — and the
+                // pipeline recomputes from pairs on every run (reprocess, repair, a late-arriving punch). So
+                // without this guard an approval visibly rewrote the day and the next run silently reverted
+                // it, which is exactly the reported "approval doesn't fix Daily Attendance". A later
+                // correction comes through a new regularization, never through a raw re-pair.
+                if (! $daily->is_regularized) {
+                    $daily->primary_punch_in = $earliestIn;
+                    $daily->primary_punch_out = $latestOut;
+                    $this->syncWorkedHours($daily, $pair, $primaryPairs, $otPairs);
+                }
 
                 if (! $daily->expected_in_time) {
                     $roster = RosterDuty::where('employee_id', $pair->employee_id)->whereDate('roster_date', $pair->duty_date)->first();
@@ -90,11 +97,15 @@ class AttendanceDailyRepository implements AttendanceDailyRepositoryInterface
                         $daily->expected_out_time = $pair->shift->end_time;
                     }
                 }
-                $daily->status = $this->deriveStatus($daily, $pair);
+                if (! $daily->is_regularized) {
+                    $daily->status = $this->deriveStatus($daily, $pair);
+                }
             } else {
-                $this->syncWorkedHours($daily, $pair, $primaryPairs, $otPairs);
-                if (empty($daily->primary_punch_in)) {
-                    $daily->status = 'Extra Duty';
+                if (! $daily->is_regularized) {
+                    $this->syncWorkedHours($daily, $pair, $primaryPairs, $otPairs);
+                    if (empty($daily->primary_punch_in)) {
+                        $daily->status = 'Extra Duty';
+                    }
                 }
                 if (! $daily->primary_shift_id) {
                     $daily->primary_shift_id = $pair->shift_id;

@@ -110,7 +110,10 @@ class RegularizationService
                         $updates['primary_punch_out'] = $this->stamp($locked, $locked->requested_out_time);
                     }
                     // Recalc worked hours if both punches now exist
-                    if (($updates['primary_punch_in'] ?? $daily->primary_punch_in) && ($updates['primary_punch_out'] ?? $daily->primary_punch_out)) {
+                    $hasInNow = (bool) ($updates['primary_punch_in'] ?? $daily->primary_punch_in);
+                    $hasOutNow = (bool) ($updates['primary_punch_out'] ?? $daily->primary_punch_out);
+
+                    if ($hasInNow && $hasOutNow) {
                         $in = Carbon::parse($updates['primary_punch_in'] ?? $daily->primary_punch_in);
                         $out = Carbon::parse($updates['primary_punch_out'] ?? $daily->primary_punch_out);
                         if ($out->lt($in)) {
@@ -124,6 +127,13 @@ class RegularizationService
                         if (! $hadPunches) {
                             $updates['status'] = 'Present';
                         }
+                    } elseif (! $hadPunches && ($hasInNow || $hasOutNow)) {
+                        // A one-sided approval onto a day that had no punches at all (an Absent-marked day
+                        // corrected with only the side anyone could prove): the day now has a punch but no
+                        // pair, so it names the side still missing instead of keeping the stale status —
+                        // and spans zero hours, exactly as the create path computes it.
+                        $updates['status'] = $this->statusFor($hasInNow, $hasOutNow);
+                        $updates['primary_worked_hours'] = 0.0;
                     }
                     $daily->update($updates);
                 } else {

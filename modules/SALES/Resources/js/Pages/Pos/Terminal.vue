@@ -13,6 +13,7 @@ import { CloudOff, RefreshCw } from 'lucide-vue-next';
 // F22 — one payload builder for the live POST and the offline queue, so the two can never drift.
 import { buildSalePayload, cartLabel } from '@sales/offline/payload';
 import { offlineStockWarning } from '@sales/offline/catalog';
+import { newClientRef } from '@sales/offline/clientRef';
 import { useOfflineTill } from '@sales/offline/useOfflineTill';
 import { unwrapOptions } from '@core/Utils/optionsPayload';
 import { readWarehouse, saveWarehouse } from '@sales/offline/posWarehousePreference';
@@ -127,9 +128,7 @@ function announceSellError(message: string) {
 
 function nextSubmissionRef(): string {
   if (!submissionRef.value) {
-    submissionRef.value = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `t-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    submissionRef.value = newClientRef();
   }
 
   return submissionRef.value;
