@@ -80,4 +80,9 @@ class RosterShiftRepository implements RosterShiftRepositoryInterface
     {
         return ['crosses_midnight' => fn (Builder $q, string $v) => $q->where('crosses_midnight', $v === '1')];
     }
+    public function catalog(): Collection
+    {
+        return RosterShift::orderBy('shift_name')
+            ->get(['id', 'shift_name', 'start_time', 'end_time', 'crosses_midnight']);
+    }
 }

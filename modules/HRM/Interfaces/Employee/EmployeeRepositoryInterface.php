@@ -25,4 +25,17 @@ interface EmployeeRepositoryInterface
     public function update(Employee $e, array $data): Employee;
 
     public function delete(Employee $e): void;
+    public function findByUserId(int $userId, array $with = []): ?Employee;
+    public function teamMembers(?array $codes): Collection;
+    public function directoryPaginate(?string $search, ?int $departmentId, ?string $status, int $perPage): LengthAwarePaginator;
+    public function countActive(): int;
+    public function countActiveByEmploymentType(string $type): int;
+    public function countJoinedBetween(string $from, string $to): int;
+    /** @return list<string> */
+    public function knownCodes(array $codes): array;
+    public function userIdForCode(string $code): ?int;
+    /** @return list<int|string> */
+    public function userIdsForCodes(array $codes): array;
+    /** @return list<int|string> */
+    public function userIdsForDepartments(array $departmentIds): array;
 }

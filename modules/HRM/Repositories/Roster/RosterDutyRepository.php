@@ -130,4 +130,27 @@ class RosterDutyRepository implements RosterDutyRepositoryInterface
     {
         return ['employee_id' => fn (Builder $q, string $v) => $q->where('employee_id', $v), 'shift_id' => fn (Builder $q, string $v) => $q->where('shift_id', $v), 'status' => fn (Builder $q, string $v) => $q->where('status', $v), 'roster_date' => fn (Builder $q, string $v) => $q->where('roster_date', $v)];
     }
+    public function find(int $id): ?RosterDuty
+    {
+        return RosterDuty::find($id);
+    }
+    public function paginateForCodes(?array $codes, ?string $from, ?string $to, int $perPage): LengthAwarePaginator
+    {
+        $query = RosterDuty::with(['employee:employee_id,full_name,first_name,last_name', 'shift:id,shift_name,start_time,end_time'])
+            ->orderBy('roster_date')->orderBy('employee_id');
+
+        if ($codes !== null) {
+            $query->whereIn('employee_id', $codes);
+        }
+
+        if ($from !== null && $from !== '') {
+            $query->whereDate('roster_date', '>=', $from);
+        }
+
+        if ($to !== null && $to !== '') {
+            $query->whereDate('roster_date', '<=', $to);
+        }
+
+        return $query->paginate($perPage);
+    }
 }

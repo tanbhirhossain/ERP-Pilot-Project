@@ -8,7 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesApiEmployee;
-use Modules\PAYROLL\Models\PfAccount;
+use Modules\PAYROLL\Interfaces\Repositories\PfAccountRepositoryInterface;
 
 /**
  * Employee provident-fund self-service (read-only).
@@ -20,6 +20,8 @@ use Modules\PAYROLL\Models\PfAccount;
 class ProvidentFundApiController extends Controller
 {
     use ResolvesApiEmployee;
+
+    public function __construct(private readonly PfAccountRepositoryInterface $accounts) {}
 
     #[ApiEndpoint(
         summary: 'My PF account and policy',
@@ -34,9 +36,7 @@ class ProvidentFundApiController extends Controller
             return $employee;
         }
 
-        $account = PfAccount::where('employee_id', $employee->employee_id)
-            ->with('policy')
-            ->first();
+        $account = $this->accounts->findByEmployee($employee->employee_id, true);
 
         if ($account === null) {
             return ApiResponse::error('No provident fund account found for this employee.', 404);
@@ -80,27 +80,22 @@ class ProvidentFundApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $account = PfAccount::where('employee_id', $employee->employee_id)->first();
+        $account = $this->accounts->findByEmployee($employee->employee_id);
 
         if ($account === null) {
             return ApiResponse::error('No provident fund account found for this employee.', 404);
         }
 
-        $query = $account->ledgers()->orderByDesc('entry_date')->orderByDesc('id');
-
-        if (! empty($data['from'])) {
-            $query->whereDate('entry_date', '>=', $data['from']);
-        }
-
-        if (! empty($data['to'])) {
-            $query->whereDate('entry_date', '<=', $data['to']);
-        }
-
-        if (! empty($data['entry_type'])) {
-            $query->where('entry_type', $data['entry_type']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'Provident fund ledger.');
+        return ApiResponse::paginated(
+            $this->accounts->paginateLedger(
+                $account,
+                $data['from'] ?? null,
+                $data['to'] ?? null,
+                $data['entry_type'] ?? null,
+                $data['per_page'] ?? 20,
+            ),
+            'Provident fund ledger.'
+        );
     }
 
     #[ApiEndpoint(
@@ -116,14 +111,14 @@ class ProvidentFundApiController extends Controller
             return $employee;
         }
 
-        $account = PfAccount::where('employee_id', $employee->employee_id)->first();
+        $account = $this->accounts->findByEmployee($employee->employee_id);
 
         if ($account === null) {
             return ApiResponse::error('No provident fund account found for this employee.', 404);
         }
 
         return ApiResponse::ok(
-            $account->withdrawals()->orderByDesc('id')->get(),
+            $this->accounts->withdrawals($account),
             'Provident fund withdrawals.'
         );
     }

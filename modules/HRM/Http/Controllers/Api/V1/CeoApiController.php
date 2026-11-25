@@ -6,19 +6,18 @@ use App\Http\Controllers\Controller;
 use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\CORE\Models\User;
-use Modules\HRM\Models\Approval\OvertimeRequestWorkflow;
-use Modules\HRM\Models\Attendance\AttendanceDaily;
-use Modules\HRM\Models\Employee\Employee;
-use Modules\HRM\Models\Employee\EmployeeResignation;
-use Modules\HRM\Models\Leave\LeaveRequest;
-use Modules\HRM\Models\Leave\LeaveRequestWorkflow;
-use Modules\HRM\Models\Leave\LeaveType;
-use Modules\HRM\Models\Roster\RosterOvertime;
+use Modules\HRM\Interfaces\Approval\LeaveRequestWorkflowRepositoryInterface;
+use Modules\HRM\Interfaces\Approval\OvertimeRequestWorkflowRepositoryInterface;
+use Modules\HRM\Interfaces\Attendance\AttendanceDailyRepositoryInterface;
+use Modules\HRM\Interfaces\Employee\EmployeeRepositoryInterface;
+use Modules\HRM\Interfaces\Employee\EmployeeResignationRepositoryInterface;
+use Modules\HRM\Interfaces\Leave\LeaveRequestRepositoryInterface;
+use Modules\HRM\Interfaces\Leave\LeaveTypeRepositoryInterface;
+use Modules\HRM\Interfaces\Roster\RosterOvertimeRepositoryInterface;
 use Modules\HRM\Services\ApprovalEngine;
 use Modules\HRM\Support\Api\ApiResponse;
-use Modules\PAYROLL\Models\PayrollSalarySheet;
-use Modules\PAYROLL\Models\PfAccount;
+use Modules\PAYROLL\Interfaces\Repositories\PayrollSalarySheetRepositoryInterface;
+use Modules\PAYROLL\Interfaces\Repositories\PfAccountRepositoryInterface;
 
 /**
  * CEO cockpit (Phase 3): dashboard, statistics, monthly report.
@@ -33,9 +32,21 @@ use Modules\PAYROLL\Models\PfAccount;
  */
 class CeoApiController extends Controller
 {
-    public function __construct(private readonly ApprovalEngine $engine) {}
+    public function __construct(
+        private readonly ApprovalEngine $engine,
+        private readonly EmployeeRepositoryInterface $employees,
+        private readonly EmployeeResignationRepositoryInterface $resignations,
+        private readonly AttendanceDailyRepositoryInterface $dailies,
+        private readonly LeaveRequestRepositoryInterface $leaveRows,
+        private readonly LeaveTypeRepositoryInterface $leaveTypes,
+        private readonly RosterOvertimeRepositoryInterface $overtimeRows,
+        private readonly LeaveRequestWorkflowRepositoryInterface $leaveWorkflows,
+        private readonly OvertimeRequestWorkflowRepositoryInterface $overtimeWorkflows,
+        private readonly PayrollSalarySheetRepositoryInterface $sheets,
+        private readonly PfAccountRepositoryInterface $pfAccounts,
+    ) {}
 
-    private function gate(User $user): ?JsonResponse
+    private function gate($user): ?JsonResponse
     {
         if (! $user->hasAnyRole(['CEO', 'Super Admin'])) {
             return ApiResponse::error('The CEO cockpit needs the CEO role.', 403);
@@ -59,36 +70,29 @@ class CeoApiController extends Controller
         $monthStart = now()->startOfMonth()->toDateString();
         $monthEnd = now()->endOfMonth()->toDateString();
 
-        $headcount = Employee::where('is_active', true)->count();
-        $onProbation = Employee::where('is_active', true)->where('employment_type', 'Probation')->count();
-        $joinedMonth = Employee::whereBetween('joining_date', [$monthStart, $monthEnd])->count();
-        $exitsMonth = EmployeeResignation::where('status', 'Approved')
-            ->whereBetween('approved_at', [$monthStart.' 00:00:00', $monthEnd.' 23:59:59'])->count();
+        $headcount = $this->employees->countActive();
+        $onProbation = $this->employees->countActiveByEmploymentType('Probation');
+        $joinedMonth = $this->employees->countJoinedBetween($monthStart, $monthEnd);
+        $exitsMonth = $this->resignations->countApprovedBetween($monthStart, $monthEnd);
 
-        $todayRows = AttendanceDaily::whereDate('duty_date', $today)
-            ->selectRaw('status, COUNT(*) AS c')->groupBy('status')->pluck('c', 'status');
+        $todayRows = $this->dailies->statusCountsForDate($today);
 
-        $onLeaveToday = LeaveRequest::where('status', 'Approved')
-            ->whereDate('from_date', '<=', $today)->whereDate('to_date', '>=', $today);
-        $onLeaveList = (clone $onLeaveToday)
-            ->with(['employee:employee_id,full_name,first_name,last_name', 'leaveType:id,name'])
-            ->orderBy('to_date')->limit(10)->get()
-            ->map(fn (LeaveRequest $l): array => [
+        $onLeaveList = $this->leaveRows->onLeaveOn($today)
+            ->map(fn ($l): array => [
                 'employee_id' => $l->employee_id,
                 'name' => $l->employee?->full_name ?? trim(($l->employee?->first_name ?? '').' '.($l->employee?->last_name ?? '')),
                 'leave_type' => $l->leaveType?->name,
                 'to_date' => $l->to_date?->toDateString(),
             ]);
 
-        $leavesPending = LeaveRequest::where('status', 'Pending')->count();
-        $otPending = RosterOvertime::where('status', 'Pending')->count();
+        $leavesPending = $this->leaveRows->countPending();
+        $otPending = $this->overtimeRows->countPending();
         $myDesk = $this->engine->queueFor($request->user());
 
-        $otApprovedMonth = (float) RosterOvertime::where('status', 'Approved')
-            ->whereBetween('overtime_date', [$monthStart, $monthEnd])->sum('hours');
+        $otApprovedMonth = $this->overtimeRows->approvedHoursBetween($monthStart, $monthEnd);
 
-        $sheet = PayrollSalarySheet::where('status', 'released')
-            ->orderByDesc('pay_year')->orderByDesc('pay_month')->first();
+        $sheet = $this->sheets->latestReleased();
+        $pfTotals = $this->pfAccounts->totals();
 
         return ApiResponse::ok([
             'date' => $today,
@@ -106,7 +110,7 @@ class CeoApiController extends Controller
                 'missing_punch' => (int) (($todayRows['Missing In'] ?? 0) + ($todayRows['Missing Out'] ?? 0)),
                 'recorded' => (int) $todayRows->sum(),
             ],
-            'on_leave_today' => ['count' => $onLeaveToday->count(), 'list' => $onLeaveList->all()],
+            'on_leave_today' => ['count' => $this->leaveRows->countOnLeaveOn($today), 'list' => $onLeaveList->all()],
             'approvals' => [
                 'leaves_pending' => $leavesPending,
                 'leaves_by_stage' => $this->pendingLeaveStages(),
@@ -127,8 +131,8 @@ class CeoApiController extends Controller
                 'net_total' => (float) $sheet->net_total,
             ] : null,
             'provident_fund' => [
-                'employee_total' => round((float) PfAccount::sum('employee_balance'), 2),
-                'employer_total' => round((float) PfAccount::sum('employer_balance'), 2),
+                'employee_total' => $pfTotals['employee'],
+                'employer_total' => $pfTotals['employer'],
             ],
         ], 'CEO dashboard.');
     }
@@ -157,20 +161,17 @@ class CeoApiController extends Controller
             $from = $month.'-01';
             $to = date('Y-m-t', strtotime($from));
 
-            $dailies = AttendanceDaily::whereBetween('duty_date', [$from, $to])->get(['status']);
+            $dailies = $this->dailies->statusesBetween($from, $to);
             $total = $dailies->count();
             $kept = $dailies->whereIn('status', ['Present', 'Late', 'Early Out', 'Late & Early Out', 'On Leave', 'Holiday', 'Extra Duty'])->count();
 
             $series[] = [
                 'month' => $month,
-                'joined' => Employee::whereBetween('joining_date', [$from, $to])->count(),
-                'exits' => EmployeeResignation::where('status', 'Approved')
-                    ->whereBetween('approved_at', [$from.' 00:00:00', $to.' 23:59:59'])->count(),
+                'joined' => $this->employees->countJoinedBetween($from, $to),
+                'exits' => $this->resignations->countApprovedBetween($from, $to),
                 'attendance_rate' => $total > 0 ? round(100 * $kept / $total, 1) : null,
-                'leave_days' => round((float) LeaveRequest::where('status', 'Approved')
-                    ->whereBetween('from_date', [$from, $to])->sum('days'), 2),
-                'overtime_hours' => round((float) RosterOvertime::where('status', 'Approved')
-                    ->whereBetween('overtime_date', [$from, $to])->sum('hours'), 2),
+                'leave_days' => $this->leaveRows->approvedDaysBetween($from, $to),
+                'overtime_hours' => $this->overtimeRows->approvedHoursBetween($from, $to),
             ];
         }
 
@@ -196,20 +197,12 @@ class CeoApiController extends Controller
         $from = $month.'-01';
         $to = date('Y-m-t', strtotime($from));
 
-        $statusCounts = AttendanceDaily::whereBetween('duty_date', [$from, $to])
-            ->selectRaw('status, COUNT(*) AS c')->groupBy('status')->pluck('c', 'status');
+        $statusCounts = $this->dailies->statusCountsBetween($from, $to);
 
-        $leaveByType = LeaveRequest::where('status', 'Approved')
-            ->whereBetween('from_date', [$from, $to])
-            ->selectRaw('leave_type_id, COUNT(*) AS n, SUM(days) AS d')->groupBy('leave_type_id')->get();
-        $typeNames = LeaveType::whereIn('id', $leaveByType->pluck('leave_type_id')->all())->pluck('name', 'id');
+        $leaveByType = $this->leaveRows->approvedGroupedByType($from, $to);
+        $typeNames = $this->leaveTypes->namesForIds($leaveByType->pluck('leave_type_id')->all());
 
-        $otByDept = RosterOvertime::where('roster_overtimes.status', 'Approved')
-            ->whereBetween('overtime_date', [$from, $to])
-            ->join('employees', 'employees.employee_id', '=', 'roster_overtimes.employee_id')
-            ->leftJoin('departments', 'departments.id', '=', 'employees.department_id')
-            ->selectRaw('COALESCE(departments.name, ?) AS dept, SUM(roster_overtimes.hours) AS h, COUNT(*) AS n', ['Unassigned'])
-            ->groupBy('dept')->orderByDesc('h')->get();
+        $otByDept = $this->overtimeRows->hoursByDepartmentBetween($from, $to);
 
         return ApiResponse::ok([
             'month' => $month,
@@ -230,13 +223,12 @@ class CeoApiController extends Controller
             ])->all(),
             'approvals_aging' => [
                 'leaves_by_stage' => $this->pendingLeaveStages(),
-                'leaves_by_week' => $this->pendingByWeek(LeaveRequest::class, 'leave_requests'),
+                'leaves_by_week' => $this->pendingByWeek($this->leaveRows->pendingCreatedDates()),
                 'overtimes_by_stage' => $this->pendingOtStages(),
             ],
             'movement' => [
-                'joined' => Employee::whereBetween('joining_date', [$from, $to])->count(),
-                'exits' => EmployeeResignation::where('status', 'Approved')
-                    ->whereBetween('approved_at', [$from.' 00:00:00', $to.' 23:59:59'])->count(),
+                'joined' => $this->employees->countJoinedBetween($from, $to),
+                'exits' => $this->resignations->countApprovedBetween($from, $to),
             ],
         ], 'CEO monthly report.');
     }
@@ -244,14 +236,14 @@ class CeoApiController extends Controller
     /** Pending leaves grouped by the stage label they wait on (snapshot-driven). */
     private function pendingLeaveStages(): array
     {
-        $ids = LeaveRequest::where('status', 'Pending')->pluck('id')->all();
+        $ids = $this->leaveRows->pendingIds();
 
         if ($ids === []) {
             return [];
         }
 
         $counts = [];
-        $workflows = LeaveRequestWorkflow::whereIn('leave_request_id', $ids)->get(['steps', 'current_stage']);
+        $workflows = $this->leaveWorkflows->stagesForLeaveIds($ids);
 
         foreach ($workflows as $workflow) {
             $steps = is_array($workflow->steps) ? array_values($workflow->steps) : [];
@@ -265,14 +257,14 @@ class CeoApiController extends Controller
     /** @return array<string,int> */
     private function pendingOtStages(): array
     {
-        $ids = RosterOvertime::where('status', 'Pending')->pluck('id')->all();
+        $ids = $this->overtimeRows->pendingIds();
 
         if ($ids === []) {
             return [];
         }
 
         $counts = [];
-        $workflows = OvertimeRequestWorkflow::whereIn('overtime_id', $ids)->get(['steps', 'current_stage']);
+        $workflows = $this->overtimeWorkflows->stagesForOvertimeIds($ids);
 
         foreach ($workflows as $workflow) {
             $steps = is_array($workflow->steps) ? array_values($workflow->steps) : [];
@@ -284,9 +276,8 @@ class CeoApiController extends Controller
     }
 
     /** @return array<string,int> week-start → pending count */
-    private function pendingByWeek(string $model, string $table): array
+    private function pendingByWeek($rows): array
     {
-        $rows = $model::where('status', 'Pending')->get(['created_at']);
         $buckets = [];
 
         foreach ($rows as $row) {
@@ -302,10 +293,7 @@ class CeoApiController extends Controller
     /** @return list<array{employee_id:string,name:string,days:int}> */
     private function topOffenders(string $from, string $to, array $statuses, int $limit = 10): array
     {
-        return AttendanceDaily::whereBetween('duty_date', [$from, $to])
-            ->whereIn('status', $statuses)
-            ->selectRaw('employee_id, COUNT(*) AS c')->groupBy('employee_id')
-            ->orderByDesc('c')->limit($limit)->get()
+        return $this->dailies->topOffenders($from, $to, $statuses, $limit)
             ->map(fn ($row): array => [
                 'employee_id' => $row->employee_id,
                 'name' => $this->employeeName($row->employee_id),
@@ -315,7 +303,7 @@ class CeoApiController extends Controller
 
     private function employeeName(string $code): string
     {
-        $employee = Employee::where('employee_id', $code)->first(['full_name', 'first_name', 'last_name']);
+        $employee = $this->employees->findByEmployeeId($code);
 
         return $employee?->full_name ?? trim(($employee?->first_name ?? '').' '.($employee?->last_name ?? '')) ?: $code;
     }

@@ -7,7 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Modules\CORE\Support\Api\ApiEndpoint;
-use Modules\HRM\Models\Device\UserDeviceToken;
+use Modules\HRM\Interfaces\Device\UserDeviceTokenRepositoryInterface;
 use Modules\HRM\Support\Api\ApiResponse;
 
 /**
@@ -24,6 +24,8 @@ use Modules\HRM\Support\Api\ApiResponse;
  */
 class DeviceApiController extends Controller
 {
+    public function __construct(private readonly UserDeviceTokenRepositoryInterface $tokens) {}
+
     #[ApiEndpoint(
         summary: 'My push installations',
         description: 'Every device token registered to the token user, newest first. An empty list means pushes for this user go nowhere — the in-app bell is unaffected.',
@@ -31,9 +33,7 @@ class DeviceApiController extends Controller
     )]
     public function index(Request $request): JsonResponse
     {
-        $tokens = UserDeviceToken::where('user_id', $request->user()->id)
-            ->orderByDesc('last_used_at')->orderByDesc('id')
-            ->get(['id', 'platform', 'device_name', 'last_used_at', 'created_at']);
+        $tokens = $this->tokens->listForUser($request->user()->id);
 
         return ApiResponse::ok($tokens, 'My devices.', ['total' => $tokens->count()]);
     }
@@ -49,18 +49,15 @@ class DeviceApiController extends Controller
     {
         $data = $request->validate([
             'token' => ['required', 'string', 'min:20', 'max:2048'],
-            'platform' => ['nullable', Rule::in(UserDeviceToken::PLATFORMS)],
+            'platform' => ['nullable', Rule::in($this->tokens->platforms())],
             'device_name' => ['nullable', 'string', 'max:120'],
         ]);
 
-        $row = UserDeviceToken::updateOrCreate(
-            ['token' => $data['token']],
-            [
-                'user_id' => $request->user()->id,
-                'platform' => $data['platform'] ?? 'android',
-                'device_name' => $data['device_name'] ?? null,
-                'last_used_at' => now(),
-            ],
+        $row = $this->tokens->register(
+            $data['token'],
+            $request->user()->id,
+            $data['platform'] ?? 'android',
+            $data['device_name'] ?? null,
         );
 
         return ApiResponse::ok(
@@ -77,13 +74,13 @@ class DeviceApiController extends Controller
     )]
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $row = UserDeviceToken::where('id', $id)->where('user_id', $request->user()->id)->first();
+        $row = $this->tokens->findForUser($id, $request->user()->id);
 
         if ($row === null) {
             return ApiResponse::error('Device not found.', 404);
         }
 
-        $row->delete();
+        $this->tokens->delete($row);
 
         return ApiResponse::ok(null, 'Device unregistered.');
     }

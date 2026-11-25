@@ -8,7 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesApiEmployee;
-use Modules\PAYROLL\Models\PayrollSlip;
+use Modules\PAYROLL\Interfaces\Repositories\PayrollSlipRepositoryInterface;
 
 /**
  * Employee payslip self-service.
@@ -20,6 +20,8 @@ use Modules\PAYROLL\Models\PayrollSlip;
 class PayslipApiController extends Controller
 {
     use ResolvesApiEmployee;
+
+    public function __construct(private readonly PayrollSlipRepositoryInterface $slips) {}
 
     #[ApiEndpoint(
         summary: 'My payslips',
@@ -43,17 +45,14 @@ class PayslipApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = PayrollSlip::where('employee_id', $employee->employee_id)
-            ->with('salarySheet:id,pay_year,pay_month,status')
-            ->orderByDesc('pay_year')
-            ->orderByDesc('pay_month')
-            ->orderByDesc('id');
-
-        if (! empty($data['year'])) {
-            $query->where('pay_year', (int) $data['year']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 12), 'My payslips.');
+        return ApiResponse::paginated(
+            $this->slips->paginateForEmployee(
+                $employee->employee_id,
+                isset($data['year']) ? (int) $data['year'] : null,
+                $data['per_page'] ?? 12,
+            ),
+            'My payslips.'
+        );
     }
 
     #[ApiEndpoint(
@@ -70,9 +69,7 @@ class PayslipApiController extends Controller
             return $employee;
         }
 
-        $slip = PayrollSlip::where('employee_id', $employee->employee_id)
-            ->with('salarySheet:id,pay_year,pay_month,status')
-            ->find($id);
+        $slip = $this->slips->findForEmployee($id, $employee->employee_id);
 
         if ($slip === null) {
             return ApiResponse::error('Payslip not found.', 404);

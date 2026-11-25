@@ -6,10 +6,11 @@ use App\Http\Controllers\Controller;
 use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Modules\CORE\Models\User;
-use Modules\HRM\Models\Employee\Employee;
+use Modules\CORE\Interfaces\UserRepositoryInterface;
+use Modules\HRM\Interfaces\Employee\EmployeeRepositoryInterface;
+use Modules\HRM\Interfaces\EmployeeSupervisorRepositoryInterface;
+use Modules\HRM\Interfaces\NotificationRepositoryInterface;
 use Modules\HRM\Support\Api\ApiResponse;
 use Illuminate\Validation\Rules\Password;
 use Modules\HRM\Services\EmployeeLoginService;
@@ -26,6 +27,13 @@ use Modules\HRM\Services\EmployeeLoginService;
  */
 class AuthController extends Controller
 {
+    public function __construct(
+        private readonly UserRepositoryInterface $users,
+        private readonly EmployeeRepositoryInterface $employees,
+        private readonly EmployeeSupervisorRepositoryInterface $supervisors,
+        private readonly NotificationRepositoryInterface $notifications,
+    ) {}
+
     #[ApiEndpoint(
         summary: 'Log in (mobile)',
         description: 'Email or employee code + password for a Sanctum token carrying the `mobile` ability. Wrong credentials answer 401; the token is rate-limited to 10 attempts a minute. Distinct from the F13 `POST auth/token` exchange, which mints ability-scoped integrator tokens.',
@@ -44,7 +52,7 @@ class AuthController extends Controller
 
         $logins = app(EmployeeLoginService::class);
         $loginEmail = $logins->resolveEmail($data['email']);
-        $user = $loginEmail !== null ? User::where('email', $loginEmail)->first() : null;
+        $user = $loginEmail !== null ? $this->users->findByEmail($loginEmail) : null;
 
         if ($user === null || ! Hash::check($data['password'], (string) $user->password) || $logins->isLeaverLocked($user)) {
             return ApiResponse::error('Invalid email or password.', 401, ['code' => 'INVALID_CREDENTIALS']);
@@ -115,9 +123,9 @@ class AuthController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function userPayload(User $user): array
+    private function userPayload($user): array
     {
-        $employee = Employee::where('user_id', $user->id)->first();
+        $employee = $this->employees->findByUserId($user->id, ['department', 'designation']);
 
         return [
             'id' => $user->id,
@@ -125,7 +133,7 @@ class AuthController extends Controller
             'email' => $user->email,
             'must_change_password' => (bool) ($user->force_password_change ?? false),
             'roles' => $user->getRoleNames()->values()->all(),
-            'is_supervisor' => DB::table('employee_supervisors')->where('supervisor_id', $user->id)->exists(),
+            'is_supervisor' => $this->supervisors->supervisesAnyone($user->id),
             'employee' => $employee !== null ? [
                 'employee_id' => $employee->employee_id,
                 'full_name' => $employee->full_name ?? trim(($employee->first_name ?? '').' '.($employee->last_name ?? '')),
@@ -135,7 +143,7 @@ class AuthController extends Controller
                 'status' => $employee->status,
                 'photo' => $employee->photo,
             ] : null,
-            'unread_notifications' => $user->unreadNotifications()->count(),
+            'unread_notifications' => $this->notifications->unreadCount($user),
         ];
     }
 }

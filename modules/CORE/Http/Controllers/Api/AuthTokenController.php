@@ -6,9 +6,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Modules\CORE\Models\User;
 use Modules\CORE\Services\ApiTokenService;
 use Modules\CORE\Support\Api\ApiEndpoint;
+use Modules\CORE\Interfaces\UserRepositoryInterface;
 use Modules\HRM\Services\EmployeeLoginService;
 
 /**
@@ -29,7 +29,10 @@ class AuthTokenController extends Controller
      */
     private const TIMING_HASH = '$2y$13$Jf6FiowxVMQ4sWD4oaMcOOmilwfjKTjG/7VpPgv3pg9J0B.GaDOdq';
 
-    public function __construct(private readonly ApiTokenService $tokens) {}
+    public function __construct(
+        private readonly ApiTokenService $tokens,
+        private readonly UserRepositoryInterface $users,
+    ) {}
 
     #[ApiEndpoint(
         summary: 'Exchange credentials for a token',
@@ -51,7 +54,7 @@ class AuthTokenController extends Controller
 
         $loginEmail = app(EmployeeLoginService::class)->resolveEmail($data['email']);
 
-        $user = $loginEmail !== null ? User::where('email', $loginEmail)->first() : null;
+        $user = $loginEmail !== null ? $this->users->findByEmail($loginEmail) : null;
 
         if ($user === null) {
             Hash::check($data['password'], self::TIMING_HASH);

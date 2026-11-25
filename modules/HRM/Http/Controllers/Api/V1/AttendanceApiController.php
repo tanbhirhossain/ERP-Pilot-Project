@@ -6,9 +6,9 @@ use App\Http\Controllers\Controller;
 use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\HRM\Models\Attendance\AttendanceDaily;
-use Modules\HRM\Models\Attendance\AttendanceLog;
-use Modules\HRM\Models\Attendance\AttendancePair;
+use Modules\HRM\Interfaces\Attendance\AttendanceDailyRepositoryInterface;
+use Modules\HRM\Interfaces\Attendance\AttendanceLogRepositoryInterface;
+use Modules\HRM\Interfaces\Attendance\AttendancePairRepositoryInterface;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesApiEmployee;
 
@@ -23,6 +23,12 @@ use Modules\HRM\Support\Api\ResolvesApiEmployee;
 class AttendanceApiController extends Controller
 {
     use ResolvesApiEmployee;
+
+    public function __construct(
+        private readonly AttendanceLogRepositoryInterface $logs,
+        private readonly AttendancePairRepositoryInterface $pairs,
+        private readonly AttendanceDailyRepositoryInterface $dailies,
+    ) {}
 
     #[ApiEndpoint(
         summary: 'My punch log',
@@ -44,10 +50,7 @@ class AttendanceApiController extends Controller
 
         [$from, $to, $perPage] = $this->range($request);
 
-        $page = AttendanceLog::where('employee_id', $employee->employee_id)
-            ->whereBetween('punch_time', [$from.' 00:00:00', $to.' 23:59:59'])
-            ->orderByDesc('punch_time')
-            ->paginate($perPage);
+        $page = $this->logs->paginateForEmployee($employee->employee_id, $from, $to, $perPage);
 
         return ApiResponse::paginated($page, 'My attendance log.');
     }
@@ -72,11 +75,7 @@ class AttendanceApiController extends Controller
 
         [$from, $to, $perPage] = $this->range($request);
 
-        $page = AttendancePair::where('employee_id', $employee->employee_id)
-            ->whereBetween('duty_date', [$from, $to])
-            ->orderByDesc('duty_date')
-            ->orderByDesc('id')
-            ->paginate($perPage);
+        $page = $this->pairs->paginateForEmployee($employee->employee_id, $from, $to, $perPage);
 
         return ApiResponse::paginated($page, 'My attendance pairs.');
     }
@@ -101,10 +100,7 @@ class AttendanceApiController extends Controller
 
         [$from, $to, $perPage] = $this->range($request);
 
-        $page = AttendanceDaily::where('employee_id', $employee->employee_id)
-            ->whereBetween('duty_date', [$from, $to])
-            ->orderByDesc('duty_date')
-            ->paginate($perPage);
+        $page = $this->dailies->paginateForEmployee($employee->employee_id, $from, $to, $perPage);
 
         return ApiResponse::paginated($page, 'My daily attendance.');
     }
@@ -131,9 +127,7 @@ class AttendanceApiController extends Controller
         $from = $month.'-01';
         $to = date('Y-m-t', strtotime($from));
 
-        $days = AttendanceDaily::where('employee_id', $employee->employee_id)
-            ->whereBetween('duty_date', [$from, $to])
-            ->get();
+        $days = $this->dailies->listForEmployeeRange($employee->employee_id, $from, $to);
 
         return ApiResponse::ok([
             'month' => $month,

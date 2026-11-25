@@ -7,7 +7,7 @@ use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Modules\HRM\Models\AttendanceRegularization;
+use Modules\HRM\Interfaces\Attendance\AttendanceRegularizationRepositoryInterface;
 use Modules\HRM\Services\RegularizationService;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesApiEmployee;
@@ -28,7 +28,10 @@ class RegularizationApiController extends Controller
 {
     use ResolvesApiEmployee;
 
-    public function __construct(private readonly RegularizationService $regularizations) {}
+    public function __construct(
+        private readonly RegularizationService $regularizations,
+        private readonly AttendanceRegularizationRepositoryInterface $rows,
+    ) {}
 
     #[ApiEndpoint(
         summary: 'Regularization types',
@@ -37,7 +40,7 @@ class RegularizationApiController extends Controller
     )]
     public function types(): JsonResponse
     {
-        return ApiResponse::ok(AttendanceRegularization::TYPES, 'Regularization types.');
+        return ApiResponse::ok($this->rows->types(), 'Regularization types.');
     }
 
     #[ApiEndpoint(
@@ -62,16 +65,10 @@ class RegularizationApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = AttendanceRegularization::where('employee_id', $employee->employee_id)
-            ->with('reviewer:id,name')
-            ->orderByDesc('duty_date')
-            ->orderByDesc('id');
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 15), 'My regularization requests.');
+        return ApiResponse::paginated(
+            $this->rows->paginateForEmployee($employee->employee_id, $data['status'] ?? null, $data['per_page'] ?? 15),
+            'My regularization requests.'
+        );
     }
 
     #[ApiEndpoint(
@@ -90,7 +87,7 @@ class RegularizationApiController extends Controller
 
         $data = $request->validate([
             'duty_date' => ['required', 'date', 'before_or_equal:today'],
-            'regularization_type' => ['required', Rule::in(AttendanceRegularization::TYPES)],
+            'regularization_type' => ['required', Rule::in($this->rows->types())],
             'assigned_shift_id' => ['nullable', 'integer', 'exists:roster_shifts,id'],
             'requested_in_time' => ['nullable', 'date_format:H:i'],
             'requested_out_time' => ['nullable', 'date_format:H:i'],
@@ -122,9 +119,7 @@ class RegularizationApiController extends Controller
             return $employee;
         }
 
-        $reg = AttendanceRegularization::where('employee_id', $employee->employee_id)
-            ->with('reviewer:id,name')
-            ->find($id);
+        $reg = $this->rows->findForEmployee($id, $employee->employee_id, true);
 
         if ($reg === null) {
             return ApiResponse::error('Regularization request not found.', 404);
@@ -148,7 +143,7 @@ class RegularizationApiController extends Controller
             return $employee;
         }
 
-        $reg = AttendanceRegularization::where('employee_id', $employee->employee_id)->find($id);
+        $reg = $this->rows->findForEmployee($id, $employee->employee_id);
 
         if ($reg === null) {
             return ApiResponse::error('Regularization request not found.', 404);

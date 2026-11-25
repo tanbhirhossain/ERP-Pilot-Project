@@ -43,4 +43,9 @@ interface UserRepositoryInterface
     public function update(User $user, array $data, array $roleIds): User;
 
     public function delete(User $user): void;
+    public function find(int|string $id): ?User;
+    public function findByEmail(string $email): ?User;
+    /** @return list<int> */
+    public function allIds(): array;
+    public function findMany(array $ids): Collection;
 }

@@ -8,7 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Modules\HRM\Models\Roster\RosterOvertime;
+use Modules\HRM\Interfaces\Roster\RosterOvertimeRepositoryInterface;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesApiEmployee;
 
@@ -29,6 +29,8 @@ class OvertimeApiController extends Controller
     use ResolvesApiEmployee;
 
     public const TYPES = ['Overtime', 'Extra Duty', 'Holiday Duty'];
+
+    public function __construct(private readonly RosterOvertimeRepositoryInterface $overtimes) {}
 
     #[ApiEndpoint(
         summary: 'My overtime / extra duty / holiday duty',
@@ -58,28 +60,16 @@ class OvertimeApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = RosterOvertime::where('employee_id', $employee->employee_id)
-            ->with('approver:id,name')
-            ->orderByDesc('overtime_date')
-            ->orderByDesc('id');
+        $page = $this->overtimes->paginateForEmployee(
+            $employee->employee_id,
+            $data['overtime_type'] ?? null,
+            $data['status'] ?? null,
+            $data['from'] ?? null,
+            $data['to'] ?? null,
+            $data['per_page'] ?? 20,
+        );
 
-        if (! empty($data['overtime_type'])) {
-            $query->where('overtime_type', $data['overtime_type']);
-        }
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        if (! empty($data['from'])) {
-            $query->whereDate('overtime_date', '>=', $data['from']);
-        }
-
-        if (! empty($data['to'])) {
-            $query->whereDate('overtime_date', '<=', $data['to']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'My overtime records.');
+        return ApiResponse::paginated($page, 'My overtime records.');
     }
 
     #[ApiEndpoint(
@@ -121,22 +111,16 @@ class OvertimeApiController extends Controller
             return ApiResponse::error('Give either the hours or the start/end time.', 422);
         }
 
-        $duplicate = RosterOvertime::where('employee_id', $employee->employee_id)
-            ->whereDate('overtime_date', $data['overtime_date'])
-            ->where('overtime_type', $data['overtime_type'])
-            ->whereIn('status', ['Pending', 'Approved'])
-            ->exists();
-
-        if ($duplicate) {
+        if ($this->overtimes->duplicateExists($employee->employee_id, $data['overtime_date'], $data['overtime_type'])) {
             return ApiResponse::error('A pending/approved record already exists for this date and type.', 422);
         }
 
-        $ot = RosterOvertime::create($data + [
+        $ot = $this->overtimes->create($data + [
             'employee_id' => $employee->employee_id,
             'status' => 'Pending',
         ]);
 
-        $ot->load('approver:id,name');
+        $ot = $this->overtimes->findForEmployee($ot->id, $employee->employee_id, true) ?? $ot;
 
         // Phase-2 engine: ping the first stage's desk (no-op without a chain).
         app(\Modules\HRM\Services\ApprovalEngine::class)->notifyNewOvertime($ot);
@@ -158,9 +142,7 @@ class OvertimeApiController extends Controller
             return $employee;
         }
 
-        $ot = RosterOvertime::where('employee_id', $employee->employee_id)
-            ->with('approver:id,name')
-            ->find($id);
+        $ot = $this->overtimes->findForEmployee($id, $employee->employee_id, true);
 
         if ($ot === null) {
             return ApiResponse::error('Overtime record not found.', 404);
@@ -184,7 +166,7 @@ class OvertimeApiController extends Controller
             return $employee;
         }
 
-        $ot = RosterOvertime::where('employee_id', $employee->employee_id)->find($id);
+        $ot = $this->overtimes->findForEmployee($id, $employee->employee_id);
 
         if ($ot === null) {
             return ApiResponse::error('Overtime record not found.', 404);
@@ -194,8 +176,8 @@ class OvertimeApiController extends Controller
             return ApiResponse::error("Only a Pending record can be cancelled (this one is {$ot->status}).", 422);
         }
 
-        $ot->update(['status' => 'Cancelled']);
+        $this->overtimes->update($ot, ['status' => 'Cancelled']);
 
-        return ApiResponse::ok($ot->fresh(), 'Overtime record cancelled.');
+        return ApiResponse::ok($this->overtimes->find($ot->id) ?? $ot, 'Overtime record cancelled.');
     }
 }

@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\HRM\Models\Department;
-use Modules\HRM\Models\Employee\Employee;
+use Modules\HRM\Interfaces\DepartmentRepositoryInterface;
+use Modules\HRM\Interfaces\Employee\EmployeeRepositoryInterface;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesTeamScope;
 
@@ -23,6 +23,11 @@ class OrgApiController extends Controller
 {
     use ResolvesTeamScope;
 
+    public function __construct(
+        private readonly DepartmentRepositoryInterface $departments,
+        private readonly EmployeeRepositoryInterface $employees,
+    ) {}
+
     #[ApiEndpoint(
         summary: 'Departments',
         description: 'Every department. Any signed-in user may read it — forms and filters need it.',
@@ -30,10 +35,7 @@ class OrgApiController extends Controller
     )]
     public function departments(): JsonResponse
     {
-        return ApiResponse::ok(
-            Department::orderBy('name')->get(['id', 'name', 'code']),
-            'Departments.'
-        );
+        return ApiResponse::ok($this->departments->catalog(), 'Departments.');
     }
 
     #[ApiEndpoint(
@@ -60,29 +62,12 @@ class OrgApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = Employee::with(['department:id,name', 'designation:id,name'])
-            ->orderBy('full_name')->orderBy('first_name');
-
-        if (! empty($data['search'])) {
-            $s = '%'.$data['search'].'%';
-            $query->where(function ($q) use ($s): void {
-                $q->where('employee_id', 'like', $s)
-                    ->orWhere('full_name', 'like', $s)
-                    ->orWhere('first_name', 'like', $s)
-                    ->orWhere('last_name', 'like', $s)
-                    ->orWhere('phone', 'like', $s);
-            });
-        }
-
-        if (! empty($data['department_id'])) {
-            $query->where('department_id', (int) $data['department_id']);
-        }
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        $page = $query->paginate($data['per_page'] ?? 20)->through(fn (Employee $e): array => [
+        $page = $this->employees->directoryPaginate(
+            $data['search'] ?? null,
+            ! empty($data['department_id']) ? (int) $data['department_id'] : null,
+            $data['status'] ?? null,
+            $data['per_page'] ?? 20,
+        )->through(fn ($e): array => [
             'employee_id' => $e->employee_id,
             'full_name' => $e->full_name ?? trim(($e->first_name ?? '').' '.($e->last_name ?? '')),
             'department' => $e->department?->name,

@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\HRM\Models\Employee\EmployeeResignation;
+use Modules\HRM\Interfaces\Employee\EmployeeResignationRepositoryInterface;
 use Modules\HRM\Services\EmployeeResignationService;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesApiEmployee;
@@ -24,7 +24,10 @@ class ResignationApiController extends Controller
 {
     use ResolvesApiEmployee;
 
-    public function __construct(private readonly EmployeeResignationService $resignations) {}
+    public function __construct(
+        private readonly EmployeeResignationService $resignations,
+        private readonly EmployeeResignationRepositoryInterface $rows,
+    ) {}
 
     #[ApiEndpoint(
         summary: 'My resignation requests',
@@ -39,9 +42,7 @@ class ResignationApiController extends Controller
             return $employee;
         }
 
-        $rows = EmployeeResignation::where('employee_id', $employee->employee_id)
-            ->orderByDesc('id')
-            ->get();
+        $rows = $this->rows->listForEmployee($employee->employee_id);
 
         return ApiResponse::ok($rows, 'My resignation requests.');
     }

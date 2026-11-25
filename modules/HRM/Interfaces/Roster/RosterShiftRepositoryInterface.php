@@ -23,4 +23,5 @@ interface RosterShiftRepositoryInterface
     public function update(RosterShift $s, array $data): RosterShift;
 
     public function delete(RosterShift $s): void;
+    public function catalog(): Collection;
 }

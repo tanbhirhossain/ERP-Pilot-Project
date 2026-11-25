@@ -23,4 +23,7 @@ interface DepartmentRepositoryInterface
     public function update(Department $d, array $data): Department;
 
     public function delete(Department $d): void;
+    public function catalog(): Collection;
+    /** @return list<int> */
+    public function knownIds(array $ids): array;
 }

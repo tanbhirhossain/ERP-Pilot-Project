@@ -7,7 +7,7 @@ use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Modules\HRM\Models\InformedRequest;
+use Modules\HRM\Interfaces\Informed\InformedRequestRepositoryInterface;
 use Modules\HRM\Services\InformedRequestService;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesApiEmployee;
@@ -26,7 +26,10 @@ class InformedApiController extends Controller
 
     public const TYPES = ['Late Coming', 'Early Out', 'Absent Informed', 'Field Work', 'On Duty', 'Other'];
 
-    public function __construct(private readonly InformedRequestService $informed) {}
+    public function __construct(
+        private readonly InformedRequestService $informed,
+        private readonly InformedRequestRepositoryInterface $rows,
+    ) {}
 
     #[ApiEndpoint(
         summary: 'Informed request types',
@@ -60,15 +63,10 @@ class InformedApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = InformedRequest::where('employee_id', $employee->employee_id)
-            ->orderByDesc('informed_date')
-            ->orderByDesc('id');
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 15), 'My informed requests.');
+        return ApiResponse::paginated(
+            $this->rows->paginateForEmployee($employee->employee_id, $data['status'] ?? null, $data['per_page'] ?? 15),
+            'My informed requests.'
+        );
     }
 
     #[ApiEndpoint(
@@ -117,7 +115,7 @@ class InformedApiController extends Controller
             return $employee;
         }
 
-        $row = InformedRequest::where('employee_id', $employee->employee_id)->find($id);
+        $row = $this->rows->findForEmployee($id, $employee->employee_id);
 
         if ($row === null) {
             return ApiResponse::error('Informed request not found.', 404);

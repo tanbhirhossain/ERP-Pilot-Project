@@ -29,4 +29,5 @@ interface AttendanceLogRepositoryInterface
     public function markProcessed(array $ids): void;
 
     public function delete(AttendanceLog $log): void;
+    public function paginateForEmployee(string $code, string $from, string $to, int $perPage): LengthAwarePaginator;
 }

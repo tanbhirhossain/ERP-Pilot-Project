@@ -9,8 +9,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\ValidationException;
-use Modules\HRM\Models\Leave\LeaveRequest;
-use Modules\HRM\Models\Roster\RosterOvertime;
+use Modules\HRM\Interfaces\Leave\LeaveRequestRepositoryInterface;
+use Modules\HRM\Interfaces\Roster\RosterOvertimeRepositoryInterface;
 use Modules\HRM\Services\ApprovalEngine;
 use Modules\HRM\Support\Api\ApiResponse;
 
@@ -30,7 +30,11 @@ use Modules\HRM\Support\Api\ApiResponse;
  */
 class ApprovalApiController extends Controller
 {
-    public function __construct(private readonly ApprovalEngine $engine) {}
+    public function __construct(
+        private readonly ApprovalEngine $engine,
+        private readonly LeaveRequestRepositoryInterface $leaveRows,
+        private readonly RosterOvertimeRepositoryInterface $overtimeRows,
+    ) {}
 
     #[ApiEndpoint(
         summary: 'My approval desk',
@@ -114,7 +118,7 @@ class ApprovalApiController extends Controller
     )]
     public function approveLeave(Request $request, int $id): JsonResponse
     {
-        $leave = LeaveRequest::find($id);
+        $leave = $this->leaveRows->find($id);
 
         if ($leave === null) {
             return ApiResponse::error('Leave application not found.', 404);
@@ -130,7 +134,7 @@ class ApprovalApiController extends Controller
             return ApiResponse::error($e->getMessage(), 422, $e->errors());
         }
 
-        $stage = $this->engine->leaveStage($leave->fresh());
+        $stage = $this->engine->leaveStage($this->leaveRows->find($leave->id) ?? $leave);
 
         return ApiResponse::ok([
             'id' => $leave->id,
@@ -150,7 +154,7 @@ class ApprovalApiController extends Controller
     )]
     public function rejectLeave(Request $request, int $id): JsonResponse
     {
-        $leave = LeaveRequest::find($id);
+        $leave = $this->leaveRows->find($id);
 
         if ($leave === null) {
             return ApiResponse::error('Leave application not found.', 404);
@@ -179,7 +183,7 @@ class ApprovalApiController extends Controller
     )]
     public function approveOvertime(Request $request, int $id): JsonResponse
     {
-        $overtime = RosterOvertime::find($id);
+        $overtime = $this->overtimeRows->find($id);
 
         if ($overtime === null) {
             return ApiResponse::error('Overtime record not found.', 404);
@@ -224,7 +228,7 @@ class ApprovalApiController extends Controller
     )]
     public function rejectOvertime(Request $request, int $id): JsonResponse
     {
-        $overtime = RosterOvertime::find($id);
+        $overtime = $this->overtimeRows->find($id);
 
         if ($overtime === null) {
             return ApiResponse::error('Overtime record not found.', 404);

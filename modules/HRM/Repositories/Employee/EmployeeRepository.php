@@ -341,4 +341,86 @@ class EmployeeRepository implements EmployeeRepositoryInterface
             },
         ];
     }
+    public function findByUserId(int $userId, array $with = []): ?Employee
+    {
+        $query = Employee::where('user_id', $userId);
+
+        if ($with !== []) {
+            $query->with($with);
+        }
+
+        return $query->first();
+    }
+    public function teamMembers(?array $codes): Collection
+    {
+        $query = Employee::with(['department:id,name', 'designation:id,name'])
+            ->orderBy('full_name')->orderBy('first_name');
+
+        if ($codes !== null) {
+            $query->whereIn('employee_id', $codes);
+        }
+
+        return $query->get([
+            'employee_id', 'full_name', 'first_name', 'last_name', 'department_id',
+            'designation_id', 'status', 'employment_type', 'joining_date', 'photo',
+        ]);
+    }
+    public function directoryPaginate(?string $search, ?int $departmentId, ?string $status, int $perPage): LengthAwarePaginator
+    {
+        $query = Employee::with(['department:id,name', 'designation:id,name'])
+            ->orderBy('full_name')->orderBy('first_name');
+
+        if ($search !== null && $search !== '') {
+            $s = '%'.$search.'%';
+            $query->where(function ($q) use ($s): void {
+                $q->where('employee_id', 'like', $s)
+                    ->orWhere('full_name', 'like', $s)
+                    ->orWhere('first_name', 'like', $s)
+                    ->orWhere('last_name', 'like', $s)
+                    ->orWhere('phone', 'like', $s);
+            });
+        }
+
+        if ($departmentId !== null) {
+            $query->where('department_id', $departmentId);
+        }
+
+        if ($status !== null && $status !== '') {
+            $query->where('status', $status);
+        }
+
+        return $query->paginate($perPage);
+    }
+    public function countActive(): int
+    {
+        return Employee::where('is_active', true)->count();
+    }
+    public function countActiveByEmploymentType(string $type): int
+    {
+        return Employee::where('is_active', true)->where('employment_type', $type)->count();
+    }
+    public function countJoinedBetween(string $from, string $to): int
+    {
+        return Employee::whereBetween('joining_date', [$from, $to])->count();
+    }
+    public function knownCodes(array $codes): array
+    {
+        return Employee::whereIn('employee_id', $codes)->pluck('employee_id')->all();
+    }
+    public function userIdForCode(string $code): ?int
+    {
+        $id = Employee::where('employee_id', $code)->value('user_id');
+
+        return $id !== null ? (int) $id : null;
+    }
+    public function userIdsForCodes(array $codes): array
+    {
+        return Employee::whereIn('employee_id', $codes)
+            ->whereNotNull('user_id')->pluck('user_id')->all();
+    }
+    public function userIdsForDepartments(array $departmentIds): array
+    {
+        return Employee::whereIn('department_id', $departmentIds)
+            ->whereNotNull('user_id')->pluck('user_id')->all();
+    }
 }

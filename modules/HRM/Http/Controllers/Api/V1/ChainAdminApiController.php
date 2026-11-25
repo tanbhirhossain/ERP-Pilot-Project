@@ -6,11 +6,9 @@ use App\Http\Controllers\Controller;
 use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Modules\HRM\Database\Seeders\ApprovalChainSeeder;
-use Modules\HRM\Models\Approval\ApprovalChain;
-use Modules\HRM\Models\Approval\ApprovalChainStep;
+use Modules\HRM\Interfaces\Approval\ApprovalChainRepositoryInterface;
 use Modules\HRM\Support\Api\ApiResponse;
 
 /**
@@ -32,6 +30,8 @@ use Modules\HRM\Support\Api\ApiResponse;
  */
 class ChainAdminApiController extends Controller
 {
+    public function __construct(private readonly ApprovalChainRepositoryInterface $chains) {}
+
     #[ApiEndpoint(
         summary: 'Read all approval chains',
         description: 'The live leave (5 stages) and overtime (4 stages) chains with their steps. Needs hrm.approval-chains.view.',
@@ -43,10 +43,7 @@ class ChainAdminApiController extends Controller
             return ApiResponse::error('You may not view approval chains.', 403);
         }
 
-        return ApiResponse::ok(
-            ApprovalChain::with('steps')->orderBy('key')->get(),
-            'Approval chains.'
-        );
+        return ApiResponse::ok($this->chains->allWithSteps(), 'Approval chains.');
     }
 
     #[ApiEndpoint(
@@ -61,7 +58,7 @@ class ChainAdminApiController extends Controller
             return ApiResponse::error('You may not view approval chains.', 403);
         }
 
-        $chain = ApprovalChain::where('key', $key)->with('steps')->first();
+        $chain = $this->chains->findByKey($key, true);
 
         if ($chain === null) {
             return ApiResponse::error('Approval chain not found.', 404);
@@ -84,7 +81,7 @@ class ChainAdminApiController extends Controller
             return ApiResponse::error('You may not edit approval chains.', 403);
         }
 
-        $chain = ApprovalChain::where('key', $key)->first();
+        $chain = $this->chains->findByKey($key);
 
         if ($chain === null) {
             return ApiResponse::error('Approval chain not found.', 404);
@@ -94,9 +91,9 @@ class ChainAdminApiController extends Controller
             'name' => ['nullable', 'string', 'max:150'],
             'is_active' => ['nullable', 'boolean'],
             'steps' => ['required', 'array', 'min:1', 'max:10'],
-            'steps.*.stage_key' => ['required', Rule::in(ApprovalChainStep::STAGE_KEYS)],
+            'steps.*.stage_key' => ['required', Rule::in($this->chains->stageKeys())],
             'steps.*.stage_label' => ['required', 'string', 'max:100'],
-            'steps.*.resolver' => ['required', Rule::in(ApprovalChainStep::RESOLVERS)],
+            'steps.*.resolver' => ['required', Rule::in($this->chains->resolvers())],
             'steps.*.role_name' => ['nullable', 'string', 'max:100', 'exists:roles,name'],
         ]);
 
@@ -110,33 +107,15 @@ class ChainAdminApiController extends Controller
             }
         }
 
-        DB::transaction(function () use ($chain, $data): void {
-            if (array_key_exists('name', $data) && $data['name'] !== null) {
-                $chain->name = $data['name'];
-            }
-
-            if (array_key_exists('is_active', $data) && $data['is_active'] !== null) {
-                $chain->is_active = (bool) $data['is_active'];
-            }
-
-            $chain->save();
-
-            ApprovalChainStep::where('approval_chain_id', $chain->id)->delete();
-
-            foreach (array_values($data['steps']) as $position => $step) {
-                ApprovalChainStep::create([
-                    'approval_chain_id' => $chain->id,
-                    'position' => $position,
-                    'stage_key' => $step['stage_key'],
-                    'stage_label' => $step['stage_label'],
-                    'resolver' => $step['resolver'],
-                    'role_name' => $step['resolver'] === 'role' ? $step['role_name'] : null,
-                ]);
-            }
-        });
+        $chain = $this->chains->replaceSteps(
+            $chain,
+            $data['steps'],
+            array_key_exists('name', $data) ? $data['name'] : null,
+            array_key_exists('is_active', $data) ? $data['is_active'] : null,
+        );
 
         return ApiResponse::ok(
-            $chain->fresh()->load('steps'),
+            $chain,
             'Chain updated. New requests follow it; in-flight requests keep their snapshot.'
         );
     }

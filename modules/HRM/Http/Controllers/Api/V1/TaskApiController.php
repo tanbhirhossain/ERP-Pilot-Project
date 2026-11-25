@@ -9,10 +9,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
-use Modules\CORE\Models\User;
+use Modules\CORE\Interfaces\UserRepositoryInterface;
 use Modules\HRM\Database\Seeders\TeamWorkNoticeSeeder;
-use Modules\HRM\Models\Employee\Employee;
-use Modules\HRM\Models\Task\WorkTask;
+use Modules\HRM\Interfaces\Employee\EmployeeRepositoryInterface;
+use Modules\HRM\Interfaces\Task\WorkTaskRepositoryInterface;
 use Modules\HRM\Notifications\DeskNotification;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesApiEmployee;
@@ -42,6 +42,12 @@ class TaskApiController extends Controller
     use ResolvesApiEmployee;
     use ResolvesTeamScope;
 
+    public function __construct(
+        private readonly WorkTaskRepositoryInterface $tasks,
+        private readonly EmployeeRepositoryInterface $employees,
+        private readonly UserRepositoryInterface $users,
+    ) {}
+
     #[ApiEndpoint(
         summary: 'Assign work',
         description: 'Needs hrm.tasks.manage, and the target must sit inside the assigner\'s scope — a supervisor can only task their own reports. The assignee\'s bell is pinged.',
@@ -58,7 +64,7 @@ class TaskApiController extends Controller
             'employee_id' => ['required', 'string', 'exists:employees,employee_id'],
             'title' => ['required', 'string', 'max:200'],
             'description' => ['nullable', 'string', 'max:5000'],
-            'priority' => ['nullable', Rule::in(WorkTask::PRIORITIES)],
+            'priority' => ['nullable', Rule::in($this->tasks->priorities())],
             'due_date' => ['nullable', 'date'],
         ]);
 
@@ -66,7 +72,7 @@ class TaskApiController extends Controller
             return ApiResponse::error('This employee is outside your team.', 403);
         }
 
-        $task = WorkTask::create([
+        $task = $this->tasks->create([
             'title' => $data['title'],
             'description' => $data['description'] ?? null,
             'employee_id' => $data['employee_id'],
@@ -105,15 +111,10 @@ class TaskApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = WorkTask::where('employee_id', $employee->employee_id)
-            ->with(['assigner:id,name'])
-            ->orderByDesc('id');
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'My tasks.');
+        return ApiResponse::paginated(
+            $this->tasks->paginateForEmployee($employee->employee_id, $data['status'] ?? null, $data['per_page'] ?? 20),
+            'My tasks.'
+        );
     }
 
     #[ApiEndpoint(
@@ -132,15 +133,10 @@ class TaskApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = WorkTask::where('assigned_by', $request->user()->id)
-            ->with(['employee:employee_id,full_name,first_name,last_name'])
-            ->orderByDesc('id');
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'Work I assigned.');
+        return ApiResponse::paginated(
+            $this->tasks->paginateAssignedBy($request->user()->id, $data['status'] ?? null, $data['per_page'] ?? 20),
+            'Work I assigned.'
+        );
     }
 
     #[ApiEndpoint(
@@ -171,18 +167,10 @@ class TaskApiController extends Controller
             $codes = [$data['employee_id']];
         }
 
-        $query = WorkTask::with(['employee:employee_id,full_name,first_name,last_name', 'assigner:id,name'])
-            ->orderByDesc('id');
-
-        if ($codes !== null) {
-            $query->whereIn('employee_id', $codes);
-        }
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'Team tasks.');
+        return ApiResponse::paginated(
+            $this->tasks->paginateForCodes($codes, $data['status'] ?? null, $data['per_page'] ?? 20),
+            'Team tasks.'
+        );
     }
 
     #[ApiEndpoint(
@@ -193,7 +181,7 @@ class TaskApiController extends Controller
     )]
     public function show(Request $request, int $id): JsonResponse
     {
-        $task = WorkTask::with(['employee:employee_id,full_name,first_name,last_name', 'assigner:id,name', 'verifier:id,name'])->find($id);
+        $task = $this->tasks->findDetailed($id, true);
 
         if ($task === null) {
             return ApiResponse::error('Task not found.', 404);
@@ -216,13 +204,13 @@ class TaskApiController extends Controller
     )]
     public function progress(Request $request, int $id): JsonResponse
     {
-        $task = WorkTask::find($id);
+        $task = $this->tasks->find($id);
 
         if ($task === null) {
             return ApiResponse::error('Task not found.', 404);
         }
 
-        $employee = Employee::where('user_id', $request->user()->id)->first();
+        $employee = $this->employees->findByUserId($request->user()->id);
 
         if ($employee === null || $employee->employee_id !== $task->employee_id) {
             return ApiResponse::error('Only the assignee moves this task.', 403);
@@ -233,13 +221,13 @@ class TaskApiController extends Controller
             'remarks' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $allowed = WorkTask::ASSIGNEE_MOVES[$task->status] ?? [];
+        $allowed = $this->tasks->assigneeMoves()[$task->status] ?? [];
 
         if (! in_array($data['status'], $allowed, true)) {
             return ApiResponse::error("Cannot move this task from {$task->status} to {$data['status']}.", 422);
         }
 
-        $task->update([
+        $this->tasks->update($task, [
             'status' => $data['status'],
             'remarks' => $data['remarks'] ?? $task->remarks,
             'completed_at' => $data['status'] === 'Done' ? now() : null,
@@ -307,7 +295,7 @@ class TaskApiController extends Controller
 
     private function transition(Request $request, int $id, string $action): JsonResponse
     {
-        $task = WorkTask::find($id);
+        $task = $this->tasks->find($id);
 
         if ($task === null) {
             return ApiResponse::error('Task not found.', 404);
@@ -352,7 +340,7 @@ class TaskApiController extends Controller
             $update['closed_at'] = null;
         }
 
-        $task->update($update);
+        $this->tasks->update($task, $update);
 
         if (in_array($action, ['verify', 'close', 'reopen', 'cancel'], true)) {
             $this->pingAssignee($task->fresh(), "Task {$map[$action]['to']}: {$task->title}", 'Decided by '.$user->name.'.');
@@ -361,13 +349,13 @@ class TaskApiController extends Controller
         return ApiResponse::ok($task->fresh(), "Task {$map[$action]['to']}.");
     }
 
-    private function canSee(User $user, WorkTask $task): bool
+    private function canSee($user, $task): bool
     {
         if ((int) $task->assigned_by === $user->id) {
             return true;
         }
 
-        $employee = Employee::where('user_id', $user->id)->first();
+        $employee = $this->employees->findByUserId($user->id);
 
         if ($employee !== null && $employee->employee_id === $task->employee_id) {
             return true;
@@ -376,13 +364,13 @@ class TaskApiController extends Controller
         return $this->inScope($user, $task->employee_id);
     }
 
-    private function pingAssignee(WorkTask $task, string $title, string $body): void
+    private function pingAssignee($task, string $title, string $body): void
     {
         try {
-            $userId = Employee::where('employee_id', $task->employee_id)->value('user_id');
+            $userId = $this->employees->userIdForCode($task->employee_id);
 
             if ($userId !== null) {
-                $this->pingUser((int) $userId, $title, $body, $task->id);
+                $this->pingUser($userId, $title, $body, $task->id);
             }
         } catch (\Throwable $e) {
             Log::warning('Task notification skipped: '.$e->getMessage());
@@ -392,7 +380,7 @@ class TaskApiController extends Controller
     private function pingUser(int $userId, string $title, string $body, int $taskId): void
     {
         try {
-            $user = User::find($userId);
+            $user = $this->users->find($userId);
 
             if ($user !== null) {
                 Notification::send($user, new DeskNotification($title, $body, 'task', $taskId));

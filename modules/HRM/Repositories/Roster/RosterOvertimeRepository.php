@@ -4,6 +4,7 @@ namespace Modules\HRM\Repositories\Roster;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Modules\CORE\Repositories\Concerns\BuildsDatatableQueries;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\HRM\Interfaces\Roster\RosterOvertimeRepositoryInterface;
@@ -125,5 +126,110 @@ class RosterOvertimeRepository implements RosterOvertimeRepositoryInterface
                 $q->where('overtime_type', $v);
             }
         }, 'department_id' => fn (Builder $q, string $v) => $q->whereHas('employee', fn (Builder $e) => $e->where('department_id', $v)), 'designation_id' => fn (Builder $q, string $v) => $q->whereHas('employee', fn (Builder $e) => $e->where('designation_id', $v))];
+    }
+    public function find(int $id): ?RosterOvertime
+    {
+        return RosterOvertime::find($id);
+    }
+    public function create(array $data): RosterOvertime
+    {
+        return \Illuminate\Support\Facades\DB::transaction(fn () => RosterOvertime::create($data));
+    }
+    public function update(RosterOvertime $overtime, array $data): RosterOvertime
+    {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($overtime, $data) {
+            $overtime->fill($data);
+            $overtime->save();
+
+            return $overtime;
+        });
+    }
+    public function findForEmployee(int $id, string $code, bool $withApprover = false): ?RosterOvertime
+    {
+        $query = RosterOvertime::where('employee_id', $code);
+
+        if ($withApprover) {
+            $query->with('approver:id,name');
+        }
+
+        return $query->find($id);
+    }
+    public function paginateForEmployee(string $code, ?string $type, ?string $status, ?string $from, ?string $to, int $perPage): LengthAwarePaginator
+    {
+        $query = RosterOvertime::where('employee_id', $code)
+            ->with('approver:id,name')
+            ->orderByDesc('overtime_date')
+            ->orderByDesc('id');
+
+        if ($type !== null && $type !== '') {
+            $query->where('overtime_type', $type);
+        }
+
+        if ($status !== null && $status !== '') {
+            $query->where('status', $status);
+        }
+
+        if ($from !== null && $from !== '') {
+            $query->whereDate('overtime_date', '>=', $from);
+        }
+
+        if ($to !== null && $to !== '') {
+            $query->whereDate('overtime_date', '<=', $to);
+        }
+
+        return $query->paginate($perPage);
+    }
+    public function paginateForCodes(?array $codes, ?string $status, ?string $type, int $perPage): LengthAwarePaginator
+    {
+        $query = RosterOvertime::with(['employee:employee_id,full_name,first_name,last_name', 'approver:id,name'])
+            ->orderByDesc('overtime_date')->orderByDesc('id');
+
+        if ($codes !== null) {
+            $query->whereIn('employee_id', $codes);
+        }
+
+        if ($status !== null && $status !== '') {
+            $query->where('status', $status);
+        }
+
+        if ($type !== null && $type !== '') {
+            $query->where('overtime_type', $type);
+        }
+
+        return $query->paginate($perPage);
+    }
+    public function duplicateExists(string $code, string $date, string $type): bool
+    {
+        return RosterOvertime::where('employee_id', $code)
+            ->whereDate('overtime_date', $date)
+            ->where('overtime_type', $type)
+            ->whereIn('status', ['Pending', 'Approved'])
+            ->exists();
+    }
+    public function pendingCountForEmployee(string $code): int
+    {
+        return RosterOvertime::where('employee_id', $code)->where('status', 'Pending')->count();
+    }
+    public function countPending(): int
+    {
+        return RosterOvertime::where('status', 'Pending')->count();
+    }
+    public function pendingIds(): array
+    {
+        return RosterOvertime::where('status', 'Pending')->pluck('id')->all();
+    }
+    public function approvedHoursBetween(string $from, string $to): float
+    {
+        return round((float) RosterOvertime::where('status', 'Approved')
+            ->whereBetween('overtime_date', [$from, $to])->sum('hours'), 2);
+    }
+    public function hoursByDepartmentBetween(string $from, string $to): Collection
+    {
+        return RosterOvertime::where('roster_overtimes.status', 'Approved')
+            ->whereBetween('overtime_date', [$from, $to])
+            ->join('employees', 'employees.employee_id', '=', 'roster_overtimes.employee_id')
+            ->leftJoin('departments', 'departments.id', '=', 'employees.department_id')
+            ->selectRaw('COALESCE(departments.name, ?) AS dept, SUM(roster_overtimes.hours) AS h, COUNT(*) AS n', ['Unassigned'])
+            ->groupBy('dept')->orderByDesc('h')->get();
     }
 }

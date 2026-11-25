@@ -2,8 +2,7 @@
 
 namespace Modules\HRM\Support\Api;
 
-use Modules\CORE\Models\User;
-use Modules\HRM\Models\Employee\EmployeeSupervisor;
+use Modules\HRM\Interfaces\EmployeeSupervisorRepositoryInterface;
 
 /**
  * Team scoping for the Phase-3 supervisor/GM/CEO surface.
@@ -16,6 +15,10 @@ use Modules\HRM\Models\Employee\EmployeeSupervisor;
  *
  * `teamCodes()` returns null for ALL-scope, or the (possibly empty) list of
  * direct-report codes. Controllers 403 a target outside the caller's scope.
+ *
+ * Mapping reads travel through the supervisor repository interface (resolved
+ * from the container: traits take no constructor). Controllers stay free of
+ * models.
  */
 trait ResolvesTeamScope
 {
@@ -25,7 +28,7 @@ trait ResolvesTeamScope
         return ['Super Admin', 'Administrator', 'Admin', 'HR Admin', 'DGM HR Admin', 'General Manager', 'CEO'];
     }
 
-    private function hasAllScope(User $user): bool
+    private function hasAllScope($user): bool
     {
         return $user->hasAnyRole($this->allScopeRoles());
     }
@@ -33,26 +36,21 @@ trait ResolvesTeamScope
     /**
      * @return list<string>|null null = whole organisation
      */
-    private function teamCodes(User $user): ?array
+    private function teamCodes($user): ?array
     {
         if ($this->hasAllScope($user)) {
             return null;
         }
 
-        return EmployeeSupervisor::where('supervisor_id', $user->id)
-            ->pluck('employee_id')
-            ->map(fn ($code): string => (string) $code)
-            ->unique()->values()->all();
+        return app(EmployeeSupervisorRepositoryInterface::class)->codesForSupervisor($user->id);
     }
 
-    private function inScope(User $user, string $employeeCode): bool
+    private function inScope($user, string $employeeCode): bool
     {
         if ($this->hasAllScope($user)) {
             return true;
         }
 
-        return EmployeeSupervisor::where('supervisor_id', $user->id)
-            ->where('employee_id', $employeeCode)
-            ->exists();
+        return app(EmployeeSupervisorRepositoryInterface::class)->inScope($user->id, $employeeCode);
     }
 }

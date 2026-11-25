@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Modules\HRM\Interfaces\NotificationRepositoryInterface;
 use Modules\HRM\Support\Api\ApiResponse;
 
 /**
@@ -21,6 +22,8 @@ use Modules\HRM\Support\Api\ApiResponse;
  */
 class NotificationApiController extends Controller
 {
+    public function __construct(private readonly NotificationRepositoryInterface $rows) {}
+
     #[ApiEndpoint(
         summary: 'My notifications (the bell)',
         description: 'Newest first. Each row carries ref_type + ref_id so the app deep-links the tap; push carries the same pair.',
@@ -37,13 +40,10 @@ class NotificationApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = $request->user()->notifications()->orderByDesc('created_at');
-
-        if (! empty($data['unread_only'])) {
-            $query->whereNull('read_at');
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'Notifications.');
+        return ApiResponse::paginated(
+            $this->rows->paginateForUser($request->user(), ! empty($data['unread_only']), $data['per_page'] ?? 20),
+            'Notifications.'
+        );
     }
 
     #[ApiEndpoint(
@@ -54,7 +54,7 @@ class NotificationApiController extends Controller
     public function unreadCount(Request $request): JsonResponse
     {
         return ApiResponse::ok(
-            ['unread' => $request->user()->unreadNotifications()->count()],
+            ['unread' => $this->rows->unreadCount($request->user())],
             'Unread count.'
         );
     }
@@ -68,13 +68,9 @@ class NotificationApiController extends Controller
     )]
     public function markRead(Request $request, string $id): JsonResponse
     {
-        $notification = $request->user()->notifications()->find($id);
-
-        if ($notification === null) {
+        if (! $this->rows->markRead($request->user(), $id)) {
             return ApiResponse::error('Notification not found.', 404);
         }
-
-        $notification->markAsRead();
 
         return ApiResponse::ok(null, 'Marked as read.');
     }
@@ -87,7 +83,7 @@ class NotificationApiController extends Controller
     )]
     public function markAllRead(Request $request): JsonResponse
     {
-        $request->user()->unreadNotifications()->update(['read_at' => now()]);
+        $this->rows->markAllRead($request->user());
 
         return ApiResponse::ok(null, 'All marked as read.');
     }

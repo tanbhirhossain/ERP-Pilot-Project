@@ -4,7 +4,7 @@ namespace Modules\HRM\Support\Api;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\HRM\Models\Employee\Employee;
+use Modules\HRM\Interfaces\Employee\EmployeeRepositoryInterface;
 
 /**
  * Self-service scoping for the mobile API, mirroring MyHrController's rule: the
@@ -15,15 +15,21 @@ use Modules\HRM\Models\Employee\Employee;
  * A login with no linked employee gets HTTP 409 + EMPLOYEE_NOT_LINKED (not a
  * bare 403), so the app can show the actionable "ask HR to link your account"
  * screen — the same failure the web self-service shows as a page.
+ *
+ * The lookup travels through the employee repository interface (resolved from
+ * the container: traits take no constructor). Controllers stay free of models.
  */
 trait ResolvesApiEmployee
 {
-    protected function apiEmployee(Request $request): Employee|JsonResponse
+    /**
+     * @param list<string> $with relations to eager-load on the resolved employee
+     */
+    protected function apiEmployee(Request $request, array $with = []): mixed
     {
         $user = $request->user();
 
         $employee = $user !== null
-            ? Employee::where('user_id', $user->id)->first()
+            ? app(EmployeeRepositoryInterface::class)->findByUserId($user->id, $with)
             : null;
 
         if ($employee === null) {

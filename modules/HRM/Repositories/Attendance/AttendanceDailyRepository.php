@@ -5,6 +5,7 @@ namespace Modules\HRM\Repositories\Attendance;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Modules\CORE\Repositories\Concerns\BuildsDatatableQueries;
@@ -350,5 +351,39 @@ class AttendanceDailyRepository implements AttendanceDailyRepositoryInterface
             'department_id' => fn (Builder $q, string $v) => $q->whereHas('employee', fn ($qq) => $qq->where('department_id', $v)),
             'designation_id' => fn (Builder $q, string $v) => $q->whereHas('employee', fn ($qq) => $qq->where('designation_id', $v)),
         ];
+    }
+    public function paginateForEmployee(string $code, string $from, string $to, int $perPage): LengthAwarePaginator
+    {
+        return AttendanceDaily::where('employee_id', $code)
+            ->whereBetween('duty_date', [$from, $to])
+            ->orderByDesc('duty_date')
+            ->paginate($perPage);
+    }
+    public function listForEmployeeRange(string $code, string $from, string $to): Collection
+    {
+        return AttendanceDaily::where('employee_id', $code)
+            ->whereBetween('duty_date', [$from, $to])
+            ->get();
+    }
+    public function statusCountsForDate(string $date): Collection
+    {
+        return AttendanceDaily::whereDate('duty_date', $date)
+            ->selectRaw('status, COUNT(*) AS c')->groupBy('status')->pluck('c', 'status');
+    }
+    public function statusesBetween(string $from, string $to): Collection
+    {
+        return AttendanceDaily::whereBetween('duty_date', [$from, $to])->get(['status']);
+    }
+    public function statusCountsBetween(string $from, string $to): Collection
+    {
+        return AttendanceDaily::whereBetween('duty_date', [$from, $to])
+            ->selectRaw('status, COUNT(*) AS c')->groupBy('status')->pluck('c', 'status');
+    }
+    public function topOffenders(string $from, string $to, array $statuses, int $limit): Collection
+    {
+        return AttendanceDaily::whereBetween('duty_date', [$from, $to])
+            ->whereIn('status', $statuses)
+            ->selectRaw('employee_id, COUNT(*) AS c')->groupBy('employee_id')
+            ->orderByDesc('c')->limit($limit)->get();
     }
 }

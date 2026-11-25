@@ -44,4 +44,9 @@ final class PayrollSalarySheetRepository implements PayrollSalarySheetRepository
             ['status' => 'queued', 'created_by' => $actorId, 'include_punishments' => $includePunishments],
         );
     }
+    public function latestReleased(): ?PayrollSalarySheet
+    {
+        return PayrollSalarySheet::where('status', 'released')
+            ->orderByDesc('pay_year')->orderByDesc('pay_month')->first();
+    }
 }

@@ -142,4 +142,11 @@ class AttendanceLogRepository implements AttendanceLogRepositoryInterface
             'designation_id' => fn (Builder $q, string $v) => $q->whereHas('employee', fn (Builder $qq) => $qq->where('designation_id', $v)),
         ];
     }
+    public function paginateForEmployee(string $code, string $from, string $to, int $perPage): LengthAwarePaginator
+    {
+        return AttendanceLog::where('employee_id', $code)
+            ->whereBetween('punch_time', [$from.' 00:00:00', $to.' 23:59:59'])
+            ->orderByDesc('punch_time')
+            ->paginate($perPage);
+    }
 }

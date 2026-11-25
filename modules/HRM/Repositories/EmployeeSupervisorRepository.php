@@ -113,4 +113,21 @@ class EmployeeSupervisorRepository implements EmployeeSupervisorRepositoryInterf
             'is_primary' => fn (Builder $q, string $v) => $q->where('is_primary', $v === '1'),
         ];
     }
+    public function codesForSupervisor(int $userId): array
+    {
+        return EmployeeSupervisor::where('supervisor_id', $userId)
+            ->pluck('employee_id')
+            ->map(fn ($code): string => (string) $code)
+            ->unique()->values()->all();
+    }
+    public function inScope(int $userId, string $code): bool
+    {
+        return EmployeeSupervisor::where('supervisor_id', $userId)
+            ->where('employee_id', $code)
+            ->exists();
+    }
+    public function supervisesAnyone(int $userId): bool
+    {
+        return EmployeeSupervisor::where('supervisor_id', $userId)->exists();
+    }
 }

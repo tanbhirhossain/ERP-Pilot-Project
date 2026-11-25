@@ -7,7 +7,7 @@ use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Modules\HRM\Models\Certificate\CertificateRequest;
+use Modules\HRM\Interfaces\Certificate\CertificateRequestRepositoryInterface;
 use Modules\HRM\Services\CertificateRequestService;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesApiEmployee;
@@ -25,7 +25,10 @@ class CertificateApiController extends Controller
 {
     use ResolvesApiEmployee;
 
-    public function __construct(private readonly CertificateRequestService $certificates) {}
+    public function __construct(
+        private readonly CertificateRequestService $certificates,
+        private readonly CertificateRequestRepositoryInterface $rows,
+    ) {}
 
     #[ApiEndpoint(
         summary: 'Certificate types',
@@ -34,7 +37,7 @@ class CertificateApiController extends Controller
     )]
     public function types(): JsonResponse
     {
-        return ApiResponse::ok(CertificateRequest::TYPES, 'Certificate types.');
+        return ApiResponse::ok($this->rows->types(), 'Certificate types.');
     }
 
     #[ApiEndpoint(
@@ -59,15 +62,10 @@ class CertificateApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = CertificateRequest::where('employee_id', $employee->employee_id)
-            ->with('issuer:id,name')
-            ->orderByDesc('id');
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 15), 'My certificate requests.');
+        return ApiResponse::paginated(
+            $this->rows->paginateForEmployee($employee->employee_id, $data['status'] ?? null, $data['per_page'] ?? 15),
+            'My certificate requests.'
+        );
     }
 
     #[ApiEndpoint(
@@ -85,7 +83,7 @@ class CertificateApiController extends Controller
         }
 
         $data = $request->validate([
-            'certificate_type' => ['required', Rule::in(CertificateRequest::TYPES)],
+            'certificate_type' => ['required', Rule::in($this->rows->types())],
             'purpose' => ['required', 'string', 'min:5', 'max:1000'],
         ]);
 
@@ -115,9 +113,7 @@ class CertificateApiController extends Controller
             return $employee;
         }
 
-        $row = CertificateRequest::where('employee_id', $employee->employee_id)
-            ->with('issuer:id,name')
-            ->find($id);
+        $row = $this->rows->findForEmployee($id, $employee->employee_id, true);
 
         if ($row === null) {
             return ApiResponse::error('Certificate request not found.', 404);
@@ -141,7 +137,7 @@ class CertificateApiController extends Controller
             return $employee;
         }
 
-        $row = CertificateRequest::where('employee_id', $employee->employee_id)->find($id);
+        $row = $this->rows->findForEmployee($id, $employee->employee_id);
 
         if ($row === null) {
             return ApiResponse::error('Certificate request not found.', 404);

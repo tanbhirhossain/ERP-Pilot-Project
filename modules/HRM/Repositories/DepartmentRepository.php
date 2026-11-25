@@ -80,4 +80,12 @@ class DepartmentRepository implements DepartmentRepositoryInterface
     {
         return ['is_active' => fn (Builder $q, string $v) => $q->where('is_active', $v === '1'), 'parent_id' => fn (Builder $q, string $v) => $q->where('parent_id', $v)];
     }
+    public function catalog(): Collection
+    {
+        return Department::orderBy('name')->get(['id', 'name', 'code']);
+    }
+    public function knownIds(array $ids): array
+    {
+        return Department::whereIn('id', $ids)->pluck('id')->map(fn ($v): int => (int) $v)->all();
+    }
 }

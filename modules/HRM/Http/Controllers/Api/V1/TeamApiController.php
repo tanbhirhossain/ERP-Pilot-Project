@@ -7,13 +7,13 @@ use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
-use Modules\HRM\Models\Attendance\AttendanceDaily;
-use Modules\HRM\Models\Attendance\AttendanceLog;
-use Modules\HRM\Models\Attendance\AttendancePair;
-use Modules\HRM\Models\Employee\Employee;
-use Modules\HRM\Models\LeaveRequest;
-use Modules\HRM\Models\Roster\RosterDuty;
-use Modules\HRM\Models\Roster\RosterOvertime;
+use Modules\HRM\Interfaces\Attendance\AttendanceDailyRepositoryInterface;
+use Modules\HRM\Interfaces\Attendance\AttendanceLogRepositoryInterface;
+use Modules\HRM\Interfaces\Attendance\AttendancePairRepositoryInterface;
+use Modules\HRM\Interfaces\Employee\EmployeeRepositoryInterface;
+use Modules\HRM\Interfaces\Leave\LeaveRequestRepositoryInterface;
+use Modules\HRM\Interfaces\Roster\RosterDutyRepositoryInterface;
+use Modules\HRM\Interfaces\Roster\RosterOvertimeRepositoryInterface;
 use Modules\HRM\Services\LeaveRequestService;
 use Modules\HRM\Services\LeaveWorkspaceService;
 use Modules\HRM\Support\Api\ApiResponse;
@@ -42,6 +42,13 @@ class TeamApiController extends Controller
     public function __construct(
         private readonly LeaveRequestService $leaves,
         private readonly LeaveWorkspaceService $workspace,
+        private readonly EmployeeRepositoryInterface $employees,
+        private readonly AttendanceLogRepositoryInterface $logs,
+        private readonly AttendancePairRepositoryInterface $pairs,
+        private readonly AttendanceDailyRepositoryInterface $dailies,
+        private readonly LeaveRequestRepositoryInterface $leaveRows,
+        private readonly RosterOvertimeRepositoryInterface $overtimeRows,
+        private readonly RosterDutyRepositoryInterface $dutyRows,
     ) {}
 
     #[ApiEndpoint(
@@ -53,26 +60,17 @@ class TeamApiController extends Controller
     {
         $codes = $this->teamCodes($request->user());
 
-        $query = Employee::with(['department:id,name', 'designation:id,name'])
-            ->orderBy('full_name')->orderBy('first_name');
-
-        if ($codes !== null) {
-            $query->whereIn('employee_id', $codes);
-        }
-
-        $members = $query->get([
-            'employee_id', 'full_name', 'first_name', 'last_name', 'department_id',
-            'designation_id', 'status', 'employment_type', 'joining_date', 'photo',
-        ])->map(fn (Employee $e): array => [
-            'employee_id' => $e->employee_id,
-            'full_name' => $e->full_name ?? trim(($e->first_name ?? '').' '.($e->last_name ?? '')),
-            'department' => $e->department?->name,
-            'designation' => $e->designation?->name,
-            'status' => $e->status,
-            'employment_type' => $e->employment_type,
-            'joining_date' => $e->joining_date?->toDateString(),
-            'photo' => $e->photo,
-        ]);
+        $members = $this->employees->teamMembers($codes)
+            ->map(fn ($e): array => [
+                'employee_id' => $e->employee_id,
+                'full_name' => $e->full_name ?? trim(($e->first_name ?? '').' '.($e->last_name ?? '')),
+                'department' => $e->department?->name,
+                'designation' => $e->designation?->name,
+                'status' => $e->status,
+                'employment_type' => $e->employment_type,
+                'joining_date' => $e->joining_date?->toDateString(),
+                'photo' => $e->photo,
+            ]);
 
         return ApiResponse::ok($members->values()->all(), 'Team members.', ['total' => $members->count()]);
     }
@@ -98,10 +96,7 @@ class TeamApiController extends Controller
 
         [$from, $to, $perPage] = $this->range($request);
 
-        $page = AttendanceLog::where('employee_id', $code)
-            ->whereBetween('punch_time', [$from.' 00:00:00', $to.' 23:59:59'])
-            ->orderByDesc('punch_time')
-            ->paginate($perPage);
+        $page = $this->logs->paginateForEmployee($code, $from, $to, $perPage);
 
         return ApiResponse::paginated($page, "Attendance log for {$code}.");
     }
@@ -127,10 +122,7 @@ class TeamApiController extends Controller
 
         [$from, $to, $perPage] = $this->range($request);
 
-        $page = AttendancePair::where('employee_id', $code)
-            ->whereBetween('duty_date', [$from, $to])
-            ->orderByDesc('duty_date')->orderByDesc('id')
-            ->paginate($perPage);
+        $page = $this->pairs->paginateForEmployee($code, $from, $to, $perPage);
 
         return ApiResponse::paginated($page, "Attendance pairs for {$code}.");
     }
@@ -156,10 +148,7 @@ class TeamApiController extends Controller
 
         [$from, $to, $perPage] = $this->range($request);
 
-        $page = AttendanceDaily::where('employee_id', $code)
-            ->whereBetween('duty_date', [$from, $to])
-            ->orderByDesc('duty_date')
-            ->paginate($perPage);
+        $page = $this->dailies->paginateForEmployee($code, $from, $to, $perPage);
 
         return ApiResponse::paginated($page, "Daily attendance for {$code}.");
     }
@@ -184,9 +173,7 @@ class TeamApiController extends Controller
         $data = $request->validate(['month' => ['nullable', 'date_format:Y-m']]);
         $month = $data['month'] ?? now()->format('Y-m');
 
-        $days = AttendanceDaily::where('employee_id', $code)
-            ->whereBetween('duty_date', [$month.'-01', date('Y-m-t', strtotime($month.'-01'))])
-            ->get();
+        $days = $this->dailies->listForEmployeeRange($code, $month.'-01', date('Y-m-t', strtotime($month.'-01')));
 
         return ApiResponse::ok([
             'employee_id' => $code,
@@ -230,19 +217,8 @@ class TeamApiController extends Controller
             $codes = [$data['employee_id']];
         }
 
-        $query = LeaveRequest::with(['employee:employee_id,full_name,first_name,last_name', 'leaveType:id,name,code,color'])
-            ->orderByDesc('id');
-
-        if ($codes !== null) {
-            $query->whereIn('employee_id', $codes);
-        }
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        $page = $query->paginate($data['per_page'] ?? 15)->through(
-            fn (LeaveRequest $leave): array => $this->workspace->requestRow($leave)
+        $page = $this->leaveRows->paginateForCodes($codes, $data['status'] ?? null, $data['per_page'] ?? 15)->through(
+            fn ($leave): array => $this->workspace->requestRow($leave)
         );
 
         return ApiResponse::paginated($page, 'Team leave applications.');
@@ -277,7 +253,7 @@ class TeamApiController extends Controller
             return ApiResponse::error($e->getMessage(), 422);
         }
 
-        $leave->load(['employee:employee_id,full_name,first_name,last_name,department_id', 'employee.department:id,name', 'leaveType:id,name,code,color']);
+        $leave = $this->leaveRows->findDetailed($leave->id) ?? $leave;
 
         return ApiResponse::ok($this->workspace->requestRow($leave), "Leave filed for {$data['employee_id']}.", [], 201);
     }
@@ -312,22 +288,14 @@ class TeamApiController extends Controller
             $codes = [$data['employee_id']];
         }
 
-        $query = RosterOvertime::with(['employee:employee_id,full_name,first_name,last_name', 'approver:id,name'])
-            ->orderByDesc('overtime_date')->orderByDesc('id');
+        $page = $this->overtimeRows->paginateForCodes(
+            $codes,
+            $data['status'] ?? null,
+            $data['overtime_type'] ?? null,
+            $data['per_page'] ?? 20,
+        );
 
-        if ($codes !== null) {
-            $query->whereIn('employee_id', $codes);
-        }
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        if (! empty($data['overtime_type'])) {
-            $query->where('overtime_type', $data['overtime_type']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 20), 'Team overtime records.');
+        return ApiResponse::paginated($page, 'Team overtime records.');
     }
 
     #[ApiEndpoint(
@@ -360,26 +328,18 @@ class TeamApiController extends Controller
             $codes = [$data['employee_id']];
         }
 
-        $query = RosterDuty::with(['employee:employee_id,full_name,first_name,last_name', 'shift:id,shift_name,start_time,end_time'])
-            ->orderBy('roster_date')->orderBy('employee_id');
-
-        if ($codes !== null) {
-            if ($codes === []) {
-                return ApiResponse::ok([], 'Team roster duties.', ['total' => 0]);
-            }
-
-            $query->whereIn('employee_id', $codes);
+        if ($codes === []) {
+            return ApiResponse::ok([], 'Team roster duties.', ['total' => 0]);
         }
 
-        if (! empty($data['from'])) {
-            $query->whereDate('roster_date', '>=', $data['from']);
-        }
+        $page = $this->dutyRows->paginateForCodes(
+            $codes,
+            $data['from'] ?? null,
+            $data['to'] ?? null,
+            $data['per_page'] ?? 50,
+        );
 
-        if (! empty($data['to'])) {
-            $query->whereDate('roster_date', '<=', $data['to']);
-        }
-
-        return ApiResponse::paginated($query->paginate($data['per_page'] ?? 50), 'Team roster duties.');
+        return ApiResponse::paginated($page, 'Team roster duties.');
     }
 
     /**

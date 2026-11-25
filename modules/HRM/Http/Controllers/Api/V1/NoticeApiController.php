@@ -10,10 +10,11 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
-use Modules\CORE\Models\User;
+use Modules\CORE\Interfaces\UserRepositoryInterface;
 use Modules\HRM\Database\Seeders\TeamWorkNoticeSeeder;
-use Modules\HRM\Models\Employee\Employee;
-use Modules\HRM\Models\Notice\Notice;
+use Modules\HRM\Interfaces\DepartmentRepositoryInterface;
+use Modules\HRM\Interfaces\Employee\EmployeeRepositoryInterface;
+use Modules\HRM\Interfaces\Notice\NoticeRepositoryInterface;
 use Modules\HRM\Notifications\DeskNotification;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesTeamScope;
@@ -36,6 +37,13 @@ class NoticeApiController extends Controller
 {
     use ResolvesTeamScope;
 
+    public function __construct(
+        private readonly NoticeRepositoryInterface $rows,
+        private readonly EmployeeRepositoryInterface $employees,
+        private readonly DepartmentRepositoryInterface $departments,
+        private readonly UserRepositoryInterface $users,
+    ) {}
+
     #[ApiEndpoint(
         summary: 'Post a notice',
         description: 'Needs hrm.notices.manage. Audiences: all, department (ids are department ids), employees (ids are employee codes). A supervisor may only address their own reports; HR/DGM/GM/CEO may target anything.',
@@ -51,7 +59,7 @@ class NoticeApiController extends Controller
         $data = $request->validate([
             'title' => ['required', 'string', 'max:200'],
             'body' => ['required', 'string', 'max:10000'],
-            'audience_type' => ['required', Rule::in(Notice::AUDIENCES)],
+            'audience_type' => ['required', Rule::in($this->rows->audiences())],
             'audience_ids' => ['nullable', 'array', 'max:1000'],
             'audience_ids.*' => ['required'],
             'expire_at' => ['nullable', 'date', 'after:now'],
@@ -65,7 +73,7 @@ class NoticeApiController extends Controller
 
         // Shape-check the ids against their own table.
         if ($data['audience_type'] === 'department' && $ids !== null) {
-            $known = \Modules\HRM\Models\Department::whereIn('id', $ids)->pluck('id')->map(fn ($v): int => (int) $v)->all();
+            $known = $this->departments->knownIds($ids);
 
             foreach ($ids as $id) {
                 if (! in_array((int) $id, $known, true)) {
@@ -77,7 +85,7 @@ class NoticeApiController extends Controller
         }
 
         if ($data['audience_type'] === 'employees' && $ids !== null) {
-            $known = Employee::whereIn('employee_id', $ids)->pluck('employee_id')->all();
+            $known = $this->employees->knownCodes($ids);
 
             foreach ($ids as $code) {
                 if (! in_array($code, $known, true)) {
@@ -99,7 +107,7 @@ class NoticeApiController extends Controller
             }
         }
 
-        $notice = Notice::create([
+        $notice = $this->rows->create([
             'title' => $data['title'],
             'body' => $data['body'],
             'posted_by' => $request->user()->id,
@@ -132,12 +140,12 @@ class NoticeApiController extends Controller
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
 
-        $employee = Employee::where('user_id', $request->user()->id)->first();
+        $employee = $this->employees->findByUserId($request->user()->id);
         $myCode = $employee?->employee_id;
         $myDept = $employee?->department_id !== null ? (int) $employee->department_id : null;
 
-        $visible = Notice::live()->with('poster:id,name')->latest('id')->limit(500)->get()
-            ->filter(function (Notice $notice) use ($myCode, $myDept): bool {
+        $visible = $this->rows->liveForBoard()
+            ->filter(function ($notice) use ($myCode, $myDept): bool {
                 if ($notice->audience_type === 'all') {
                     return true;
                 }
@@ -179,10 +187,7 @@ class NoticeApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $page = Notice::where('posted_by', $request->user()->id)
-            ->with('poster:id,name')
-            ->latest('id')
-            ->paginate($data['per_page'] ?? 20);
+        $page = $this->rows->paginatePostedBy($request->user()->id, $data['per_page'] ?? 20);
 
         return ApiResponse::paginated($page, 'Notices I posted.');
     }
@@ -197,7 +202,7 @@ class NoticeApiController extends Controller
     )]
     public function update(Request $request, int $id): JsonResponse
     {
-        $notice = Notice::find($id);
+        $notice = $this->rows->find($id);
 
         if ($notice === null) {
             return ApiResponse::error('Notice not found.', 404);
@@ -214,7 +219,7 @@ class NoticeApiController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
-        $notice->update(array_filter($data, fn ($v): bool => $v !== null));
+        $this->rows->update($notice, array_filter($data, fn ($v): bool => $v !== null));
 
         return ApiResponse::ok($notice->fresh(), 'Notice updated.');
     }
@@ -228,7 +233,7 @@ class NoticeApiController extends Controller
     )]
     public function retract(Request $request, int $id): JsonResponse
     {
-        $notice = Notice::find($id);
+        $notice = $this->rows->find($id);
 
         if ($notice === null) {
             return ApiResponse::error('Notice not found.', 404);
@@ -238,12 +243,12 @@ class NoticeApiController extends Controller
             return ApiResponse::error('Only the poster (or HR/DGM/GM/CEO) retracts this notice.', 403);
         }
 
-        $notice->update(['is_active' => false]);
+        $this->rows->update($notice, ['is_active' => false]);
 
         return ApiResponse::ok($notice->fresh(), 'Notice retracted.');
     }
 
-    private function canManage(User $user, Notice $notice): bool
+    private function canManage($user, $notice): bool
     {
         return (int) $notice->posted_by === $user->id || $this->hasAllScope($user);
     }
@@ -252,15 +257,13 @@ class NoticeApiController extends Controller
      * Ping the audience's bells. Capped: a company-wide post is read from the
      * list, not fanned out into thousands of rows.
      */
-    private function pingAudience(Notice $notice): void
+    private function pingAudience($notice): void
     {
         try {
             $userIds = match ($notice->audience_type) {
-                'all' => User::pluck('id')->all(),
-                'department' => Employee::whereIn('department_id', $notice->audience_ids ?? [])
-                    ->whereNotNull('user_id')->pluck('user_id')->all(),
-                default => Employee::whereIn('employee_id', $notice->audience_ids ?? [])
-                    ->whereNotNull('user_id')->pluck('user_id')->all(),
+                'all' => $this->users->allIds(),
+                'department' => $this->employees->userIdsForDepartments($notice->audience_ids ?? []),
+                default => $this->employees->userIdsForCodes($notice->audience_ids ?? []),
             };
 
             $userIds = array_values(array_unique(array_map('intval', $userIds)));
@@ -269,7 +272,7 @@ class NoticeApiController extends Controller
                 return;
             }
 
-            $users = User::whereIn('id', $userIds)->get();
+            $users = $this->users->findMany($userIds);
 
             if ($users->isNotEmpty()) {
                 Notification::send(

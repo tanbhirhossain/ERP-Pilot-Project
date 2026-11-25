@@ -23,4 +23,8 @@ interface EmployeeSupervisorRepositoryInterface
     public function delete(EmployeeSupervisor $m): void;
 
     public function optionsForEmployee(?string $search = null, int $limit = 25): Collection;
+    /** @return list<string> */
+    public function codesForSupervisor(int $userId): array;
+    public function inScope(int $userId, string $code): bool;
+    public function supervisesAnyone(int $userId): bool;
 }

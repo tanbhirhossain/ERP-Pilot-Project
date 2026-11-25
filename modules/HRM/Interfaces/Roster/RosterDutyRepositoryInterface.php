@@ -25,4 +25,6 @@ interface RosterDutyRepositoryInterface
     public function delete(RosterDuty $d): void;
 
     public function bulkAssign(array $employeeIds, int $shiftId, string $from, string $to): int;
+    public function find(int $id): ?RosterDuty;
+    public function paginateForCodes(?array $codes, ?string $from, ?string $to, int $perPage): LengthAwarePaginator;
 }

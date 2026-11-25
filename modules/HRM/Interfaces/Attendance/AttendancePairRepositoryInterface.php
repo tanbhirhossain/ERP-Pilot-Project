@@ -24,4 +24,5 @@ interface AttendancePairRepositoryInterface
     public function update(AttendancePair $p, array $data): AttendancePair;
 
     public function delete(AttendancePair $p): void;
+    public function paginateForEmployee(string $code, string $from, string $to, int $perPage): LengthAwarePaginator;
 }

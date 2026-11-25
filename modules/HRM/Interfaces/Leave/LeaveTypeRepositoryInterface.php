@@ -23,4 +23,6 @@ interface LeaveTypeRepositoryInterface
     public function delete(LeaveType $type): void;
 
     public function options(): Collection;
+    public function activeCatalog(): Collection;
+    public function namesForIds(array $ids): Collection;
 }

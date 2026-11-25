@@ -12,8 +12,12 @@ use Modules\PAYROLL\Console\Commands\RecalculateTax;
 use Modules\PAYROLL\Interfaces\HRM\AttendancePayrollDataProviderInterface;
 use Modules\PAYROLL\Interfaces\HRM\EmployeePayrollDataProviderInterface;
 use Modules\PAYROLL\Interfaces\Repositories\PayrollLoanRepositoryInterface;
+use Modules\PAYROLL\Interfaces\Repositories\PayrollSlipRepositoryInterface;
+use Modules\PAYROLL\Interfaces\Repositories\PfAccountRepositoryInterface;
 use Modules\PAYROLL\Interfaces\Repositories\PayrollSalarySheetRepositoryInterface;
 use Modules\PAYROLL\Repositories\PayrollLoanRepository;
+use Modules\PAYROLL\Repositories\PayrollSlipRepository;
+use Modules\PAYROLL\Repositories\PfAccountRepository;
 use Modules\PAYROLL\Repositories\PayrollSalarySheetRepository;
 use Modules\PAYROLL\Services\HRM\HrmAttendancePayrollDataProvider;
 use Modules\PAYROLL\Services\HRM\HrmEmployeePayrollDataProvider;
@@ -26,6 +30,8 @@ final class PAYROLLServiceProvider extends ServiceProvider
         $this->app->bind(AttendancePayrollDataProviderInterface::class, HrmAttendancePayrollDataProvider::class);
         $this->app->bind(PayrollSalarySheetRepositoryInterface::class, PayrollSalarySheetRepository::class);
         $this->app->bind(PayrollLoanRepositoryInterface::class, PayrollLoanRepository::class);
+        $this->app->bind(PayrollSlipRepositoryInterface::class, PayrollSlipRepository::class);
+        $this->app->bind(PfAccountRepositoryInterface::class, PfAccountRepository::class);
     }
 
     public function boot(): void

@@ -140,4 +140,12 @@ class AttendancePairRepository implements AttendancePairRepositoryInterface
             'designation_id' => fn (Builder $q, string $v) => $q->whereHas('employee', fn (Builder $qq) => $qq->where('designation_id', $v)),
         ];
     }
+    public function paginateForEmployee(string $code, string $from, string $to, int $perPage): LengthAwarePaginator
+    {
+        return AttendancePair::where('employee_id', $code)
+            ->whereBetween('duty_date', [$from, $to])
+            ->orderByDesc('duty_date')
+            ->orderByDesc('id')
+            ->paginate($perPage);
+    }
 }

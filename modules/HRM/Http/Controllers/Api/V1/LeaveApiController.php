@@ -7,8 +7,8 @@ use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
-use Modules\HRM\Models\Leave\LeaveType;
-use Modules\HRM\Models\LeaveRequest;
+use Modules\HRM\Interfaces\Leave\LeaveRequestRepositoryInterface;
+use Modules\HRM\Interfaces\Leave\LeaveTypeRepositoryInterface;
 use Modules\HRM\Services\LeaveRequestService;
 use Modules\HRM\Services\LeaveWorkspaceService;
 use Modules\HRM\Support\Api\ApiResponse;
@@ -35,6 +35,8 @@ class LeaveApiController extends Controller
     public function __construct(
         private readonly LeaveRequestService $leaves,
         private readonly LeaveWorkspaceService $workspace,
+        private readonly LeaveRequestRepositoryInterface $leaveRows,
+        private readonly LeaveTypeRepositoryInterface $leaveTypes,
     ) {}
 
     #[ApiEndpoint(
@@ -44,11 +46,7 @@ class LeaveApiController extends Controller
     )]
     public function types(): JsonResponse
     {
-        $types = LeaveType::where('is_active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'code', 'days_per_year', 'is_paid', 'color', 'description']);
-
-        return ApiResponse::ok($types, 'Leave types.');
+        return ApiResponse::ok($this->leaveTypes->activeCatalog(), 'Leave types.');
     }
 
     #[ApiEndpoint(
@@ -148,24 +146,14 @@ class LeaveApiController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = LeaveRequest::where('employee_id', $employee->employee_id)
-            ->with(['employee:id,employee_id,full_name,first_name,last_name,department_id', 'employee.department:id,name', 'leaveType:id,name,code,color'])
-            ->orderByDesc('id');
-
-        if (! empty($data['status'])) {
-            $query->where('status', $data['status']);
-        }
-
-        if (! empty($data['year'])) {
-            $query->whereYear('from_date', (int) $data['year']);
-        }
-
-        if (! empty($data['leave_type_id'])) {
-            $query->where('leave_type_id', (int) $data['leave_type_id']);
-        }
-
-        $page = $query->paginate($data['per_page'] ?? 15)->through(
-            fn (LeaveRequest $leave): array => $this->workspace->requestRow($leave)
+        $page = $this->leaveRows->paginateForEmployee(
+            $employee->employee_id,
+            $data['status'] ?? null,
+            isset($data['year']) ? (int) $data['year'] : null,
+            isset($data['leave_type_id']) ? (int) $data['leave_type_id'] : null,
+            $data['per_page'] ?? 15,
+        )->through(
+            fn ($leave): array => $this->workspace->requestRow($leave)
         );
 
         return ApiResponse::paginated($page, 'My leave applications.');
@@ -201,7 +189,7 @@ class LeaveApiController extends Controller
             return ApiResponse::error($e->getMessage(), 422);
         }
 
-        $leave->load(['employee:id,employee_id,full_name,first_name,last_name,department_id', 'employee.department:id,name', 'leaveType:id,name,code,color']);
+        $leave = $this->leaveRows->findDetailed($leave->id) ?? $leave;
 
         return ApiResponse::ok($this->workspace->requestRow($leave), 'Leave application submitted.', [], 201);
     }
@@ -220,7 +208,7 @@ class LeaveApiController extends Controller
             return $employee;
         }
 
-        $leave = LeaveRequest::where('employee_id', $employee->employee_id)->find($id);
+        $leave = $this->leaveRows->findForEmployee($id, $employee->employee_id);
 
         if ($leave === null) {
             return ApiResponse::error('Leave application not found.', 404);
@@ -247,7 +235,7 @@ class LeaveApiController extends Controller
             return $employee;
         }
 
-        $leave = LeaveRequest::where('employee_id', $employee->employee_id)->find($id);
+        $leave = $this->leaveRows->findForEmployee($id, $employee->employee_id);
 
         if ($leave === null) {
             return ApiResponse::error('Leave application not found.', 404);

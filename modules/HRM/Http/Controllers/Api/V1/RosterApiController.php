@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use Modules\CORE\Support\Api\ApiEndpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\HRM\Models\Roster\RosterDuty;
-use Modules\HRM\Models\Roster\RosterShift;
+use Modules\HRM\Interfaces\Roster\RosterDutyRepositoryInterface;
+use Modules\HRM\Interfaces\Roster\RosterShiftRepositoryInterface;
 use Modules\HRM\Services\RosterDutyService;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesTeamScope;
@@ -29,7 +29,11 @@ class RosterApiController extends Controller
 {
     use ResolvesTeamScope;
 
-    public function __construct(private readonly RosterDutyService $duties) {}
+    public function __construct(
+        private readonly RosterDutyService $duties,
+        private readonly RosterDutyRepositoryInterface $dutyRows,
+        private readonly RosterShiftRepositoryInterface $shifts,
+    ) {}
 
     #[ApiEndpoint(
         summary: 'Roster shift catalogue',
@@ -38,10 +42,7 @@ class RosterApiController extends Controller
     )]
     public function shifts(): JsonResponse
     {
-        $shifts = RosterShift::orderBy('shift_name')
-            ->get(['id', 'shift_name', 'start_time', 'end_time', 'crosses_midnight']);
-
-        return ApiResponse::ok($shifts, 'Roster shifts.');
+        return ApiResponse::ok($this->shifts->catalog(), 'Roster shifts.');
     }
 
     #[ApiEndpoint(
@@ -123,7 +124,7 @@ class RosterApiController extends Controller
     )]
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $duty = RosterDuty::find($id);
+        $duty = $this->dutyRows->find($id);
 
         if ($duty === null) {
             return ApiResponse::error('Roster duty not found.', 404);

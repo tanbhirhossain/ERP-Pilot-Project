@@ -74,4 +74,28 @@ class InformedRequestRepository implements InformedRequestRepositoryInterface
     {
         return ['status' => fn (Builder $q, string $v) => $q->where('status', $v), 'employee_id' => fn (Builder $q, string $v) => $q->where('employee_id', $v), 'informed_type' => fn (Builder $q, string $v) => $q->where('informed_type', $v)];
     }
+    public function find(int $id): ?InformedRequest
+    {
+        return InformedRequest::find($id);
+    }
+    public function findForEmployee(int $id, string $code): ?InformedRequest
+    {
+        return InformedRequest::where('employee_id', $code)->find($id);
+    }
+    public function paginateForEmployee(string $code, ?string $status, int $perPage): LengthAwarePaginator
+    {
+        $query = InformedRequest::where('employee_id', $code)
+            ->orderByDesc('informed_date')
+            ->orderByDesc('id');
+
+        if ($status !== null && $status !== '') {
+            $query->where('status', $status);
+        }
+
+        return $query->paginate($perPage);
+    }
+    public function pendingCountForEmployee(string $code): int
+    {
+        return InformedRequest::where('employee_id', $code)->where('status', 'Pending')->count();
+    }
 }

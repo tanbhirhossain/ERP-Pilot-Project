@@ -14,4 +14,5 @@ interface PayrollSalarySheetRepositoryInterface
     public function forPeriod(int $year, int $month): ?PayrollSalarySheet;
 
     public function createForPeriod(int $year, int $month, ?int $actorId, bool $includePunishments = false): PayrollSalarySheet;
+    public function latestReleased(): ?PayrollSalarySheet;
 }

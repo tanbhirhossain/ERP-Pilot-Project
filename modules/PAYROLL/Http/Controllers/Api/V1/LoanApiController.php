@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Modules\HRM\Support\Api\ApiResponse;
 use Modules\HRM\Support\Api\ResolvesApiEmployee;
-use Modules\PAYROLL\Models\PayrollLoan;
+use Modules\PAYROLL\Interfaces\Repositories\PayrollLoanRepositoryInterface;
 use Modules\PAYROLL\Services\PayrollLoanService;
 
 /**
@@ -26,7 +26,10 @@ class LoanApiController extends Controller
 {
     use ResolvesApiEmployee;
 
-    public function __construct(private readonly PayrollLoanService $loans) {}
+    public function __construct(
+        private readonly PayrollLoanService $loans,
+        private readonly PayrollLoanRepositoryInterface $rows,
+    ) {}
 
     #[ApiEndpoint(
         summary: 'My loans, recovery and trail',
@@ -41,11 +44,8 @@ class LoanApiController extends Controller
             return $employee;
         }
 
-        $rows = PayrollLoan::where('employee_id', $employee->employee_id)
-            ->with(['installments', 'approvals'])
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (PayrollLoan $loan): array => $this->loanRow($loan));
+        $rows = $this->rows->listForEmployee($employee->employee_id)
+            ->map(fn ($loan): array => $this->loanRow($loan));
 
         return ApiResponse::ok($rows->values()->all(), 'My loans.');
     }
@@ -102,9 +102,7 @@ class LoanApiController extends Controller
             return $employee;
         }
 
-        $loan = PayrollLoan::where('employee_id', $employee->employee_id)
-            ->with(['installments', 'approvals'])
-            ->find($id);
+        $loan = $this->rows->findDetailed($id, $employee->employee_id);
 
         if ($loan === null) {
             return ApiResponse::error('Loan not found.', 404);
@@ -116,7 +114,7 @@ class LoanApiController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function loanRow(PayrollLoan $loan): array
+    private function loanRow($loan): array
     {
         $installments = $loan->installments;
 

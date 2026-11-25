@@ -130,4 +130,20 @@ class UserRepository implements UserRepositoryInterface
                 : $query->whereNull('email_verified_at'),
         ];
     }
+    public function find(int|string $id): ?User
+    {
+        return User::find($id);
+    }
+    public function findByEmail(string $email): ?User
+    {
+        return User::where('email', $email)->first();
+    }
+    public function allIds(): array
+    {
+        return User::pluck('id')->all();
+    }
+    public function findMany(array $ids): Collection
+    {
+        return User::whereIn('id', $ids)->get();
+    }
 }

@@ -3,6 +3,7 @@
 namespace Modules\PAYROLL\Repositories;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\PAYROLL\Interfaces\Repositories\PayrollLoanRepositoryInterface;
 use Modules\PAYROLL\Models\PayrollLoan;
@@ -36,5 +37,22 @@ final class PayrollLoanRepository implements PayrollLoanRepositoryInterface
     public function create(array $data): PayrollLoan
     {
         return DB::transaction(fn (): PayrollLoan => PayrollLoan::query()->create($data));
+    }
+    public function listForEmployee(string $code): Collection
+    {
+        return PayrollLoan::where('employee_id', $code)
+            ->with(['installments', 'approvals'])
+            ->orderByDesc('id')
+            ->get();
+    }
+    public function findDetailed(int $id, string $code): ?PayrollLoan
+    {
+        return PayrollLoan::where('employee_id', $code)
+            ->with(['installments', 'approvals'])
+            ->find($id);
+    }
+    public function pendingCountForEmployee(string $code): int
+    {
+        return PayrollLoan::where('employee_id', $code)->where('status', 'pending')->count();
     }
 }

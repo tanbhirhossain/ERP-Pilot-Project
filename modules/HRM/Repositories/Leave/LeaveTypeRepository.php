@@ -80,4 +80,14 @@ class LeaveTypeRepository implements LeaveTypeRepositoryInterface
     {
         return ['is_active' => fn (Builder $q, string $v) => $q->where('is_active', $v), 'is_paid' => fn (Builder $q, string $v) => $q->where('is_paid', $v)];
     }
+    public function activeCatalog(): Collection
+    {
+        return LeaveType::where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'days_per_year', 'is_paid', 'color', 'description']);
+    }
+    public function namesForIds(array $ids): Collection
+    {
+        return LeaveType::whereIn('id', $ids)->pluck('name', 'id');
+    }
 }
