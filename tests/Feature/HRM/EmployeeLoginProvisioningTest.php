@@ -292,3 +292,30 @@ test('the leaver sweep revokes tokens for last days that arrived after approval'
 
     expect($user->tokens()->count())->toBe(0);
 });
+
+test('the default password is amz at birth-year when the birth date is on file', function () {
+    $result = elProvisioned(['date_of_birth' => '1990-05-17']);
+
+    expect($result['tempPassword'])->toBe('amz@1990');
+
+    // It really is the password: the login box accepts it and still forces the change.
+    $this->post('/login', ['email' => $result['employee']->employee_id, 'password' => 'amz@1990'])
+        ->assertRedirect(route('password.edit', absolute: false));
+
+    $this->assertAuthenticated();
+
+    // An HR reset hands back the same memorable default, not a new random one.
+    expect(elLogins()->resetLogin($result['employee']->fresh()))->toBe('amz@1990');
+});
+
+test('without a birth date the temporary password stays random', function () {
+    $result = elProvisioned();
+
+    expect($result['tempPassword'])->toBeString()
+        ->and($result['tempPassword'])->not->toStartWith('amz@')
+        ->and(strlen((string) $result['tempPassword']))->toBeGreaterThanOrEqual(8);
+
+    $user = User::find($result['employee']->fresh()->user_id);
+
+    expect(Hash::check((string) $result['tempPassword'], (string) $user->password))->toBeTrue();
+});

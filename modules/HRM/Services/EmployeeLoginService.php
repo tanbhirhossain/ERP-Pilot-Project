@@ -15,9 +15,10 @@ use Modules\HRM\Models\Employee\Employee;
  * Employee login provisioning: one employee, at most one user, no admin trip
  * to the users screen.
  *
- * Creating an employee provisions the login (random temporary password, forced
- * change on first sign-in); HR resets it with `resetLogin()` or the
- * `hrm:employee-logins` command. Leavers are locked out by
+ * Creating an employee provisions the login (default password `amz@<birth-year>`,
+ * forced change on first sign-in — a random one when no birth date is on file);
+ * HR resets it with `resetLogin()` or the `hrm:employee-logins` command.
+ * Leavers are locked out by
  * {@see Employee::hasLeftOnOrBefore()} — the same date payroll asks, so notice
  * periods keep working and legacy label-only rows stay locked — and every
  * authentication path plus the login-policy middleware funnels through
@@ -63,7 +64,7 @@ class EmployeeLoginService
                 return ['user' => $existing, 'tempPassword' => null, 'created' => false];
             }
 
-            $temp = $this->tempPassword();
+            $temp = $this->defaultPassword($employee);
             $user = new User([
                 'name' => $employee->full_name ?: trim($employee->first_name.' '.$employee->last_name) ?: 'Employee '.$employee->employee_id,
                 'email' => $email,
@@ -121,7 +122,7 @@ class EmployeeLoginService
             return $provisioned['tempPassword'] ?? null;
         }
 
-        $temp = $this->tempPassword();
+        $temp = $this->defaultPassword($employee);
         $user->forceFill([
             'password' => Hash::make($temp),
             'force_password_change' => true,
@@ -263,8 +264,20 @@ class EmployeeLoginService
         return Str::lower($employee->employee_id).'@'.config('hrm.logins.placeholder_domain', 'employees.local');
     }
 
-    private function tempPassword(): string
+    /**
+     * The memorable default HR asked for: `amz@<birth-year>` (`amz@1990`). It is
+     * a starting point, not a secret — the forced change on first sign-in still
+     * applies, so nobody keeps it. No (or no sane) birth year on file falls back
+     * to the old random temporary, which is also what the reset path returns.
+     */
+    private function defaultPassword(Employee $employee): string
     {
+        $year = $employee->date_of_birth?->year;
+
+        if (is_int($year) && $year >= 1900 && $year <= (int) now()->year) {
+            return 'amz@'.$year;
+        }
+
         return Str::random(max(8, (int) config('hrm.logins.temp_password_length', 12)));
     }
 }
