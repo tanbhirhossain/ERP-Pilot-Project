@@ -55,6 +55,27 @@ class ApprovalChainSeeder extends Seeder
                 }
             }
 
+            // The chain roles exist to work the approvals screens: without the page
+            // permissions every approver answers 403 on them and the chain stages can
+            // never advance past the applicant.
+            $workPerms = ['hrm.leaves.view', 'hrm.leaves.approve', 'hrm.overtimes.view', 'hrm.overtimes.approve'];
+
+            foreach ($workPerms as $perm) {
+                Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
+            }
+
+            foreach (self::ROLES as $roleName) {
+                if ($role = Role::where('name', $roleName)->first()) {
+                    $role->givePermissionTo($workPerms);
+                }
+            }
+
+            // HR generates the OT rows under test from attendance.
+            if ($role = Role::where('name', 'HR Admin')->first()) {
+                Permission::firstOrCreate(['name' => 'hrm.overtimes.manage', 'guard_name' => 'web']);
+                $role->givePermissionTo('hrm.overtimes.manage');
+            }
+
             $this->seedChain(ApprovalChain::LEAVE, 'Leave approval chain', [
                 ['supervisor', 'Supervisor', 'supervisor', null],
                 ['hr', 'HR and Admin', 'role', 'HR Admin'],
