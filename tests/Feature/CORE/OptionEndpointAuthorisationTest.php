@@ -92,7 +92,10 @@ function optAuthMatrix(): array
     // 40 since F18: `purchase/requisitions`, the picker that lets a quote round be attached to the demand
     // behind it. It is in the matrix rather than skipped because it filters — only approved requisitions
     // with quantity still outstanding are offered — and a filter is where a leak would happen.
-    expect($rows)->toHaveCount(40, 'the option-type matrix drifted; update this test deliberately');
+    // 41 since the fixed-asset purchase flow: `accounts/asset-categories`, the asset class a bill
+    // line capitalises into. Gated on the asset register plus the bill form grants, and served to
+    // the bill form picker, so it belongs in the matrix with everything else.
+    expect($rows)->toHaveCount(41, 'the option-type matrix drifted; update this test deliberately');
 
     return $rows;
 }

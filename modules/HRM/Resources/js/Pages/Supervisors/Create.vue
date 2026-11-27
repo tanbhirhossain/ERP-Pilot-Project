@@ -42,7 +42,7 @@ const userOpts=computed(()=> props.userOptions);
       <form @submit.prevent="submit" style="display:flex;flex-direction:column;gap:16px">
         <div style="display:flex;flex-direction:column;gap:6px">
           <Label>Employee *</Label>
-          <SearchableSelect v-model="form.employee_id" :options="empOpts" placeholder="Select employee..." />
+          <SearchableSelect v-model="form.employee_id" :options="empOpts" endpoint="/hrm/api/options/employees" placeholder="Search employee by name or ID..." />
           <p v-if="form.errors.employee_id" style="font-size:12px;color:#dc2626">{{ form.errors.employee_id }}</p>
         </div>
 
@@ -55,12 +55,12 @@ const userOpts=computed(()=> props.userOptions);
 
         <div v-if="kind==='user'" style="display:flex;flex-direction:column;gap:6px">
           <Label>Supervisor (User) *</Label>
-          <SearchableSelect v-model="form.supervisor_id" :options="userOpts" placeholder="Search user by name/email..." />
+          <SearchableSelect v-model="form.supervisor_id" :options="userOpts" endpoint="/core/api/options/users" placeholder="Search user by name/email..." />
           <p v-if="form.errors.supervisor_id" style="font-size:12px;color:#dc2626">{{ form.errors.supervisor_id }}</p>
         </div>
         <div v-else style="display:flex;flex-direction:column;gap:6px">
           <Label>Supervisor (Employee) *</Label>
-          <SearchableSelect v-model="form.supervisor_employee_id" :options="empOpts" placeholder="Select employee as supervisor..." />
+          <SearchableSelect v-model="form.supervisor_employee_id" :options="empOpts" endpoint="/hrm/api/options/employees" placeholder="Search employee as supervisor..." />
           <p v-if="form.errors.supervisor_employee_id" style="font-size:12px;color:#dc2626">{{ form.errors.supervisor_employee_id }}</p>
           <p style="font-size:11px;color:#0e7490;background:#ecfeff;padding:6px 10px;border-radius:6px">Employee-as-supervisor: the selected employee will be recorded as supervisor for {{ form.employee_id || 'the employee' }}.</p>
         </div>

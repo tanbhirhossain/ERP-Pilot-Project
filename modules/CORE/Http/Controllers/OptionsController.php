@@ -31,6 +31,10 @@ class OptionsController extends Controller
         'users' => [
             'users.view', 'users.create', 'users.update', 'users.delete',
             'roles.view', 'roles.update', 'permissions.view',
+            // The Assign-Supervisor form lets HR pick a login account as the
+            // supervisor; its holders open the page on hrm.employees.view and
+            // would otherwise meet a 403 shaped exactly like "no matches".
+            'hrm.employees.view', 'hrm.employees.manage',
         ],
         'causers' => ['audit.view', 'users.view'],
         'log-names' => ['audit.view', 'users.view'],
