@@ -11,8 +11,10 @@ use Inertia\Response;
 use Illuminate\Support\Facades\DB;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\CORE\Support\PaginatedResource;
+use Modules\HRM\Models\Approval\ApprovalChain;
 use Modules\HRM\Models\Attendance\AttendanceDaily;
 use Modules\HRM\Models\Roster\RosterOvertime;
+use Modules\HRM\Services\ApprovalEngine;
 use Modules\HRM\Services\RosterOvertimeService;
 
 final class RosterOvertimeController extends Controller
@@ -234,17 +236,49 @@ final class RosterOvertimeController extends Controller
             'hours' => ['required', 'numeric', 'gt:0', 'max:24'],
             'comments' => ['nullable', 'string', 'max:1000'],
         ]);
-        $this->service->approve($overtime, (float) $data['hours'], (int) $request->user()->id, $data['comments'] ?? null);
+        if ($denial = $this->stageDenial($request, $overtime)) {
+            return back()->with('error', $denial);
+        }
+        $result = $this->service->approve($overtime, (float) $data['hours'], (int) $request->user()->id, $data['comments'] ?? null);
 
-        return back()->with('success', 'Attendance-linked request approved with the reviewed hours; it will enter payroll cutlists generated after approval.');
+        if ($result->status !== 'Pending') {
+            return back()->with('success', 'Attendance-linked request approved with the reviewed hours; it will enter payroll cutlists generated after approval.');
+        }
+
+        $stage = app(ApprovalEngine::class)->overtimeStage($result);
+
+        return back()->with('success', 'Approval stage recorded. The record is now waiting on '.($stage['label'] ?? 'the next stage').'.');
     }
 
     public function reject(Request $request, RosterOvertime $overtime): RedirectResponse
     {
         abort_unless($request->user()?->can('hrm.overtimes.approve'), 403);
         $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:1000']]);
+        if ($denial = $this->stageDenial($request, $overtime)) {
+            return back()->with('error', $denial);
+        }
         $this->service->reject($overtime, (int) $request->user()->id, $data['reason']);
 
         return back()->with('success', 'Attendance-linked request rejected with an audit reason.');
+    }
+
+    /**
+     * Under the overtime chain only the current stage's desk may decide; the
+     * denial names the desk the record actually waits on. Without a chain the
+     * permission gate above stays the only check.
+     *
+     * @return ?string the denial message, or null when the user may decide
+     */
+    private function stageDenial(Request $request, RosterOvertime $overtime): ?string
+    {
+        $engine = app(ApprovalEngine::class);
+
+        if ($engine->steps(ApprovalChain::OVERTIME) === null) {
+            return null;
+        }
+
+        [$ok, $denied] = $engine->canApproveOvertime($request->user(), $overtime);
+
+        return $ok ? null : ($denied ?? 'This record is waiting on another desk.');
     }
 }

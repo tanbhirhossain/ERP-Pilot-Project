@@ -3,11 +3,16 @@
 namespace Modules\HRM\Services;
 
 use Carbon\Carbon;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Modules\CORE\Models\User;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\HRM\Interfaces\Roster\RosterOvertimeRepositoryInterface;
+use Modules\HRM\Models\Approval\ApprovalChain;
+use Modules\HRM\Models\Approval\OvertimeApprovalAction;
+use Modules\HRM\Models\Approval\OvertimeRequestWorkflow;
 use Modules\HRM\Models\Attendance\AttendanceDaily;
 use Modules\HRM\Models\Employee\Employee;
 use Modules\HRM\Models\Employee\EmployeeFallbackOffDay;
@@ -104,8 +109,20 @@ class RosterOvertimeService
         $approved = 0;
         $skipped = [];
 
+        $engine = app(ApprovalEngine::class);
+        $chained = $engine->steps(ApprovalChain::OVERTIME) !== null;
+        $actor = $actorId !== null ? User::query()->find($actorId) : null;
+
         foreach (RosterOvertime::query()->whereIn('id', $ids)->orderBy('id')->get() as $row) {
             try {
+                // Under the chain a row waiting on another desk is reported and
+                // skipped: one press clears the operator's own stage, nothing else.
+                if ($chained && $actor !== null) {
+                    [$ok, $denied] = $engine->canApproveOvertime($actor, $row);
+                    if (! $ok) {
+                        throw new AuthorizationException($denied ?? 'This record is waiting on another desk.');
+                    }
+                }
                 $this->approve($row, (float) $row->hours, $actorId, $comments);
                 $approved++;
             } catch (ValidationException $e) {
@@ -114,6 +131,13 @@ class RosterOvertimeService
                     'employee_id' => $row->employee_id,
                     'date' => $row->overtime_date?->toDateString(),
                     'reason' => collect($e->errors())->flatten()->first() ?? 'Refused.',
+                ];
+            } catch (AuthorizationException $e) {
+                $skipped[] = [
+                    'id' => $row->id,
+                    'employee_id' => $row->employee_id,
+                    'date' => $row->overtime_date?->toDateString(),
+                    'reason' => $e->getMessage(),
                 ];
             }
         }
@@ -199,6 +223,9 @@ class RosterOvertimeService
         }
         $created = 0;
         $skipped = 0;
+        // Under the overtime chain every new row pings its first stage (the
+        // applicant's supervisor, or the desk when nobody is mapped to them).
+        $chained = app(ApprovalEngine::class)->steps(ApprovalChain::OVERTIME) !== null;
         $dailyQuery = AttendanceDaily::query()->where('grand_total_hours', '>', 0)->whereDate('duty_date', '<=', now()->subDay()->toDateString());
         if ($kind === 'Overtime') {
             $dailyQuery->where('total_overtime_hours', '>', 0.5);
@@ -209,7 +236,7 @@ class RosterOvertimeService
         if ($to !== null) {
             $dailyQuery->whereDate('duty_date', '<=', $to);
         }
-        $dailyQuery->orderBy('id')->chunkById(400, function ($dailies) use ($kind, &$created, &$skipped): void {
+        $dailyQuery->orderBy('id')->chunkById(400, function ($dailies) use ($kind, $chained, &$created, &$skipped): void {
             $employeeIds = $dailies->pluck('employee_id')->unique()->values()->all();
             $dates = $dailies->map(fn ($daily) => Carbon::parse($daily->duty_date)->toDateString());
             $from = $dates->min();
@@ -278,38 +305,112 @@ class RosterOvertimeService
                     $start = Carbon::parse($daily->primary_punch_in)->format('H:i');
                 }
                 $end = $daily->primary_punch_out ? Carbon::parse($daily->primary_punch_out)->format('H:i') : null;
-                $wasCreated = DB::transaction(function () use ($daily, $date, $type, $start, $end, $hours, $kind): bool {
+                $newRow = DB::transaction(function () use ($daily, $date, $type, $start, $end, $hours, $kind): ?RosterOvertime {
                     // Employee-row lock serializes concurrent queue refreshes without changing HRM schema.
                     Employee::query()->where('employee_id', $daily->employee_id)->lockForUpdate()->first();
                     if (RosterOvertime::query()->where('employee_id', $daily->employee_id)->whereDate('overtime_date', $date)->exists()) {
-                        return false;
+                        return null;
                     }
                     if ($kind === 'Extra Duty' && $daily->status !== 'Extra Duty') {
                         $daily->update(['status' => 'Extra Duty', 'remarks' => 'Reconciled as Extra Duty from attendance and off-day/holiday policy.']);
                     }
-                    RosterOvertime::query()->create([
+
+                    return RosterOvertime::query()->create([
                         'employee_id' => $daily->employee_id, 'overtime_date' => $date,
                         'overtime_type' => $type, 'shift_id' => $daily->primary_shift_id,
                         'start_time' => $start, 'end_time' => $end, 'hours' => round($hours, 2),
                         'reason' => 'Backfilled from existing attendance daily record.', 'status' => 'Pending',
                     ]);
-
-                    return true;
                 }, 3);
-                if (! $wasCreated) {
+                if ($newRow === null) {
                     $skipped++;
 
                     continue;
                 }
                 $existingKeys[$key] = true;
                 $created++;
+                if ($chained) {
+                    app(ApprovalEngine::class)->notifyNewOvertime($newRow);
+                }
             }
         });
 
         return ['created' => $created, 'skipped' => $skipped];
     }
 
+    /**
+     * Approve one queued day.
+     *
+     * Without a chain this is the legacy single decision: guards, the immutable
+     * payroll cutlist row, finalize. Under the overtime chain each desk records
+     * one stage and the next desk is pinged; only the final stage runs the
+     * money path, so payroll still moves exactly once.
+     */
     public function approve(RosterOvertime $ot, float $adjustedHours, ?int $actorId, ?string $comments = null): RosterOvertime
+    {
+        $engine = app(ApprovalEngine::class);
+
+        if ($engine->steps(ApprovalChain::OVERTIME) === null) {
+            return $this->finalizeApproval($ot, $adjustedHours, $actorId, $comments);
+        }
+
+        $fresh = DB::transaction(function () use ($ot, $adjustedHours, $actorId, $comments, $engine): RosterOvertime {
+            $locked = RosterOvertime::query()->whereKey($ot->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== 'Pending') {
+                throw ValidationException::withMessages(['approval' => 'Only pending attendance requests can be approved.']);
+            }
+            if ((int) Employee::query()->where('employee_id', $locked->employee_id)->value('user_id') === $actorId) {
+                throw ValidationException::withMessages(['approval' => 'An employee cannot approve their own overtime or extra-duty record.']);
+            }
+
+            $workflow = OvertimeRequestWorkflow::query()->where('overtime_id', $locked->id)->lockForUpdate()->first();
+            if ($workflow === null) {
+                $workflow = OvertimeRequestWorkflow::create([
+                    'overtime_id' => $locked->id,
+                    'steps' => $engine->chainLabels(ApprovalChain::OVERTIME) ?? ['HR'],
+                    'current_stage' => 0,
+                ]);
+            }
+            $steps = is_array($workflow->steps) && $workflow->steps !== [] ? array_values($workflow->steps) : ['HR'];
+            $step = (int) $workflow->current_stage;
+            if ($step >= count($steps)) {
+                throw ValidationException::withMessages(['approval' => 'Every approval stage on this record is already complete.']);
+            }
+
+            OvertimeApprovalAction::create([
+                'overtime_id' => $locked->id,
+                'stage_index' => $step + 1,
+                'stage_name' => $steps[$step] ?? 'HR',
+                'decision' => 'Approved',
+                'actor_id' => $actorId,
+                'comments' => $comments,
+                'decided_at' => now(),
+            ]);
+            $workflow->update(['current_stage' => $step + 1]);
+
+            // The final stage runs the money path inside this same transaction: a
+            // payroll refusal rolls the stage back with it, so the record is never
+            // left "staged but unapprovable".
+            if ($step + 1 >= count($steps)) {
+                $this->finalizeLocked($locked, $adjustedHours, $actorId, $comments);
+            }
+
+            return $locked->refresh();
+        }, 3);
+
+        $engine->notifyOvertimeDecided($this->actor($actorId), $fresh, 'Approved', $comments);
+
+        return $fresh;
+    }
+
+    /** The deciding user for notification addressing (null in system context). */
+    private function actor(?int $actorId): ?User
+    {
+        return $actorId !== null ? User::query()->find($actorId) : null;
+    }
+
+    /** The legacy single decision, unchanged: guards + cutlist + finalize. */
+    private function finalizeApproval(RosterOvertime $ot, float $adjustedHours, ?int $actorId, ?string $comments = null): RosterOvertime
     {
         return DB::transaction(function () use ($ot, $adjustedHours, $actorId, $comments): RosterOvertime {
             $locked = RosterOvertime::query()->whereKey($ot->id)->lockForUpdate()->firstOrFail();
@@ -319,52 +420,65 @@ class RosterOvertimeService
             if ((int) Employee::query()->where('employee_id', $locked->employee_id)->value('user_id') === $actorId) {
                 throw ValidationException::withMessages(['approval' => 'An employee cannot approve their own overtime or extra-duty record.']);
             }
-            $date = $locked->overtime_date->toDateString();
-            $sheetExists = PayrollSalarySheet::query()->where('pay_year', (int) Carbon::parse($date)->format('Y'))
-                ->where('pay_month', (int) Carbon::parse($date)->format('m'))->exists();
-            if ($sheetExists) {
-                throw ValidationException::withMessages(['approval' => 'A salary sheet already exists for this attendance month. Approve attendance duty before creating payroll so the immutable cutlist includes it.']);
-            }
-            $daily = AttendanceDaily::query()->where('employee_id', $locked->employee_id)->whereDate('duty_date', $date)->lockForUpdate()->first();
-            if ($daily === null) {
-                throw ValidationException::withMessages(['approval' => 'The source attendance-daily record no longer exists.']);
-            }
-            $sourceHours = $locked->overtime_type === 'Overtime'
-                ? (float) $daily->total_overtime_hours
-                : (float) $daily->grand_total_hours;
-            if ($locked->overtime_type === 'Overtime' && $sourceHours <= 0.5) {
-                throw ValidationException::withMessages(['approval' => 'Overtime can only be approved when attendance daily total_overtime_hours is greater than 30 minutes.']);
-            }
-            if ($locked->overtime_type !== 'Overtime' && $daily->status !== 'Extra Duty') {
-                throw ValidationException::withMessages(['approval' => 'Extra duty is no longer supported by the attendance-day classification.']);
-            }
-            $hours = round($adjustedHours, 2);
-            if ($hours <= 0 || $hours > 24 || $hours > $sourceHours) {
-                throw ValidationException::withMessages(['hours' => 'Approved hours must be positive, at most 24, and cannot exceed the source attendance hours.']);
-            }
-
-            PayrollAttendanceDutyDecision::query()->create([
-                'roster_overtime_id' => $locked->id,
-                'employee_id' => $locked->employee_id,
-                'duty_date' => $date,
-                'duty_type' => $locked->overtime_type,
-                'attendance_source_hours' => round($sourceHours, 2),
-                'requested_hours' => round((float) $locked->hours, 2),
-                'approved_hours' => $hours,
-                'decision' => 'approved',
-                'comments' => $comments,
-                'decided_by' => $actorId,
-                'decided_at' => now(),
-            ]);
-            $locked->update(['hours' => $hours, 'status' => 'Approved', 'approved_by' => $actorId, 'approved_at' => now()]);
+            $this->finalizeLocked($locked, $adjustedHours, $actorId, $comments);
 
             return $locked->refresh();
         }, 3);
     }
 
+    /**
+     * The money path: payroll guards, the immutable cutlist row, finalize.
+     * Runs inside the caller's transaction (the legacy decision or the chain's
+     * final stage) — it never commits on its own.
+     */
+    private function finalizeLocked(RosterOvertime $locked, float $adjustedHours, ?int $actorId, ?string $comments): void
+    {
+        $date = $locked->overtime_date->toDateString();
+        $sheetExists = PayrollSalarySheet::query()->where('pay_year', (int) Carbon::parse($date)->format('Y'))
+            ->where('pay_month', (int) Carbon::parse($date)->format('m'))->exists();
+        if ($sheetExists) {
+            throw ValidationException::withMessages(['approval' => 'A salary sheet already exists for this attendance month. Approve attendance duty before creating payroll so the immutable cutlist includes it.']);
+        }
+        $daily = AttendanceDaily::query()->where('employee_id', $locked->employee_id)->whereDate('duty_date', $date)->lockForUpdate()->first();
+        if ($daily === null) {
+            throw ValidationException::withMessages(['approval' => 'The source attendance-daily record no longer exists.']);
+        }
+        $sourceHours = $locked->overtime_type === 'Overtime'
+            ? (float) $daily->total_overtime_hours
+            : (float) $daily->grand_total_hours;
+        if ($locked->overtime_type === 'Overtime' && $sourceHours <= 0.5) {
+            throw ValidationException::withMessages(['approval' => 'Overtime can only be approved when attendance daily total_overtime_hours is greater than 30 minutes.']);
+        }
+        if ($locked->overtime_type !== 'Overtime' && $daily->status !== 'Extra Duty') {
+            throw ValidationException::withMessages(['approval' => 'Extra duty is no longer supported by the attendance-day classification.']);
+        }
+        $hours = round($adjustedHours, 2);
+        if ($hours <= 0 || $hours > 24 || $hours > $sourceHours) {
+            throw ValidationException::withMessages(['hours' => 'Approved hours must be positive, at most 24, and cannot exceed the source attendance hours.']);
+        }
+
+        PayrollAttendanceDutyDecision::query()->create([
+            'roster_overtime_id' => $locked->id,
+            'employee_id' => $locked->employee_id,
+            'duty_date' => $date,
+            'duty_type' => $locked->overtime_type,
+            'attendance_source_hours' => round($sourceHours, 2),
+            'requested_hours' => round((float) $locked->hours, 2),
+            'approved_hours' => $hours,
+            'decision' => 'approved',
+            'comments' => $comments,
+            'decided_by' => $actorId,
+            'decided_at' => now(),
+        ]);
+        $locked->update(['hours' => $hours, 'status' => 'Approved', 'approved_by' => $actorId, 'approved_at' => now()]);
+    }
+
     public function reject(RosterOvertime $ot, int $actorId, string $reason): RosterOvertime
     {
-        return DB::transaction(function () use ($ot, $actorId, $reason): RosterOvertime {
+        $engine = app(ApprovalEngine::class);
+        $chained = $engine->steps(ApprovalChain::OVERTIME) !== null;
+
+        $result = DB::transaction(function () use ($ot, $actorId, $reason, $chained, $engine): RosterOvertime {
             $locked = RosterOvertime::query()->whereKey($ot->id)->lockForUpdate()->firstOrFail();
             if ($locked->status !== 'Pending') {
                 throw ValidationException::withMessages(['approval' => 'Only pending attendance requests can be rejected.']);
@@ -392,9 +506,29 @@ class RosterOvertimeService
                 'decided_by' => $actorId,
                 'decided_at' => now(),
             ]);
+            if ($chained) {
+                // The stage trail, mirroring the engine path: who ended the walk,
+                // and at which desk it stood.
+                $stage = $engine->overtimeStage($locked);
+                OvertimeApprovalAction::create([
+                    'overtime_id' => $locked->id,
+                    'stage_index' => $stage['current'] + 1,
+                    'stage_name' => $stage['label'] ?? 'HR',
+                    'decision' => 'Rejected',
+                    'actor_id' => $actorId,
+                    'comments' => trim($reason),
+                    'decided_at' => now(),
+                ]);
+            }
             $locked->update(['status' => 'Rejected', 'approved_by' => $actorId, 'approved_at' => now()]);
 
             return $locked->refresh();
         }, 3);
+
+        if ($chained) {
+            $engine->notifyOvertimeDecided($this->actor($actorId), $result, 'Rejected', $reason);
+        }
+
+        return $result;
     }
 }

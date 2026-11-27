@@ -123,6 +123,18 @@ class ApprovalEngine
     }
 
     /**
+     * Whether the user holds the literal `*` permission (directly or via a
+     * role): omnipotent, regardless of stage membership. Read off the loaded
+     * permission collections rather than `hasPermissionTo()`, which throws
+     * when the permission row does not exist in a fixture database.
+     */
+    private function isWildcard(User $user): bool
+    {
+        return $user->getDirectPermissions()->contains('name', '*')
+            || $user->getPermissionsViaRoles()->contains('name', '*');
+    }
+
+    /**
      * Where a leave sits: snapshot labels + current position + who decides now.
      *
      * @return array{steps:list<string>,current:int,total:int,label:?string,is_final:bool,approver_ids:list<int>}
@@ -167,7 +179,13 @@ class ApprovalEngine
             $definition = $definitions !== null ? ($definitions[$current] ?? null) : null;
             $approvers = $definition !== null
                 ? $this->stageApprovers($definition, $employeeCode)
-                : $this->fallbackApprovers($chainKey);
+                : [];
+            // A stage that resolves to nobody (an unmapped supervisor, a role nobody
+            // holds yet) falls back to the desk permission holders instead of
+            // deadlocking the request: somebody must be able to move it.
+            if ($approvers === []) {
+                $approvers = $this->fallbackApprovers($chainKey);
+            }
         }
 
         return [
@@ -185,6 +203,13 @@ class ApprovalEngine
     {
         if ($leave->status !== 'Pending') {
             return [false, "This application is already {$leave->status}."];
+        }
+
+        // The wildcard (`*`) holder is omnipotent by definition: the web desks
+        // route through here too, and the platform admin must never be told a
+        // request is "waiting on somebody else".
+        if ($this->isWildcard($user)) {
+            return [true, null];
         }
 
         $stage = $this->leaveStage($leave);
@@ -205,6 +230,10 @@ class ApprovalEngine
     {
         if ($overtime->status !== 'Pending') {
             return [false, "This record is already {$overtime->status}."];
+        }
+
+        if ($this->isWildcard($user)) {
+            return [true, null];
         }
 
         $stage = $this->overtimeStage($overtime);
@@ -553,6 +582,18 @@ class ApprovalEngine
         });
     }
 
+    /**
+     * Ping after a web-desk OT decision: the next stage's desk plus the
+     * applicant while the record still walks, the applicant alone once it is
+     * final. The roster desk stages its own writes (payroll guards + cutlist
+     * live there), so it calls back here for the ping the engine path gets
+     * from approveOvertime()/rejectOvertime().
+     */
+    public function notifyOvertimeDecided(?User $actor, \Modules\HRM\Models\Roster\RosterOvertime $overtime, string $decision, ?string $comments): void
+    {
+        $this->safelyNotify(fn () => $this->notifyOvertimeMoved($actor, $overtime->fresh() ?? $overtime, $decision, $comments));
+    }
+
     private function notifyLeaveMoved(User $actor, LeaveRequest $leave, string $decision, ?string $comments): void
     {
         $applicantId = $this->applicantUserId($leave->employee_id);
@@ -586,7 +627,7 @@ class ApprovalEngine
         );
     }
 
-    private function notifyOvertimeMoved(User $actor, \Modules\HRM\Models\Roster\RosterOvertime $overtime, string $decision, ?string $comments): void
+    private function notifyOvertimeMoved(?User $actor, \Modules\HRM\Models\Roster\RosterOvertime $overtime, string $decision, ?string $comments): void
     {
         $applicantId = $this->applicantUserId($overtime->employee_id);
 
@@ -609,7 +650,7 @@ class ApprovalEngine
         $stage = $this->overtimeStage($overtime);
 
         $this->ping(
-            array_values(array_diff($stage['approver_ids'], [$actor->id])),
+            array_values(array_diff($stage['approver_ids'], $actor !== null ? [$actor->id] : [])),
             $applicantId !== null ? [$applicantId] : [],
             ucfirst(strtolower($overtime->overtime_type))." moved to {$stage['label']}",
             "{$overtime->employee_id}: {$overtime->overtime_date} ({$overtime->hours}h).",

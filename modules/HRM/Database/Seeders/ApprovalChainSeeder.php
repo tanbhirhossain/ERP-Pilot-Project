@@ -76,6 +76,19 @@ class ApprovalChainSeeder extends Seeder
                 $role->givePermissionTo('hrm.overtimes.manage');
             }
 
+            // The CEO approves leave and reads everything else: every `*.view`
+            // permission in the register, whatever module it belongs to. Write
+            // permissions stay untouched — viewing payroll is not running it.
+            if ($role = Role::where('name', 'CEO')->first()) {
+                $viewPerms = Permission::query()
+                    ->where('guard_name', 'web')
+                    ->where('name', 'like', '%.view')
+                    ->pluck('name')->all();
+                if ($viewPerms !== []) {
+                    $role->givePermissionTo($viewPerms);
+                }
+            }
+
             $this->seedChain(ApprovalChain::LEAVE, 'Leave approval chain', [
                 ['supervisor', 'Supervisor', 'supervisor', null],
                 ['hr', 'HR and Admin', 'role', 'HR Admin'],

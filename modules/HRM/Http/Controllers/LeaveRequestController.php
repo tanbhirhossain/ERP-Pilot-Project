@@ -11,9 +11,11 @@ use Inertia\Inertia;
 use Inertia\Response;
 use Modules\CORE\Support\DataTableQuery;
 use Modules\CORE\Support\PaginatedResource;
+use Modules\HRM\Models\Approval\ApprovalChain;
 use Modules\HRM\Models\Leave\LeaveRequest;
 use Modules\HRM\Models\Leave\LeaveType;
 use Modules\HRM\Requests\StoreLeaveRequestRequest;
+use Modules\HRM\Services\ApprovalEngine;
 use Modules\HRM\Services\EmployeeService;
 use Modules\HRM\Services\LeaveBalanceService;
 use Modules\HRM\Services\LeaveRequestService;
@@ -262,7 +264,11 @@ class LeaveRequestController extends Controller
         $data = $r->validate(['comments' => ['nullable', 'string', 'max:1000']]);
 
         try {
-            $result = $this->svc->approve($leave);
+            // Under an active chain the desk decides through the engine — the same
+            // staged write, plus stage-exact authorization and the next-desk ping.
+            $result = $this->chained()
+                ? app(ApprovalEngine::class)->approveLeave($r->user(), $leave, $data['comments'] ?? null)
+                : $this->svc->approve($leave, $data['comments'] ?? null);
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -279,12 +285,20 @@ class LeaveRequestController extends Controller
         $data = $r->validate(['comments' => ['required', 'string', 'min:3', 'max:1000']]);
 
         try {
-            $this->svc->reject($leave, $data['comments']);
+            $this->chained()
+                ? app(ApprovalEngine::class)->rejectLeave($r->user(), $leave, $data['comments'])
+                : $this->svc->reject($leave, $data['comments']);
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
 
         return back()->with('success', 'Application rejected and the reason is recorded on its trail. Any attendance days it had marked were released.');
+    }
+
+    /** Whether the leave chain is configured: only then do web decisions walk it. */
+    private function chained(): bool
+    {
+        return app(ApprovalEngine::class)->steps(ApprovalChain::LEAVE) !== null;
     }
 
     public function destroy(LeaveRequest $leave): RedirectResponse
