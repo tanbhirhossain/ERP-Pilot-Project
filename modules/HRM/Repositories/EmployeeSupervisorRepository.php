@@ -40,6 +40,10 @@ class EmployeeSupervisorRepository implements EmployeeSupervisorRepositoryInterf
     public function create(array $data): EmployeeSupervisor
     {
         return DB::transaction(function () use ($data) {
+            // `supervisor_kind` is a form-only discriminator (it drives the
+            // required_if validation); the table carries the two id columns and
+            // the kind is derived on read. It must never reach the INSERT.
+            unset($data['supervisor_kind']);
             // Ensure only one kind set
             if (! empty($data['supervisor_employee_id'])) {
                 $data['supervisor_id'] = null;
@@ -59,6 +63,8 @@ class EmployeeSupervisorRepository implements EmployeeSupervisorRepositoryInterf
     public function update(EmployeeSupervisor $m, array $data): EmployeeSupervisor
     {
         return DB::transaction(function () use ($m, $data) {
+            // Form-only discriminator — see create().
+            unset($data['supervisor_kind']);
             if (array_key_exists('supervisor_employee_id', $data) && ! empty($data['supervisor_employee_id'])) {
                 $data['supervisor_id'] = null;
             }
