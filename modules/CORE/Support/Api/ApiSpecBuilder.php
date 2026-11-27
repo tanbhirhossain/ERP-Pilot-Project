@@ -418,6 +418,20 @@ final class ApiSpecBuilder
                 'reason' => ['type' => 'string', 'maxLength' => 1000],
             ],
         ],
+        'MobileTeamOvertimeClaim' => [
+            'type' => 'object',
+            'required' => ['employee_id', 'overtime_date', 'overtime_type'],
+            'properties' => [
+                'employee_id' => ['type' => 'string', 'description' => 'Report code, inside the caller\'s scope.'],
+                'overtime_date' => ['type' => 'string', 'format' => 'date', 'description' => 'Today or earlier.'],
+                'overtime_type' => ['type' => 'string', 'enum' => ['Overtime', 'Extra Duty', 'Holiday Duty']],
+                'shift_id' => ['type' => 'integer'],
+                'start_time' => ['type' => 'string', 'description' => 'HH:MM, 24-hour. Give this + end_time, or hours.'],
+                'end_time' => ['type' => 'string', 'description' => 'HH:MM, 24-hour.'],
+                'hours' => ['type' => 'number', 'minimum' => 0.25, 'maximum' => 24],
+                'reason' => ['type' => 'string', 'maxLength' => 1000],
+            ],
+        ],
         'MobileRosterBulk' => [
             'type' => 'object',
             'required' => ['employee_ids', 'shift_id', 'from_date', 'to_date'],

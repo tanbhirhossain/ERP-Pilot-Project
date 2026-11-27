@@ -131,6 +131,7 @@ Route::middleware(['api'])->prefix('api')->group(function (): void {
             Route::get('team/leaves', [TeamApiController::class, 'leaves'])->name('team.leaves');
             Route::post('team/leaves/apply', [TeamApiController::class, 'applyLeave'])->name('team.leaves.apply');
             Route::get('team/overtimes', [TeamApiController::class, 'overtimes'])->name('team.overtimes');
+            Route::post('team/overtimes/claim', [TeamApiController::class, 'claimOvertime'])->name('team.overtimes.claim');
             Route::get('team/roster', [TeamApiController::class, 'roster'])->name('team.roster');
 
             // Phase 3 — roster writes (team scope, via RosterDutyService).

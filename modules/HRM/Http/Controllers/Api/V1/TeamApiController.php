@@ -4,8 +4,10 @@ namespace Modules\HRM\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use Modules\CORE\Support\Api\ApiEndpoint;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Modules\HRM\Interfaces\Attendance\AttendanceDailyRepositoryInterface;
 use Modules\HRM\Interfaces\Attendance\AttendanceLogRepositoryInterface;
@@ -31,6 +33,7 @@ use Modules\HRM\Support\Api\ResolvesTeamScope;
  * GET  /api/v1/team/leaves?employee_id=&status=              reports' applications
  * POST /api/v1/team/leaves/apply                             file leave FOR a report
  * GET  /api/v1/team/overtimes?employee_id=&status=           reports' OT/ED
+ * POST /api/v1/team/overtimes/claim                          file OT/ED FOR a report
  * GET  /api/v1/team/roster?employee_id=&from=&to=            reports' duties
  *
  * Approving itself stays on /approvals/* (the engine is supervisor-aware).
@@ -296,6 +299,58 @@ class TeamApiController extends Controller
         );
 
         return ApiResponse::paginated($page, 'Team overtime records.');
+    }
+
+    #[ApiEndpoint(
+        summary: 'Claim overtime for a report',
+        description: 'On-behalf OT/Extra-Duty/Holiday claim through the same checks as self-claim (hours or start/end, duplicate date+type refused) plus the first-stage ping. Outside scope answers 403.',
+        request: 'MobileTeamOvertimeClaim',
+        response: 'MobileEnvelope',
+    )]
+    public function claimOvertime(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'employee_id' => ['required', 'string', 'exists:employees,employee_id'],
+            'overtime_date' => ['required', 'date', 'before_or_equal:today'],
+            'overtime_type' => ['required', Rule::in(OvertimeApiController::TYPES)],
+            'shift_id' => ['nullable', 'integer', 'exists:roster_shifts,id'],
+            'start_time' => ['nullable', 'date_format:H:i'],
+            'end_time' => ['nullable', 'date_format:H:i'],
+            'hours' => ['nullable', 'numeric', 'min:0.25', 'max:24'],
+            'reason' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if (! $this->inScope($request->user(), $data['employee_id'])) {
+            return ApiResponse::error('This employee is outside your team.', 403);
+        }
+
+        if (! empty($data['start_time']) && ! empty($data['end_time'])) {
+            $start = Carbon::createFromFormat('H:i', $data['start_time']);
+            $end = Carbon::createFromFormat('H:i', $data['end_time']);
+
+            if ($end->lessThanOrEqualTo($start)) {
+                return ApiResponse::error('End time must be after start time.', 422);
+            }
+
+            $data['hours'] = $data['hours'] ?? round($start->floatDiffInHours($end), 2);
+        }
+
+        if (empty($data['hours']) && empty($data['start_time'])) {
+            return ApiResponse::error('Give either the hours or the start/end time.', 422);
+        }
+
+        if ($this->overtimeRows->duplicateExists($data['employee_id'], $data['overtime_date'], $data['overtime_type'])) {
+            return ApiResponse::error('A pending/approved record already exists for this date and type.', 422);
+        }
+
+        $ot = $this->overtimeRows->create($data + ['status' => 'Pending']);
+
+        $ot = $this->overtimeRows->findForEmployee($ot->id, $data['employee_id'], true) ?? $ot;
+
+        // Same first-stage ping a self-claim sends.
+        app(\Modules\HRM\Services\ApprovalEngine::class)->notifyNewOvertime($ot);
+
+        return ApiResponse::ok($ot, ucfirst(strtolower($data['overtime_type']))." claim filed for {$data['employee_id']}.", [], 201);
     }
 
     #[ApiEndpoint(
