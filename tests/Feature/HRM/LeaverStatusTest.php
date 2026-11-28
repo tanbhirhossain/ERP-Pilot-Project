@@ -151,11 +151,15 @@ test('payroll still selects somebody serving notice, and stops selecting them on
     expect($thisMonth)->not->toBeNull()
         ->and((float) $thisMonth->grossSalary)->toBe(30000.0);
 
-    // A period that starts after the last working day: gone, and correctly not slipped.
+    // A period starting the month after the last working day: gone, and correctly not slipped.
+    // Anchored to $lastDay, not to `now()`: now()+60's month-start can fall BEFORE now()+40's last
+    // day near a month boundary (Nov 28 runs Jan 1 against a Jan 7 last day), and a month that was
+    // partly worked IS paid, pro-rated — the app is right, the old period was wrong.
+    $afterMonth = \Carbon\Carbon::parse($lastDay)->addMonth();
     $after = $provider->employeeForPayroll(
         'P36-NOTICE',
-        now()->addDays(60)->startOfMonth()->toDateString(),
-        now()->addDays(60)->endOfMonth()->toDateString(),
+        $afterMonth->copy()->startOfMonth()->toDateString(),
+        $afterMonth->copy()->endOfMonth()->toDateString(),
     );
     expect($after)->toBeNull();
 });
