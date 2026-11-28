@@ -6193,6 +6193,62 @@
                 "description": "Scope-filtered register. Outside scope answers 403."
             }
         },
+        "/api/v1/team/overtimes/claim": {
+            "post": {
+                "operationId": "api.v1.team.overtimes.claim",
+                "summary": "Claim overtime for a report",
+                "tags": [
+                    "Team"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "x-required-permission": null,
+                "x-required-ability": null,
+                "x-middleware": [
+                    "api",
+                    "auth:sanctum"
+                ],
+                "parameters": [],
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MobileEnvelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/UnprocessableEntity"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                },
+                "description": "On-behalf OT/Extra-Duty/Holiday claim through the same checks as self-claim (hours or start/end, duplicate date+type refused) plus the first-stage ping. Outside scope answers 403.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MobileTeamOvertimeClaim"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/team/roster": {
             "get": {
                 "operationId": "api.v1.team.roster",
@@ -7429,6 +7485,53 @@
                     },
                     "is_half_day": {
                         "type": "boolean"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 1000
+                    }
+                }
+            },
+            "MobileTeamOvertimeClaim": {
+                "type": "object",
+                "required": [
+                    "employee_id",
+                    "overtime_date",
+                    "overtime_type"
+                ],
+                "properties": {
+                    "employee_id": {
+                        "type": "string",
+                        "description": "Report code, inside the caller's scope."
+                    },
+                    "overtime_date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "Today or earlier."
+                    },
+                    "overtime_type": {
+                        "type": "string",
+                        "enum": [
+                            "Overtime",
+                            "Extra Duty",
+                            "Holiday Duty"
+                        ]
+                    },
+                    "shift_id": {
+                        "type": "integer"
+                    },
+                    "start_time": {
+                        "type": "string",
+                        "description": "HH:MM, 24-hour. Give this + end_time, or hours."
+                    },
+                    "end_time": {
+                        "type": "string",
+                        "description": "HH:MM, 24-hour."
+                    },
+                    "hours": {
+                        "type": "number",
+                        "minimum": 0.25,
+                        "maximum": 24
                     },
                     "reason": {
                         "type": "string",
